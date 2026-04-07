@@ -53,11 +53,15 @@ export default function SettingsPage({ params }: PageProps) {
 
   const [strategy, setStrategy] = useState<'conservative' | 'balanced' | 'experimental'>('balanced')
   const [slackWebhook, setSlackWebhook] = useState('')
+  const [pixelId, setPixelId] = useState('')
+  const [accountIdsRaw, setAccountIdsRaw] = useState('') // comma-separated
 
   const [strategyState, setStrategyState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [strategyMsg, setStrategyMsg] = useState('')
   const [slackState, setSlackState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [slackMsg, setSlackMsg] = useState('')
+  const [metaState, setMetaState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [metaMsg, setMetaMsg] = useState('')
   const [regenState, setRegenState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [regenMsg, setRegenMsg] = useState('')
 
@@ -69,6 +73,8 @@ export default function SettingsPage({ params }: PageProps) {
       setCompany(data)
       setStrategy(data.pipelineConfig?.campaignStrategy ?? 'balanced')
       setSlackWebhook(data.delivery?.slackWebhook ?? '')
+      setPixelId(data.meta?.pixelId ?? '')
+      setAccountIdsRaw((data.meta?.accountIds ?? []).join(', '))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings')
@@ -124,6 +130,31 @@ export default function SettingsPage({ params }: PageProps) {
     }
   }
 
+  async function saveMeta() {
+    setMetaState('loading')
+    setMetaMsg('')
+    try {
+      const accountIds = accountIdsRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const res = await fetch(`${API_BASE}/companies/${tenantId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: { accountIds, pixelId: pixelId.trim() || undefined } }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setMetaState('success')
+      setMetaMsg('Meta settings saved.')
+      fetchCompany()
+    } catch (err) {
+      setMetaState('error')
+      setMetaMsg(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setTimeout(() => { setMetaState('idle'); setMetaMsg('') }, 4000)
+    }
+  }
+
   async function handleRegen() {
     setRegenState('loading')
     setRegenMsg('')
@@ -166,7 +197,7 @@ export default function SettingsPage({ params }: PageProps) {
               </h1>
             </div>
             <p className="text-sm" style={{ color: '#71717a' }}>
-              Manage your BriefOS configuration
+              Manage your Marketing Agent configuration
             </p>
           </div>
           <button
@@ -431,25 +462,93 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { label: 'Access Token', value: maskToken(company?.meta?.accessToken), active: !!company?.meta?.accessToken, mono: true },
-              { label: 'Ad Account ID', value: company?.meta?.adAccountId, active: !!company?.meta?.adAccountId },
-              { label: 'Page ID', value: company?.meta?.pageId, active: !!company?.meta?.pageId },
-              { label: 'Pixel ID', value: company?.meta?.pixelId, active: !!company?.meta?.pixelId },
-            ].map((item) => (
-              <div key={item.label}>
-                <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>{item.label}</p>
-                <div className="flex items-center gap-2">
-                  <StatusDot active={item.active} />
-                  <p
-                    className={cn('text-sm', item.mono && 'font-mono')}
-                    style={{ color: '#18181b' }}
-                  >
-                    {item.value || '—'}
-                  </p>
-                </div>
+            {/* Read-only: access token + account ID */}
+            <div>
+              <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Access Token</p>
+              <div className="flex items-center gap-2">
+                <StatusDot active={!!company?.meta?.accessToken} />
+                <p className="text-sm font-mono" style={{ color: '#18181b' }}>
+                  {maskToken(company?.meta?.accessToken)}
+                </p>
               </div>
-            ))}
+            </div>
+            <div>
+              <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Ad Account ID</p>
+              <div className="flex items-center gap-2">
+                <StatusDot active={!!company?.meta?.accountId} />
+                <p className="text-sm font-mono" style={{ color: '#18181b' }}>
+                  {company?.meta?.accountId || '—'}
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Page ID</p>
+              <div className="flex items-center gap-2">
+                <StatusDot active={!!company?.meta?.pageId} />
+                <p className="text-sm font-mono" style={{ color: '#18181b' }}>
+                  {company?.meta?.pageId || '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Editable: Pixel ID */}
+            <div className="sm:col-span-2 pt-3" style={{ borderTop: '1px solid #f0f0f1' }}>
+              <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>Pixel ID</p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={pixelId}
+                  onChange={(e) => setPixelId(e.target.value)}
+                  placeholder="e.g. 123456789"
+                  className="flex-1 rounded-lg px-3 py-2 text-sm font-mono"
+                  style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
+                />
+              </div>
+            </div>
+
+            {/* Editable: Account IDs */}
+            <div className="sm:col-span-2">
+              <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>
+                Account IDs
+                <span className="ml-1 font-normal" style={{ color: '#d4d4d8' }}>
+                  (comma-separated)
+                </span>
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={accountIdsRaw}
+                  onChange={(e) => setAccountIdsRaw(e.target.value)}
+                  placeholder="e.g. act_123, act_456"
+                  className="flex-1 rounded-lg px-3 py-2 text-sm font-mono"
+                  style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
+                />
+              </div>
+            </div>
+
+            {/* Save Meta button */}
+            <div className="sm:col-span-2 flex items-center gap-3">
+              <button
+                onClick={saveMeta}
+                disabled={metaState === 'loading'}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all"
+                style={
+                  metaState === 'success'
+                    ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
+                    : metaState === 'error'
+                    ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }
+                    : { background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }
+                }
+              >
+                {metaState === 'loading' && <Loader2 size={11} className="animate-spin" />}
+                {metaState === 'loading' ? 'Saving...' : metaState === 'success' ? 'Saved!' : metaState === 'error' ? 'Error' : 'Save Meta Settings'}
+              </button>
+              {metaMsg && (
+                <span className="text-xs" style={{ color: metaState === 'success' ? '#15803d' : '#b91c1c' }}>
+                  {metaMsg}
+                </span>
+              )}
+            </div>
           </div>
         </section>
 

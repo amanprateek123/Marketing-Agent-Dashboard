@@ -15,8 +15,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BriefOS — AI Marketing Intelligence",
-  description: "BriefOS: AI-powered marketing pipeline dashboard",
+  title: "Marketing Agent — AI Marketing Intelligence",
+  description: "Marketing: AI-powered marketing pipeline dashboard",
 };
 
 export default function RootLayout({

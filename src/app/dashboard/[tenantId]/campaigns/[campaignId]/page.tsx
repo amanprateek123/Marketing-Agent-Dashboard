@@ -12,6 +12,8 @@ import {
   ChevronRight,
   AlertCircle,
   Megaphone,
+  Bot,
+  User,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
@@ -458,6 +460,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 </h1>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <StatusBadge status={campaign.status} />
+                  {campaign.source === 'agent' ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                    >
+                      <Bot size={10} /> Agent Launched
+                    </span>
+                  ) : campaign.source === 'manual' ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                    >
+                      <User size={10} /> Manual
+                    </span>
+                  ) : null}
                   {campaign.metaCampaignId && (
                     <span className="text-xs font-mono" style={{ color: '#a1a1aa' }}>
                       {campaign.metaCampaignId}

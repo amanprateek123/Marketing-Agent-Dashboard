@@ -1,6 +1,7 @@
 export interface MetaConnection {
   accessToken?: string
-  adAccountId?: string
+  accountId?: string
+  accountIds?: string[]
   pageId?: string
   pixelId?: string
 }
@@ -33,15 +34,17 @@ export interface Company {
   pipelineConfig?: PipelineConfig
   delivery?: { slackWebhook?: string }
   learnings?: {
+    updatedAt?: string
     creative?: {
-      winningHooks?: Array<{ hookStyle: string; avgCTR: number; count: number }>
-      losingHooks?: Array<{ hookStyle: string; avgCTR: number; count: number }>
-      bestFormats?: Array<{ format: string; conversionShare: number }>
+      winningHooks?: string[]
+      losingHooks?: string[]
+      winningFormats?: string[]
+      losingFormats?: string[]
     }
     campaign?: {
-      audiencePerformance?: Array<{ audienceType: string; roas: number; conversions: number }>
+      audienceScores?: Record<string, number>
       budgetInsights?: string[]
-      seasonalPeaks?: string[]
+      timingInsights?: string[]
     }
   }
 }
@@ -187,6 +190,8 @@ export interface PendingAction {
 export interface Campaign {
   _id: string
   status: 'pending_approval' | 'active' | 'paused' | 'completed' | 'failed'
+  source?: 'agent' | 'manual'
+  syncedAt?: string
   budget?: number
   objective?: string
   metaCampaignId?: string

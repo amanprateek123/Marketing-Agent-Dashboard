@@ -51,7 +51,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
             <Zap size={15} className="text-white" fill="currentColor" />
           </div>
           <span className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
-            BriefOS
+            Marketing Agent
           </span>
         </div>
         <div
@@ -101,7 +101,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
 
       {/* Footer */}
       <div className="px-5 py-4" style={{ borderTop: '1px solid #f0f0f1' }}>
-        <p className="text-xs font-medium" style={{ color: '#a1a1aa' }}>BriefOS v0.1</p>
+        <p className="text-xs font-medium" style={{ color: '#a1a1aa' }}>Marketing Agent v0.1</p>
         <p className="text-xs mt-0.5" style={{ color: '#d4d4d8' }}>AI Marketing Intelligence</p>
       </div>
     </aside>

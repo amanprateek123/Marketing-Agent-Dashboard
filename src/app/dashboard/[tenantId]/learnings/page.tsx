@@ -19,6 +19,46 @@ interface PageProps {
   params: Promise<{ tenantId: string }>
 }
 
+function TagList({
+  items,
+  color,
+}: {
+  items: string[]
+  color: 'green' | 'red' | 'amber' | 'blue' | 'zinc'
+}) {
+  const styles: Record<string, React.CSSProperties> = {
+    green:  { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
+    red:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
+    amber:  { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },
+    blue:   { background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' },
+    zinc:   { background: '#f4f4f5', border: '1px solid #e4e4e7', color: '#52525b' },
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item, i) => (
+        <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={styles[color]}>
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function InsightList({ items, bullet }: { items: string[]; bullet?: string }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
+          <span className="mt-0.5 shrink-0" style={{ color: '#0284c7' }}>
+            {bullet ?? '•'}
+          </span>
+          {item}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function CaseStudyCard({ study }: { study: CaseStudy }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -33,7 +73,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
     >
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 transition-colors text-left"
+        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left transition-colors"
         style={{ background: expanded ? '#fafafa' : '#ffffff' }}
       >
         <div className="flex items-center gap-4 flex-wrap min-w-0">
@@ -41,9 +81,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             <p className="text-sm font-semibold truncate" style={{ color: '#18181b' }}>
               {study.campaignName}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>
-              {study.product}
-            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>{study.product}</p>
           </div>
           {study.dateRange && (
             <span className="text-xs shrink-0" style={{ color: '#a1a1aa' }}>
@@ -69,10 +107,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       </button>
 
       {expanded && (
-        <div
-          className="px-5 pb-5 flex flex-col gap-4"
-          style={{ borderTop: '1px solid #f0f0f1' }}
-        >
+        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f0f0f1' }}>
           {study.context && (
             <p className="text-sm leading-relaxed mt-4" style={{ color: '#71717a' }}>
               {study.context}
@@ -80,83 +115,43 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
           )}
 
           {study.whatWorked && (
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: '#15803d' }}>
-                ✅ What Worked
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {study.whatWorked.hooks.map((h, i) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }}
-                        >
-                          {h}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {study.whatWorked.audiences && study.whatWorked.audiences.length > 0 && (
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {study.whatWorked.audiences.map((a, i) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' }}
-                        >
-                          {a}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {study.whatWorked.formats && study.whatWorked.formats.length > 0 && (
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Formats</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {study.whatWorked.formats.map((f, i) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' }}
-                        >
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex gap-3 flex-wrap mt-1">
-                  {study.whatWorked.bestCPA !== undefined && (
-                    <div
-                      className="rounded-lg px-3 py-1.5"
-                      style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}
-                    >
-                      <p className="text-xs" style={{ color: '#a1a1aa' }}>Best CPA</p>
-                      <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
-                        {formatCurrency(study.whatWorked.bestCPA)}
-                      </p>
-                    </div>
-                  )}
-                  {study.whatWorked.bestROAS !== undefined && (
-                    <div
-                      className="rounded-lg px-3 py-1.5"
-                      style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}
-                    >
-                      <p className="text-xs" style={{ color: '#a1a1aa' }}>Best ROAS</p>
-                      <p className="text-xs font-semibold" style={{ color: '#15803d' }}>
-                        {study.whatWorked.bestROAS.toFixed(2)}x
-                      </p>
-                    </div>
-                  )}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold" style={{ color: '#15803d' }}>✅ What Worked</p>
+              {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
+                <div>
+                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
+                  <TagList items={study.whatWorked.hooks} color="green" />
                 </div>
+              )}
+              {study.whatWorked.audiences && study.whatWorked.audiences.length > 0 && (
+                <div>
+                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
+                  <TagList items={study.whatWorked.audiences} color="blue" />
+                </div>
+              )}
+              {study.whatWorked.formats && study.whatWorked.formats.length > 0 && (
+                <div>
+                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Formats</p>
+                  <TagList items={study.whatWorked.formats} color="amber" />
+                </div>
+              )}
+              <div className="flex gap-3 flex-wrap mt-1">
+                {study.whatWorked.bestCPA !== undefined && (
+                  <div className="rounded-lg px-3 py-1.5" style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}>
+                    <p className="text-xs" style={{ color: '#a1a1aa' }}>Best CPA</p>
+                    <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
+                      {formatCurrency(study.whatWorked.bestCPA)}
+                    </p>
+                  </div>
+                )}
+                {study.whatWorked.bestROAS !== undefined && (
+                  <div className="rounded-lg px-3 py-1.5" style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}>
+                    <p className="text-xs" style={{ color: '#a1a1aa' }}>Best ROAS</p>
+                    <p className="text-xs font-semibold" style={{ color: '#15803d' }}>
+                      {Number(study.whatWorked.bestROAS).toFixed(2)}x
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -165,63 +160,32 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             (study.whatFailed.hooks?.length ||
               study.whatFailed.audiences?.length ||
               study.whatFailed.reason) && (
-              <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: '#b91c1c' }}>
-                  ❌ What Failed
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {study.whatFailed.hooks.map((h, i) => (
-                          <span
-                            key={i}
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                          >
-                            {h}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {study.whatFailed.audiences && study.whatFailed.audiences.length > 0 && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {study.whatFailed.audiences.map((a, i) => (
-                          <span
-                            key={i}
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
-                          >
-                            {a}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {study.whatFailed.reason && (
-                    <p className="text-xs italic" style={{ color: '#a1a1aa' }}>
-                      {study.whatFailed.reason}
-                    </p>
-                  )}
-                </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>❌ What Failed</p>
+                {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
+                    <TagList items={study.whatFailed.hooks} color="red" />
+                  </div>
+                )}
+                {study.whatFailed.audiences && study.whatFailed.audiences.length > 0 && (
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
+                    <TagList items={study.whatFailed.audiences} color="red" />
+                  </div>
+                )}
+                {study.whatFailed.reason && (
+                  <p className="text-xs italic" style={{ color: '#a1a1aa' }}>
+                    {study.whatFailed.reason}
+                  </p>
+                )}
               </div>
             )}
 
           {study.lesson && (
-            <div
-              className="rounded-xl p-3"
-              style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}
-            >
-              <p className="text-xs font-semibold mb-1" style={{ color: '#0284c7' }}>
-                💡 Lesson
-              </p>
-              <p className="text-sm leading-relaxed" style={{ color: '#0369a1' }}>
-                {study.lesson}
-              </p>
+            <div className="rounded-xl p-3" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: '#0284c7' }}>💡 Lesson</p>
+              <p className="text-sm leading-relaxed" style={{ color: '#0369a1' }}>{study.lesson}</p>
             </div>
           )}
         </div>
@@ -244,25 +208,26 @@ export default function LearningsPage({ params }: PageProps) {
     progress: number
     completedBatches: number
     totalBatches: number
-    enrichedCount: number
+    totalCampaigns: number
     caseStudyCount: number
   } | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
+  async function fetchCompany() {
+    const res = await fetch(`${API_BASE}/companies/${tenantId}`)
+    if (res.ok) setCompany(await res.json())
+  }
+
+  async function fetchCaseStudies() {
+    const res = await fetch(`${API_BASE}/companies/${tenantId}/case-studies`)
+    if (res.ok) setCaseStudies(await res.json())
+  }
+
   async function fetchData() {
     try {
-      const [companyRes, studiesRes] = await Promise.all([
-        fetch(`${API_BASE}/companies/${tenantId}`),
-        fetch(`${API_BASE}/companies/${tenantId}/case-studies`),
-      ])
-      if (!companyRes.ok) throw new Error(`HTTP ${companyRes.status}`)
-      const companyData: Company = await companyRes.json()
-      setCompany(companyData)
-      if (studiesRes.ok) {
-        const studies: CaseStudy[] = await studiesRes.json()
-        setCaseStudies(studies)
-      }
+      setLoading(true)
+      await Promise.all([fetchCompany(), fetchCaseStudies()])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load learnings')
     } finally {
@@ -280,28 +245,44 @@ export default function LearningsPage({ params }: PageProps) {
     setImportProgress(null)
     setImportError(null)
     try {
-      const res = await fetch(`${API_BASE}/companies/${tenantId}/import-learnings`, {
-        method: 'POST',
-      })
+      const res = await fetch(`${API_BASE}/companies/${tenantId}/import-learnings`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const poll = setInterval(async () => {
+
+      // Poll status every 3s
+      const statusPoll = setInterval(async () => {
         try {
           const statusRes = await fetch(`${API_BASE}/companies/${tenantId}/import-status`)
           if (!statusRes.ok) return
           const data = await statusRes.json()
-          setImportProgress(data)
+          setImportProgress({
+            status: data.status,
+            progress: data.progress ?? 0,
+            completedBatches: data.completedBatches ?? 0,
+            totalBatches: data.totalBatches ?? 0,
+            totalCampaigns: data.totalCampaigns ?? 0,
+            caseStudyCount: data.caseStudyCount ?? 0,
+          })
           if (data.status === 'completed') {
-            clearInterval(poll)
+            clearInterval(statusPoll)
+            clearInterval(studiesPoll)
             setImportPhase('completed')
-            await fetchData()
+            // Final fetch of company learnings + full case study list
+            await Promise.all([fetchCompany(), fetchCaseStudies()])
           } else if (data.status === 'failed') {
-            clearInterval(poll)
+            clearInterval(statusPoll)
+            clearInterval(studiesPoll)
             setImportPhase('failed')
             setImportError('Import failed on the server.')
           }
-        } catch {
-          // keep polling on transient errors
-        }
+        } catch { /* keep polling */ }
+      }, 3000)
+
+      // Poll case studies every 5s to append in real time
+      const studiesPoll = setInterval(async () => {
+        try {
+          const studiesRes = await fetch(`${API_BASE}/companies/${tenantId}/case-studies`)
+          if (studiesRes.ok) setCaseStudies(await studiesRes.json())
+        } catch { /* keep polling */ }
       }, 5000)
     } catch (err) {
       setImportPhase('failed')
@@ -320,8 +301,9 @@ export default function LearningsPage({ params }: PageProps) {
     )
   }
 
-  const creativeLearnings = company?.learnings?.creative
-  const campaignLearnings = company?.learnings?.campaign
+  const creative = company?.learnings?.creative
+  const campaign = company?.learnings?.campaign
+  const updatedAt = company?.learnings?.updatedAt
 
   const filteredStudies = caseStudies
     .filter((s) => {
@@ -331,11 +313,20 @@ export default function LearningsPage({ params }: PageProps) {
     })
     .sort((a, b) => (b.whatWorked?.bestROAS ?? 0) - (a.whatWorked?.bestROAS ?? 0))
 
-  const tableStyle = {
+  const cardStyle: React.CSSProperties = {
     background: '#ffffff',
     border: '1px solid #e4e4e7',
     boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
   }
+
+  const hasPatternData =
+    creative?.winningHooks?.length ||
+    creative?.losingHooks?.length ||
+    creative?.winningFormats?.length ||
+    creative?.losingFormats?.length ||
+    campaign?.audienceScores ||
+    campaign?.budgetInsights?.length ||
+    campaign?.timingInsights?.length
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -351,6 +342,11 @@ export default function LearningsPage({ params }: PageProps) {
             </div>
             <p className="text-sm" style={{ color: '#71717a' }}>
               AI-synthesized insights from past campaign performance
+              {updatedAt && (
+                <span className="ml-2 text-xs" style={{ color: '#a1a1aa' }}>
+                  · Updated {new Date(updatedAt).toLocaleDateString()}
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -388,30 +384,20 @@ export default function LearningsPage({ params }: PageProps) {
 
         {/* Progress bar */}
         {(importPhase === 'importing' || importPhase === 'completed') && importProgress && (
-          <div
-            className="mt-4 rounded-xl p-4 flex flex-col gap-3"
-            style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}
-          >
+          <div className="mt-4 rounded-xl p-4 flex flex-col gap-3" style={cardStyle}>
             <div className="flex items-center justify-between text-xs">
               <span
                 className="font-medium capitalize"
-                style={{
-                  color:
-                    importProgress.status === 'completed'
-                      ? '#15803d'
-                      : '#0284c7',
-                }}
+                style={{ color: importProgress.status === 'completed' ? '#15803d' : '#0284c7' }}
               >
-                {importProgress.status === 'completed'
-                  ? '✓ Completed'
-                  : importProgress.status === 'failed'
-                  ? '✗ Failed'
-                  : `${importProgress.status}…`}
+                {importProgress.status === 'completed' ? '✓ Completed' :
+                 importProgress.status === 'failed' ? '✗ Failed' :
+                 `${importProgress.status}…`}
               </span>
               <span style={{ color: '#71717a' }}>
                 {importProgress.completedBatches}/{importProgress.totalBatches} batches
-                {importProgress.caseStudyCount > 0 &&
-                  ` · ${importProgress.caseStudyCount} case studies`}
+                {importProgress.totalCampaigns > 0 && ` · ${importProgress.totalCampaigns} campaigns`}
+                {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} case studies`}
               </span>
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e4e4e7' }}>
@@ -426,9 +412,7 @@ export default function LearningsPage({ params }: PageProps) {
           </div>
         )}
         {importPhase === 'failed' && importError && (
-          <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>
-            {importError}
-          </p>
+          <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>{importError}</p>
         )}
       </div>
 
@@ -447,177 +431,133 @@ export default function LearningsPage({ params }: PageProps) {
           Pattern Memory
         </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Winning hooks */}
-          <div className="rounded-xl p-5" style={tableStyle}>
-            <h3
-              className="text-xs font-semibold uppercase tracking-wider mb-3"
-              style={{ color: '#15803d' }}
-            >
-              Winning Hooks
-            </h3>
-            {!creativeLearnings?.winningHooks || creativeLearnings.winningHooks.length === 0 ? (
-              <p className="text-xs italic py-2" style={{ color: '#a1a1aa' }}>
-                No winning hooks recorded yet.
-              </p>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1' }}>
-                    <th className="pb-2 text-left text-xs font-semibold" style={{ color: '#a1a1aa' }}>Hook Style</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Avg CTR</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {creativeLearnings.winningHooks.map((hook, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                      <td className="py-2 text-sm" style={{ color: '#18181b' }}>{hook.hookStyle}</td>
-                      <td className="py-2 text-right text-sm font-semibold" style={{ color: '#15803d' }}>
-                        {(hook.avgCTR * 100).toFixed(2)}%
-                      </td>
-                      <td className="py-2 text-right text-xs" style={{ color: '#a1a1aa' }}>{hook.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {!hasPatternData ? (
+          <div
+            className="rounded-xl py-10 text-center"
+            style={cardStyle}
+          >
+            <p className="text-sm" style={{ color: '#a1a1aa' }}>No learnings data yet.</p>
+            <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>
+              Import from Meta to generate AI-synthesized insights.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Winning hooks */}
+            {creative?.winningHooks && creative.winningHooks.length > 0 && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                <h3
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: '#15803d' }}
+                >
+                  Winning Hooks
+                </h3>
+                <TagList items={creative.winningHooks} color="green" />
+              </div>
             )}
-          </div>
 
-          {/* Losing hooks */}
-          {creativeLearnings?.losingHooks && creativeLearnings.losingHooks.length > 0 && (
-            <div className="rounded-xl p-5" style={tableStyle}>
-              <h3
-                className="text-xs font-semibold uppercase tracking-wider mb-3"
-                style={{ color: '#b91c1c' }}
-              >
-                Losing Hooks
-              </h3>
-              <table className="w-full">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1' }}>
-                    <th className="pb-2 text-left text-xs font-semibold" style={{ color: '#a1a1aa' }}>Hook Style</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Avg CTR</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {creativeLearnings.losingHooks.map((hook, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                      <td className="py-2 text-sm" style={{ color: '#18181b' }}>{hook.hookStyle}</td>
-                      <td className="py-2 text-right text-sm font-semibold" style={{ color: '#b91c1c' }}>
-                        {(hook.avgCTR * 100).toFixed(2)}%
-                      </td>
-                      <td className="py-2 text-right text-xs" style={{ color: '#a1a1aa' }}>{hook.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            {/* Losing hooks */}
+            {creative?.losingHooks && creative.losingHooks.length > 0 && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                <h3
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: '#b91c1c' }}
+                >
+                  Losing Hooks
+                </h3>
+                <TagList items={creative.losingHooks} color="red" />
+              </div>
+            )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Best formats */}
-          {creativeLearnings?.bestFormats && creativeLearnings.bestFormats.length > 0 && (
-            <div className="rounded-xl p-5" style={tableStyle}>
-              <h3
-                className="text-xs font-semibold uppercase tracking-wider mb-3"
-                style={{ color: '#b45309' }}
-              >
-                Best Formats
-              </h3>
-              <table className="w-full">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1' }}>
-                    <th className="pb-2 text-left text-xs font-semibold" style={{ color: '#a1a1aa' }}>Format</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Conversion Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {creativeLearnings.bestFormats.map((fmt, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                      <td className="py-2 text-sm" style={{ color: '#18181b' }}>{fmt.format}</td>
-                      <td className="py-2 text-right text-sm font-semibold" style={{ color: '#b45309' }}>
-                        {(fmt.conversionShare * 100).toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            {/* Winning formats */}
+            {creative?.winningFormats && creative.winningFormats.length > 0 && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                <h3
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: '#b45309' }}
+                >
+                  Winning Formats
+                </h3>
+                <TagList items={creative.winningFormats} color="amber" />
+              </div>
+            )}
 
-          {/* Audience ROAS */}
-          {campaignLearnings?.audiencePerformance && campaignLearnings.audiencePerformance.length > 0 && (
-            <div className="rounded-xl p-5" style={tableStyle}>
-              <h3
-                className="text-xs font-semibold uppercase tracking-wider mb-3"
-                style={{ color: '#0284c7' }}
-              >
-                Audience ROAS
-              </h3>
-              <table className="w-full">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1' }}>
-                    <th className="pb-2 text-left text-xs font-semibold" style={{ color: '#a1a1aa' }}>Audience Type</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>ROAS</th>
-                    <th className="pb-2 text-right text-xs font-semibold" style={{ color: '#a1a1aa' }}>Conversions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaignLearnings.audiencePerformance.map((aud, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                      <td className="py-2 text-sm" style={{ color: '#18181b' }}>{aud.audienceType}</td>
-                      <td className="py-2 text-right text-sm font-semibold" style={{ color: '#15803d' }}>
-                        {aud.roas.toFixed(2)}x
-                      </td>
-                      <td className="py-2 text-right text-xs" style={{ color: '#71717a' }}>{aud.conversions}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            {/* Losing formats */}
+            {creative?.losingFormats && creative.losingFormats.length > 0 && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                <h3
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: '#71717a' }}
+                >
+                  Losing Formats
+                </h3>
+                <TagList items={creative.losingFormats} color="zinc" />
+              </div>
+            )}
 
-        {/* Budget insights */}
-        {campaignLearnings?.budgetInsights && campaignLearnings.budgetInsights.length > 0 && (
-          <div className="rounded-xl p-5 mb-4" style={tableStyle}>
-            <h3
-              className="text-xs font-semibold uppercase tracking-wider mb-3"
-              style={{ color: '#a1a1aa' }}
-            >
-              Budget Insights
-            </h3>
-            <ul className="flex flex-col gap-1.5">
-              {campaignLearnings.budgetInsights.map((insight, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
-                  <span className="mt-0.5 shrink-0" style={{ color: '#0284c7' }}>•</span>
-                  {insight}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+            {/* Audience scores */}
+            {campaign?.audienceScores && Object.keys(campaign.audienceScores).length > 0 && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                <h3
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: '#0284c7' }}
+                >
+                  Audience Scores
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {Object.entries(campaign.audienceScores)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([type, score]) => (
+                      <div key={type} className="flex items-center justify-between gap-3">
+                        <span className="text-sm capitalize" style={{ color: '#52525b' }}>{type}</span>
+                        <div className="flex items-center gap-2 flex-1 max-w-[140px]">
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e4e4e7' }}>
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${Math.min((score / 5) * 100, 100)}%`,
+                                background: score >= 3 ? '#15803d' : score >= 2 ? '#b45309' : '#b91c1c',
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold w-8 text-right" style={{ color: '#18181b' }}>
+                            {score.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
-        {/* Seasonal peaks */}
-        {campaignLearnings?.seasonalPeaks && campaignLearnings.seasonalPeaks.length > 0 && (
-          <div className="rounded-xl p-5 mb-4" style={tableStyle}>
-            <h3
-              className="text-xs font-semibold uppercase tracking-wider mb-3"
-              style={{ color: '#a1a1aa' }}
-            >
-              Seasonal Peaks
-            </h3>
-            <ul className="flex flex-col gap-1.5">
-              {campaignLearnings.seasonalPeaks.map((peak, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
-                  <span className="mt-0.5 shrink-0" style={{ color: '#b45309' }}>•</span>
-                  {peak}
-                </li>
-              ))}
-            </ul>
+            {/* Budget + timing insights */}
+            {((campaign?.budgetInsights?.length ?? 0) > 0 ||
+              (campaign?.timingInsights?.length ?? 0) > 0) && (
+              <div className="rounded-xl p-5" style={cardStyle}>
+                {campaign?.budgetInsights && campaign.budgetInsights.length > 0 && (
+                  <div className="mb-3">
+                    <h3
+                      className="text-xs font-semibold uppercase tracking-wider mb-2"
+                      style={{ color: '#a1a1aa' }}
+                    >
+                      Budget Insights
+                    </h3>
+                    <InsightList items={campaign.budgetInsights} />
+                  </div>
+                )}
+                {campaign?.timingInsights && campaign.timingInsights.length > 0 && (
+                  <div>
+                    <h3
+                      className="text-xs font-semibold uppercase tracking-wider mb-2"
+                      style={{ color: '#a1a1aa' }}
+                    >
+                      Timing Insights
+                    </h3>
+                    <InsightList items={campaign.timingInsights} bullet="⏱" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -627,6 +567,14 @@ export default function LearningsPage({ params }: PageProps) {
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <h2 className="text-base font-semibold" style={{ color: '#18181b' }}>
             Case Studies
+            {caseStudies.length > 0 && (
+              <span
+                className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+              >
+                {caseStudies.length}
+              </span>
+            )}
           </h2>
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a1a1aa' }} />
@@ -636,11 +584,7 @@ export default function LearningsPage({ params }: PageProps) {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by campaign or product..."
               className="rounded-lg pl-8 pr-4 py-2 text-sm w-72"
-              style={{
-                background: '#ffffff',
-                border: '1px solid #e4e4e7',
-                color: '#18181b',
-              }}
+              style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
             />
           </div>
         </div>
