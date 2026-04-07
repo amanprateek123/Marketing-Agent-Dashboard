@@ -15,9 +15,12 @@ import {
   Loader2,
   CheckCircle,
   Activity,
+  AlertCircle,
+  Settings,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { MetricCard } from '@/components/ui/MetricCard'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import type { Company, Campaign, PipelineRun } from '@/types'
 import { useRouter } from 'next/navigation'
@@ -98,7 +101,9 @@ export default function DashboardPage({ params }: PageProps) {
   const allRoas = campaigns.filter((c) => c.roas && c.roas > 0).map((c) => c.roas as number)
   const avgRoas = allRoas.length > 0 ? allRoas.reduce((a, b) => a + b, 0) / allRoas.length : 0
   const activeCampaigns = campaigns.filter((c) => c.status === 'active').length
-  const recentCampaigns = [...campaigns].slice(0, 5)
+  const recentCampaigns = [...campaigns]
+    .sort((a, b) => new Date(b.launchedAt || 0).getTime() - new Date(a.launchedAt || 0).getTime())
+    .slice(0, 5)
   const recentRuns = [...runs].slice(0, 5)
 
   const metaConnected = !!(company?.meta?.accessToken)
@@ -230,6 +235,33 @@ export default function DashboardPage({ params }: PageProps) {
         </div>
       </div>
 
+      {/* Meta disconnected banner */}
+      {company && !metaConnected && (
+        <div
+          className="flex items-center justify-between gap-4 rounded-xl px-5 py-4 mb-6 flex-wrap"
+          style={{ background: '#fef3c7', border: '1px solid #fde68a' }}
+        >
+          <div className="flex items-center gap-3">
+            <AlertCircle size={16} style={{ color: '#b45309' }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+                Meta account not connected
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+                Connect your Meta account in Settings before triggering a pipeline run.
+              </p>
+            </div>
+          </div>
+          <Link
+            href={`/dashboard/${tenantId}/settings`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
+            style={{ background: '#b45309', color: '#ffffff' }}
+          >
+            <Settings size={12} /> Go to Settings
+          </Link>
+        </div>
+      )}
+
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard
@@ -286,13 +318,11 @@ export default function DashboardPage({ params }: PageProps) {
             <p className="text-sm" style={{ color: '#b91c1c' }}>{campaignsError}</p>
           </div>
         ) : recentCampaigns.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <Megaphone size={28} className="mx-auto mb-2" style={{ color: '#d4d4d8' }} />
-            <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>No campaigns yet</p>
-            <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>
-              Trigger a pipeline run to create your first campaign
-            </p>
-          </div>
+          <EmptyState
+            icon={Megaphone}
+            title="No campaigns yet"
+            subtitle="Trigger a pipeline run to create your first campaign"
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -318,7 +348,7 @@ export default function DashboardPage({ params }: PageProps) {
                         className="text-sm font-medium transition-colors hover:text-sky-700"
                         style={{ color: '#18181b' }}
                       >
-                        {campaign.topic || 'Untitled'}
+                        {campaign.name || campaign.topic || 'Untitled'}
                       </Link>
                     </td>
                     <td className="px-5 py-3.5">
@@ -328,8 +358,10 @@ export default function DashboardPage({ params }: PageProps) {
                       {campaign.budget ? formatCurrency(campaign.budget) : '—'}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      {campaign.roas ? (
-                        <span className="text-sm font-semibold" style={{ color: '#15803d' }}>
+                      {campaign.roas != null ? (
+                        <span className="text-sm font-semibold" style={{
+                          color: campaign.roas >= 2 ? '#15803d' : campaign.roas >= 1 ? '#b45309' : '#b91c1c'
+                        }}>
                           {campaign.roas.toFixed(2)}x
                         </span>
                       ) : (
@@ -367,10 +399,7 @@ export default function DashboardPage({ params }: PageProps) {
         </div>
 
         {recentRuns.length === 0 ? (
-          <div className="px-5 py-8 text-center">
-            <Activity size={24} className="mx-auto mb-2" style={{ color: '#d4d4d8' }} />
-            <p className="text-sm" style={{ color: '#a1a1aa' }}>No pipeline runs yet</p>
-          </div>
+          <EmptyState icon={Activity} title="No pipeline runs yet" iconSize={24} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

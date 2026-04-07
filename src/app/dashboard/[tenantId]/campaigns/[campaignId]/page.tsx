@@ -7,6 +7,7 @@ import {
   Loader2,
   ThumbsUp,
   Pause,
+  Play,
   CheckCircle,
   XCircle,
   ChevronRight,
@@ -14,6 +15,13 @@ import {
   Megaphone,
   Bot,
   User,
+  MousePointerClick,
+  Eye,
+  TrendingUp,
+  DollarSign,
+  BarChart3,
+  RefreshCw,
+  Target,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
@@ -27,30 +35,43 @@ interface PageProps {
 }
 
 function AdRow({ ad }: { ad: CampaignAd }) {
-  const metrics = ad.metrics || {}
   return (
     <tr className="transition-colors hover:bg-zinc-50" style={{ borderBottom: '1px solid #f4f4f5' }}>
-      <td className="px-4 py-2.5 text-xs font-mono" style={{ color: '#71717a' }}>
-        {ad.metaAdId?.slice(0, 12) || '—'}
+      <td className="px-4 py-2.5">
+        <div>
+          <p className="text-xs font-medium" style={{ color: '#18181b' }}>{ad.name || '—'}</p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {ad.hookStyle && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                {ad.hookStyle}
+              </span>
+            )}
+            {ad.format && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                {ad.format}
+              </span>
+            )}
+          </div>
+        </div>
       </td>
       <td className="px-4 py-2.5">
-        {ad.status ? (
+        {ad.status && ad.status.trim() ? (
           <StatusBadge status={ad.status} />
         ) : (
           <span className="text-xs" style={{ color: '#d4d4d8' }}>—</span>
         )}
       </td>
       <td className="px-4 py-2.5 text-right text-xs" style={{ color: '#71717a' }}>
-        {metrics.spend ? formatCurrency(metrics.spend) : '—'}
+        {ad.spend ? formatCurrency(ad.spend) : '—'}
       </td>
       <td className="px-4 py-2.5 text-right text-xs" style={{ color: '#71717a' }}>
-        {metrics.ctr ? `${(metrics.ctr * 100).toFixed(2)}%` : '—'}
+        {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '—'}
       </td>
       <td className="px-4 py-2.5 text-right text-xs" style={{ color: '#71717a' }}>
-        {metrics.cpc ? formatCurrency(metrics.cpc) : '—'}
+        {ad.cpc ? formatCurrency(ad.cpc) : '—'}
       </td>
       <td className="px-4 py-2.5 text-right text-xs" style={{ color: '#71717a' }}>
-        {metrics.conversions ?? '—'}
+        {ad.impressions ?? '—'}
       </td>
     </tr>
   )
@@ -59,7 +80,6 @@ function AdRow({ ad }: { ad: CampaignAd }) {
 function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
   const [expanded, setExpanded] = useState(false)
   const ads = adSet.ads || []
-  const metrics = adSet.metrics || {}
 
   return (
     <>
@@ -88,36 +108,42 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
           </div>
         </td>
         <td className="px-5 py-3.5">
-          {adSet.status ? (
+          {adSet.status && adSet.status.trim() ? (
             <StatusBadge status={adSet.status} />
           ) : (
-            <span className="text-sm" style={{ color: '#d4d4d8' }}>—</span>
+            <span className="text-xs" style={{ color: '#d4d4d8' }}>—</span>
           )}
         </td>
-        <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
-          {metrics.spend ? formatCurrency(metrics.spend) : '—'}
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.spend ? formatCurrency(adSet.spend) : '—'}
         </td>
-        <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
-          {metrics.ctr ? `${(metrics.ctr * 100).toFixed(2)}%` : '—'}
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.impressions ? adSet.impressions.toLocaleString() : '—'}
         </td>
-        <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
-          {metrics.cpa ? formatCurrency(metrics.cpa) : '—'}
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.clicks ? adSet.clicks.toLocaleString() : '—'}
         </td>
-        <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
-          {metrics.frequency?.toFixed(2) || '—'}
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.ctr != null ? `${adSet.ctr.toFixed(2)}%` : '—'}
         </td>
-        <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
-          {metrics.conversions ?? '—'}
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.cpa ? formatCurrency(adSet.cpa) : '—'}
+        </td>
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.frequency?.toFixed(2) || '—'}
+        </td>
+        <td className="px-5 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {adSet.conversions ?? '—'}
         </td>
       </tr>
       {expanded && ads.length > 0 && (
         <tr style={{ background: '#f9fafb' }}>
-          <td colSpan={7} className="px-8 py-3">
+          <td colSpan={9} className="px-8 py-3">
             <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #e4e4e7' }}>
               <table className="w-full">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
-                    {['Ad', 'Status', 'Spend', 'CTR', 'CPC', 'Conv.'].map((h, i) => (
+                    {['Ad / Hook / Format', 'Status', 'Spend', 'CTR', 'CPC', 'Impr.'].map((h, i) => (
                       <th
                         key={h}
                         className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}
@@ -130,7 +156,7 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
                 </thead>
                 <tbody>
                   {ads.map((ad, i) => (
-                    <AdRow key={ad.metaAdId || i} ad={ad} />
+                    <AdRow key={ad.id || i} ad={ad} />
                   ))}
                 </tbody>
               </table>
@@ -303,6 +329,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [approveState, setApproveState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [pauseState, setPauseState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectState, setRejectState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -331,6 +358,36 @@ export default function CampaignDetailPage({ params }: PageProps) {
     fetchCampaign()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, campaignId])
+
+  async function handlePause() {
+    setPauseState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/campaigns/${tenantId}/${campaignId}/pause`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPauseState('success')
+      showToast('Campaign paused.', 'success')
+      fetchCampaign()
+    } catch (err) {
+      setPauseState('error')
+      showToast(err instanceof Error ? err.message : 'Pause failed', 'error')
+      setTimeout(() => setPauseState('idle'), 3000)
+    }
+  }
+
+  async function handleResume() {
+    try {
+      const res = await fetch(`${API_BASE}/campaigns/${tenantId}/${campaignId}/resume`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      showToast('Campaign resumed.', 'success')
+      fetchCampaign()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Resume failed', 'error')
+    }
+  }
 
   async function handleApprove() {
     setApproveState('loading')
@@ -406,7 +463,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
     )
   }
 
-  const adSets = campaign.adSets || []
+  const adSets = campaign.metaAdSets || []
   const pendingActions = campaign.pendingActions || []
   const reviewDebateLog = campaign.reviewDebateLog || []
 
@@ -456,8 +513,11 @@ export default function CampaignDetailPage({ params }: PageProps) {
               </div>
               <div>
                 <h1 className="text-xl font-bold leading-tight" style={{ color: '#18181b' }}>
-                  {campaign.topic || 'Untitled Campaign'}
+                  {campaign.name || campaign.topic || 'Untitled Campaign'}
                 </h1>
+                {campaign.name && campaign.topic && campaign.topic.trim() && (
+                  <p className="text-xs mt-0.5" style={{ color: '#a1a1aa' }}>{campaign.topic}</p>
+                )}
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <StatusBadge status={campaign.status} />
                   {campaign.source === 'agent' ? (
@@ -483,6 +543,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 </div>
               </div>
             </div>
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
+              {campaign.objective && (
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                >
+                  {campaign.objective}
+                </span>
+              )}
+              {campaign.metaCampaignId && (
+                <span className="text-xs font-mono" style={{ color: '#a1a1aa' }}>
+                  {campaign.metaCampaignId}
+                </span>
+              )}
+            </div>
             <div
               className="flex items-center gap-4 text-xs flex-wrap mt-2"
               style={{ color: '#a1a1aa' }}
@@ -497,6 +572,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <span>
                   Approved:{' '}
                   <span style={{ color: '#52525b' }}>{formatDate(campaign.approvedAt)}</span>
+                </span>
+              )}
+              {campaign.syncedAt && (
+                <span className="flex items-center gap-1">
+                  <RefreshCw size={10} />
+                  Synced:{' '}
+                  <span style={{ color: '#52525b' }}>{formatDate(campaign.syncedAt)}</span>
                 </span>
               )}
               {campaign.runId && (
@@ -551,11 +633,30 @@ export default function CampaignDetailPage({ params }: PageProps) {
             )}
             {campaign.status === 'active' && (
               <button
+                onClick={handlePause}
+                disabled={pauseState !== 'idle'}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' }}
+                style={
+                  pauseState !== 'idle'
+                    ? { background: '#fef3c7', color: '#b45309', opacity: 0.6, cursor: 'not-allowed' }
+                    : { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' }
+                }
               >
-                <Pause size={14} />
-                Pause
+                {pauseState === 'loading' ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Pause size={14} />
+                )}
+                {pauseState === 'loading' ? 'Pausing...' : pauseState === 'success' ? 'Paused!' : 'Pause'}
+              </button>
+            )}
+            {campaign.status === 'paused' && (
+              <button
+                onClick={handleResume}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                style={{ background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' }}
+              >
+                <Play size={14} fill="currentColor" /> Resume
               </button>
             )}
           </div>
@@ -601,23 +702,83 @@ export default function CampaignDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Budget Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+        {/* Budget utilization bar */}
+        {campaign.budget && campaign.budget > 0 && (
+          <div className="mt-5 rounded-xl p-4" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium" style={{ color: '#52525b' }}>Budget utilization</span>
+              <span className="text-xs font-semibold" style={{ color: '#18181b' }}>
+                {formatCurrency(campaign.spend || 0)} <span style={{ color: '#a1a1aa' }}>of</span> {formatCurrency(campaign.budget)}
+                <span className="ml-2" style={{ color: '#71717a' }}>
+                  ({Math.min(((campaign.spend || 0) / campaign.budget) * 100, 100).toFixed(1)}%)
+                </span>
+              </span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: '#e4e4e7' }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(((campaign.spend || 0) / campaign.budget) * 100, 100)}%`,
+                  background: ((campaign.spend || 0) / campaign.budget) > 0.9 ? '#b91c1c' : '#0284c7',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Metrics grid */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mt-3">
           {[
-            { label: 'Budget', value: campaign.budget ? formatCurrency(campaign.budget) : '—', color: '#18181b' },
-            { label: 'Total Spend', value: campaign.spend ? formatCurrency(campaign.spend) : '—', color: '#18181b' },
-            { label: 'ROAS', value: campaign.roas ? `${campaign.roas.toFixed(2)}x` : '—', color: '#15803d' },
-            { label: 'Conversions', value: campaign.conversions ?? '—', color: '#18181b' },
+            {
+              icon: Eye,
+              label: 'Impressions',
+              value: campaign.impressions ? campaign.impressions.toLocaleString() : '—',
+              iconColor: '#52525b', iconBg: '#f4f4f5',
+            },
+            {
+              icon: MousePointerClick,
+              label: 'Clicks',
+              value: campaign.clicks ? campaign.clicks.toLocaleString() : '—',
+              iconColor: '#1d4ed8', iconBg: '#dbeafe',
+            },
+            {
+              icon: BarChart3,
+              label: 'CTR',
+              value: campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : '—',
+              iconColor: '#b45309', iconBg: '#fef3c7',
+            },
+            {
+              icon: DollarSign,
+              label: 'CPC',
+              value: campaign.cpc ? formatCurrency(campaign.cpc) : '—',
+              iconColor: '#52525b', iconBg: '#f4f4f5',
+            },
+            {
+              icon: TrendingUp,
+              label: 'ROAS',
+              value: campaign.roas != null ? `${campaign.roas.toFixed(2)}x` : '—',
+              iconColor: campaign.roas != null && campaign.roas >= 2 ? '#15803d' : campaign.roas != null && campaign.roas >= 1 ? '#b45309' : '#b91c1c',
+              iconBg: campaign.roas != null && campaign.roas >= 2 ? '#dcfce7' : campaign.roas != null && campaign.roas >= 1 ? '#fef3c7' : '#fee2e2',
+            },
+            {
+              icon: Target,
+              label: 'Conversions',
+              value: campaign.conversions ?? '—',
+              iconColor: '#15803d', iconBg: '#dcfce7',
+            },
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-lg p-3"
+              className="rounded-xl p-3 flex flex-col gap-2"
               style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
             >
-              <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>{item.label}</p>
-              <p className="text-sm font-semibold" style={{ color: item.color }}>
-                {item.value}
-              </p>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: item.iconBg }}>
+                <item.icon size={13} style={{ color: item.iconColor }} />
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: '#a1a1aa' }}>{item.label}</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: item.iconColor }}>{item.value}</p>
+              </div>
             </div>
           ))}
         </div>
@@ -638,8 +799,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
       )}
 
       {/* Ad Sets */}
-      {adSets.length > 0 && (
-        <div className="rounded-xl overflow-hidden mb-5" style={sectionStyle}>
+      <div className="rounded-xl overflow-hidden mb-5" style={sectionStyle}>
           <div className="px-5 py-3.5" style={{ borderBottom: '1px solid #f0f0f1' }}>
             <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>Ad Sets</h2>
             <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>
@@ -650,7 +810,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <table className="w-full">
               <thead>
                 <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
-                  {['Ad Set', 'Status', 'Spend', 'CTR', 'CPA', 'Freq.', 'Conv.'].map((h, i) => (
+                  {['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'CPA', 'Freq.', 'Conv.'].map((h, i) => (
                     <th
                       key={h}
                       className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}
@@ -663,13 +823,18 @@ export default function CampaignDetailPage({ params }: PageProps) {
               </thead>
               <tbody>
                 {adSets.map((adSet, idx) => (
-                  <AdSetRow key={adSet.metaAdSetId || idx} adSet={adSet} />
+                  <AdSetRow key={adSet.id || idx} adSet={adSet} />
                 ))}
               </tbody>
             </table>
           </div>
+          {adSets.length === 0 && (
+            <div className="px-5 py-8 text-center">
+              <p className="text-sm" style={{ color: '#a1a1aa' }}>No ad sets synced yet.</p>
+              <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>Ad sets will appear once the campaign is live and synced from Meta.</p>
+            </div>
+          )}
         </div>
-      )}
 
       {/* Pending Actions */}
       {pendingActions.length > 0 && (

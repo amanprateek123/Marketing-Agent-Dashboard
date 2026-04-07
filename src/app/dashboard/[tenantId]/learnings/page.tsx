@@ -23,9 +23,10 @@ function TagList({
   items,
   color,
 }: {
-  items: string[]
+  items: string[] | string
   color: 'green' | 'red' | 'amber' | 'blue' | 'zinc'
 }) {
+  const list = Array.isArray(items) ? items : [items]
   const styles: Record<string, React.CSSProperties> = {
     green:  { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
     red:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
@@ -35,7 +36,7 @@ function TagList({
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      {items.map((item, i) => (
+      {list.map((item, i) => (
         <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={styles[color]}>
           {item}
         </span>
@@ -44,10 +45,11 @@ function TagList({
   )
 }
 
-function InsightList({ items, bullet }: { items: string[]; bullet?: string }) {
+function InsightList({ items, bullet }: { items: string[] | string; bullet?: string }) {
+  const list = Array.isArray(items) ? items : [items]
   return (
     <ul className="flex flex-col gap-1.5">
-      {items.map((item, i) => (
+      {list.map((item, i) => (
         <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
           <span className="mt-0.5 shrink-0" style={{ color: '#0284c7' }}>
             {bullet ?? '•'}

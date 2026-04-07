@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useMemo } from 'react'
 import Link from 'next/link'
+import { EmptyState } from '@/components/ui/EmptyState'
 import {
   Megaphone,
   Bot,
@@ -18,8 +19,8 @@ import {
   Loader2,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import type { Campaign } from '@/types'
+import { formatCurrency, formatDate, cn } from '@/lib/utils'
+import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -55,6 +56,232 @@ function SourceBadge({ source }: { source?: 'agent' | 'manual' }) {
     >
       <User size={9} /> Manual
     </span>
+  )
+}
+
+// ── Inline ad row (within adset expansion) ───────────────────────────────────
+function InlineAdRow({ ad }: { ad: CampaignAd }) {
+  return (
+    <tr style={{ borderBottom: '1px solid #f4f4f5' }}>
+      <td className="px-4 py-2 pl-8">
+        <div>
+          <p className="text-xs font-medium" style={{ color: '#18181b' }}>{ad.name || '—'}</p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {ad.hookStyle && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                {ad.hookStyle}
+              </span>
+            )}
+            {ad.format && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                {ad.format}
+              </span>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>
+        {ad.spend ? formatCurrency(ad.spend) : '—'}
+      </td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>
+        {ad.impressions?.toLocaleString() ?? '—'}
+      </td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>
+        {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '—'}
+      </td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>
+        {ad.cpc ? formatCurrency(ad.cpc) : '—'}
+      </td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>—</td>
+      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#71717a' }}>—</td>
+      <td className="px-4 py-2" />
+    </tr>
+  )
+}
+
+// ── Inline adset row (within campaign expansion) ──────────────────────────────
+function InlineAdSetRow({ adSet }: { adSet: CampaignAdSet }) {
+  const [adsOpen, setAdsOpen] = useState(false)
+  const ads = adSet.ads || []
+
+  return (
+    <>
+      <tr
+        className="transition-colors"
+        style={{ background: '#f0f9ff', borderBottom: '1px solid #e0f2fe' }}
+      >
+        <td className="px-4 py-2.5 pl-10">
+          <div className="flex items-center gap-2">
+            {ads.length > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setAdsOpen((o) => !o) }}
+                className="shrink-0"
+              >
+                <ChevronRight
+                  size={12}
+                  className={cn('transition-transform', adsOpen && 'rotate-90')}
+                  style={{ color: '#0284c7' }}
+                />
+              </button>
+            )}
+            <div>
+              <p className="text-xs font-medium" style={{ color: '#0369a1' }}>{adSet.name || '—'}</p>
+              {adSet.audienceType && (
+                <p className="text-xs mt-0.5 capitalize" style={{ color: '#7dd3fc' }}>{adSet.audienceType}</p>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.spend ? formatCurrency(adSet.spend) : '—'}
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.impressions?.toLocaleString() ?? '—'}
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.ctr != null ? `${adSet.ctr.toFixed(2)}%` : '—'}
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.cpa ? formatCurrency(adSet.cpa) : '—'}
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.frequency?.toFixed(2) || '—'}
+        </td>
+        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#0369a1' }}>
+          {adSet.conversions ?? '—'}
+        </td>
+        <td className="px-4 py-2.5">
+          {adSet.status && <StatusBadge status={adSet.status} />}
+        </td>
+      </tr>
+      {adsOpen && ads.map((ad, i) => (
+        <InlineAdRow key={ad.id || i} ad={ad} />
+      ))}
+    </>
+  )
+}
+
+// ── Campaign row with expand/collapse for adsets ──────────────────────────────
+function CampaignRow({
+  campaign,
+  tenantId,
+  isPending,
+}: {
+  campaign: Campaign
+  tenantId: string
+  isPending: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const adSets = campaign.metaAdSets || []
+
+  return (
+    <>
+      <tr
+        className="group transition-colors hover:bg-sky-50/40"
+        style={{ borderBottom: open ? 'none' : '1px solid #f4f4f5' }}
+      >
+        {/* Expand chevron + name */}
+        <td className="px-5 py-3.5">
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setOpen((o) => !o)}
+              className="mt-0.5 shrink-0 rounded p-0.5 transition-colors hover:bg-sky-100"
+              title={open ? 'Collapse' : 'Expand ad sets'}
+            >
+              <ChevronRight
+                size={13}
+                className={cn('transition-transform', open && 'rotate-90')}
+                style={{ color: adSets.length > 0 ? '#0284c7' : '#d4d4d8' }}
+              />
+            </button>
+            <div className="min-w-0">
+              {isPending && (
+                <span className="w-1.5 h-1.5 rounded-full inline-block mr-1.5 mb-0.5 align-middle" style={{ background: '#f59e0b' }} />
+              )}
+              <Link
+                href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm font-medium leading-snug hover:underline"
+                style={{ color: '#18181b' }}
+              >
+                {campaign.name || campaign.topic || 'Untitled Campaign'}
+              </Link>
+              {campaign.name && campaign.topic && (
+                <p className="text-xs mt-0.5 truncate" style={{ color: '#a1a1aa' }}>{campaign.topic}</p>
+              )}
+              {adSets.length > 0 && (
+                <p className="text-xs mt-0.5" style={{ color: '#0284c7' }}>
+                  {adSets.length} ad set{adSets.length !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="px-4 py-3.5"><StatusBadge status={campaign.status} /></td>
+        <td className="px-4 py-3.5"><SourceBadge source={campaign.source} /></td>
+        <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#d4d4d8' }}>—</span>}
+        </td>
+        <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: '#d4d4d8' }}>—</span>}
+        </td>
+        <td className="px-4 py-3.5 text-right text-sm tabular-nums">
+          {campaign.roas != null ? (
+            <span className="font-semibold" style={{
+              color: campaign.roas >= 2 ? '#15803d' : campaign.roas >= 1 ? '#b45309' : '#b91c1c'
+            }}>
+              {campaign.roas.toFixed(2)}x
+            </span>
+          ) : <span style={{ color: '#d4d4d8' }}>—</span>}
+        </td>
+        <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
+          {campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : <span style={{ color: '#d4d4d8' }}>—</span>}
+        </td>
+        <td className="px-4 py-3.5 text-right text-sm tabular-nums font-medium" style={{ color: '#18181b' }}>
+          {campaign.conversions ?? <span style={{ color: '#d4d4d8' }}>—</span>}
+        </td>
+        <td className="px-4 py-3.5 text-right text-sm whitespace-nowrap" style={{ color: '#a1a1aa' }}>
+          {formatDate(campaign.launchedAt)}
+        </td>
+        <td className="px-4 py-3.5 text-right">
+          <ChevronRight size={15} className="opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#0284c7' }} />
+        </td>
+      </tr>
+
+      {/* Ad sets expansion */}
+      {open && (
+        <tr style={{ borderBottom: '1px solid #e0f2fe' }}>
+          <td colSpan={10} className="px-0 py-0">
+            {adSets.length === 0 ? (
+              <div className="px-10 py-3 text-xs" style={{ background: '#f0f9ff', color: '#7dd3fc' }}>
+                No ad sets on this campaign yet.
+              </div>
+            ) : (
+              <table className="w-full" style={{ background: '#f0f9ff' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #bae6fd' }}>
+                    {['Ad Set / Audience', 'Spend', 'Impressions', 'CTR', 'CPA', 'Freq.', 'Conv.', 'Status'].map((h, i) => (
+                      <th
+                        key={h}
+                        className={`px-4 py-2 ${i === 0 ? 'pl-10 text-left' : 'text-left'} text-xs font-semibold uppercase tracking-wider`}
+                        style={{ color: '#7dd3fc' }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {adSets.map((adSet, i) => (
+                    <InlineAdSetRow key={adSet.id || i} adSet={adSet} />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
@@ -148,6 +375,7 @@ export default function CampaignsPage({ params }: PageProps) {
       const q = search.toLowerCase()
       list = list.filter(
         (c) =>
+          c.name?.toLowerCase().includes(q) ||
           c.topic?.toLowerCase().includes(q) ||
           c.metaCampaignId?.toLowerCase().includes(q)
       )
@@ -155,7 +383,7 @@ export default function CampaignsPage({ params }: PageProps) {
     return [...list].sort((a, b) => {
       let va: number | string = 0, vb: number | string = 0
       switch (sortKey) {
-        case 'topic':      va = a.topic || ''; vb = b.topic || ''; break
+        case 'topic':      va = a.name || a.topic || ''; vb = b.name || b.topic || ''; break
         case 'status':     va = a.status; vb = b.status; break
         case 'budget':     va = a.budget || 0; vb = b.budget || 0; break
         case 'spend':      va = a.spend || 0; vb = b.spend || 0; break
@@ -273,17 +501,11 @@ export default function CampaignsPage({ params }: PageProps) {
             <span className="text-sm">Loading campaigns...</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center">
-            <Megaphone size={32} className="mx-auto mb-3" style={{ color: '#e4e4e7' }} />
-            <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
-              {search || statusFilter !== 'all' ? 'No campaigns match your filters' : 'No campaigns yet'}
-            </p>
-            {!search && statusFilter === 'all' && (
-              <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>
-                Trigger a pipeline run to create your first campaign
-              </p>
-            )}
-          </div>
+          <EmptyState
+            icon={Megaphone}
+            title={search || statusFilter !== 'all' ? 'No campaigns match your filters' : 'No campaigns yet'}
+            subtitle={!search && statusFilter === 'all' ? 'Trigger a pipeline run to create your first campaign' : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -330,98 +552,14 @@ export default function CampaignsPage({ params }: PageProps) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((campaign, idx) => {
-                  const id = campaign._id
-                  const isPending = campaign.status === 'pending_approval'
-                  return (
-                    <tr
-                      key={id || idx}
-                      className="group transition-colors hover:bg-sky-50/50 cursor-pointer"
-                      style={{ borderBottom: '1px solid #f4f4f5' }}
-                      onClick={() => id && (window.location.href = `/dashboard/${tenantId}/campaigns/${id}`)}
-                    >
-                      {/* Campaign name */}
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-start gap-2 max-w-[220px]">
-                          {isPending && (
-                            <span
-                              className="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ background: '#f59e0b' }}
-                            />
-                          )}
-                          <div>
-                            <p
-                              className="text-sm font-medium leading-snug line-clamp-2"
-                              style={{ color: '#18181b' }}
-                            >
-                              {campaign.topic || 'Untitled Campaign'}
-                            </p>
-                            {campaign.metaCampaignId && (
-                              <p className="text-xs font-mono mt-0.5" style={{ color: '#a1a1aa' }}>
-                                {campaign.metaCampaignId}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3.5">
-                        <StatusBadge status={campaign.status} />
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-4 py-3.5">
-                        <SourceBadge source={campaign.source} />
-                      </td>
-
-                      {/* Budget */}
-                      <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
-                        {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#d4d4d8' }}>—</span>}
-                      </td>
-
-                      {/* Spend */}
-                      <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
-                        {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: '#d4d4d8' }}>—</span>}
-                      </td>
-
-                      {/* ROAS */}
-                      <td className="px-4 py-3.5 text-right text-sm tabular-nums">
-                        {campaign.roas ? (
-                          <span className="font-semibold" style={{ color: campaign.roas >= 2 ? '#15803d' : '#b45309' }}>
-                            {campaign.roas.toFixed(2)}x
-                          </span>
-                        ) : (
-                          <span style={{ color: '#d4d4d8' }}>—</span>
-                        )}
-                      </td>
-
-                      {/* CTR */}
-                      <td className="px-4 py-3.5 text-right text-sm tabular-nums" style={{ color: '#52525b' }}>
-                        {campaign.ctr ? `${(campaign.ctr * 100).toFixed(2)}%` : <span style={{ color: '#d4d4d8' }}>—</span>}
-                      </td>
-
-                      {/* Conversions */}
-                      <td className="px-4 py-3.5 text-right text-sm tabular-nums font-medium" style={{ color: '#18181b' }}>
-                        {campaign.conversions ?? <span style={{ color: '#d4d4d8' }}>—</span>}
-                      </td>
-
-                      {/* Launch date */}
-                      <td className="px-4 py-3.5 text-right text-sm whitespace-nowrap" style={{ color: '#a1a1aa' }}>
-                        {formatDate(campaign.launchedAt)}
-                      </td>
-
-                      {/* Arrow */}
-                      <td className="px-4 py-3.5 text-right">
-                        <ChevronRight
-                          size={15}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ color: '#0284c7' }}
-                        />
-                      </td>
-                    </tr>
-                  )
-                })}
+                {filtered.map((campaign, idx) => (
+                  <CampaignRow
+                    key={campaign._id || idx}
+                    campaign={campaign}
+                    tenantId={tenantId}
+                    isPending={campaign.status === 'pending_approval'}
+                  />
+                ))}
               </tbody>
             </table>
           </div>

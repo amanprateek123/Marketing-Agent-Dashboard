@@ -146,32 +146,33 @@ export interface AdSetConfig {
 }
 
 export interface CampaignAd {
-  metaAdId?: string
-  copyVariantIndex?: number
+  id?: string
+  name?: string
   hookStyle?: string
+  format?: string
   status?: string
-  ctrBaseline?: number
-  metrics?: {
-    spend?: number
-    ctr?: number
-    cpc?: number
-    conversions?: number
-  }
+  spend?: number
+  impressions?: number
+  clicks?: number
+  ctr?: number
+  cpc?: number
 }
 
 export interface CampaignAdSet {
-  metaAdSetId?: string
+  id?: string
   name?: string
-  budgetPercent?: number
   audienceType?: string
   status?: string
-  metrics?: {
-    spend?: number
-    ctr?: number
-    cpa?: number
-    frequency?: number
-    conversions?: number
-  }
+  dailyBudget?: number
+  lifetimeBudget?: number
+  optimizationGoal?: string
+  spend?: number
+  impressions?: number
+  clicks?: number
+  conversions?: number
+  ctr?: number
+  cpa?: number
+  frequency?: number
   ads?: CampaignAd[]
 }
 
@@ -216,7 +217,8 @@ export interface Campaign {
     scaleRules?: string
     pauseRules?: string
   }
-  adSets?: CampaignAdSet[]
+  name?: string
+  metaAdSets?: CampaignAdSet[]
   pendingActions?: PendingAction[]
   spend?: number
   impressions?: number
