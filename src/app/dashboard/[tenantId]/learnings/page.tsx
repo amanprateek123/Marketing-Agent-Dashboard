@@ -32,7 +32,7 @@ function TagList({
     red:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
     amber:  { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },
     blue:   { background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' },
-    zinc:   { background: '#f4f4f5', border: '1px solid #e4e4e7', color: '#52525b' },
+    zinc:   { background: '#f4f4f5', border: '1px solid #e8e8ec', color: '#52525b' },
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -66,16 +66,16 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-xl overflow-hidden transition-all"
       style={{
         background: '#ffffff',
-        border: '1px solid #e4e4e7',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        border: '1px solid #e8e8ec',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}
     >
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left transition-colors hover:bg-zinc-50/60"
         style={{ background: expanded ? '#fafafa' : '#ffffff' }}
       >
         <div className="flex items-center gap-4 flex-wrap min-w-0">
@@ -109,7 +109,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f0f0f1' }}>
+        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f0f0f2' }}>
           {study.context && (
             <p className="text-sm leading-relaxed mt-4" style={{ color: '#71717a' }}>
               {study.context}
@@ -118,7 +118,10 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 
           {study.whatWorked && (
             <div className="flex flex-col gap-2">
-              <p className="text-xs font-semibold" style={{ color: '#15803d' }}>✅ What Worked</p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs">✅</span>
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#15803d' }}>What Worked</p>
+              </div>
               {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
                 <div>
                   <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
@@ -139,16 +142,16 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               )}
               <div className="flex gap-3 flex-wrap mt-1">
                 {study.whatWorked.bestCPA !== undefined && (
-                  <div className="rounded-lg px-3 py-1.5" style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}>
-                    <p className="text-xs" style={{ color: '#a1a1aa' }}>Best CPA</p>
+                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e8e8ec' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best CPA</p>
                     <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
                       {formatCurrency(study.whatWorked.bestCPA)}
                     </p>
                   </div>
                 )}
                 {study.whatWorked.bestROAS !== undefined && (
-                  <div className="rounded-lg px-3 py-1.5" style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}>
-                    <p className="text-xs" style={{ color: '#a1a1aa' }}>Best ROAS</p>
+                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e8e8ec' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best ROAS</p>
                     <p className="text-xs font-semibold" style={{ color: '#15803d' }}>
                       {Number(study.whatWorked.bestROAS).toFixed(2)}x
                     </p>
@@ -163,7 +166,10 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               study.whatFailed.audiences?.length ||
               study.whatFailed.reason) && (
               <div className="flex flex-col gap-2">
-                <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>❌ What Failed</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs">❌</span>
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#b91c1c' }}>What Failed</p>
+                </div>
                 {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
                   <div>
                     <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
@@ -317,8 +323,8 @@ export default function LearningsPage({ params }: PageProps) {
 
   const cardStyle: React.CSSProperties = {
     background: '#ffffff',
-    border: '1px solid #e4e4e7',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+    border: '1px solid #e8e8ec',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
   }
 
   const hasPatternData =
@@ -331,25 +337,28 @@ export default function LearningsPage({ params }: PageProps) {
     campaign?.timingInsights?.length
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-7 max-w-5xl mx-auto animate-fade-up">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5 mb-1">
-              <BookOpen size={18} style={{ color: '#0284c7' }} />
-              <h1 className="text-xl font-bold tracking-tight" style={{ color: '#18181b' }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}
+            >
+              <BookOpen size={15} style={{ color: '#15803d' }} />
+            </div>
+            <div>
+              <h1 className="text-[20px] font-bold tracking-tight" style={{ color: '#18181b' }}>
                 Learnings
               </h1>
+              <p className="text-xs mt-0.5" style={{ color: '#a1a1aa' }}>
+                AI-synthesized insights from past campaign performance
+                {updatedAt && (
+                  <span className="ml-1">· Updated {new Date(updatedAt).toLocaleDateString()}</span>
+                )}
+              </p>
             </div>
-            <p className="text-sm" style={{ color: '#71717a' }}>
-              AI-synthesized insights from past campaign performance
-              {updatedAt && (
-                <span className="ml-2 text-xs" style={{ color: '#a1a1aa' }}>
-                  · Updated {new Date(updatedAt).toLocaleDateString()}
-                </span>
-              )}
-            </p>
           </div>
           <button
             onClick={handleImport}
@@ -362,7 +371,7 @@ export default function LearningsPage({ params }: PageProps) {
                 ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
                 : importPhase === 'failed'
                 ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }
-                : { background: '#0284c7', color: '#ffffff' }
+                : { background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: '#ffffff', boxShadow: '0 2px 6px rgba(2,132,199,0.35)' }
             }
           >
             {importPhase === 'importing' ? (
@@ -402,7 +411,7 @@ export default function LearningsPage({ params }: PageProps) {
                 {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} case studies`}
               </span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e4e4e7' }}>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e8e8ec' }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -429,7 +438,7 @@ export default function LearningsPage({ params }: PageProps) {
 
       {/* ===== SECTION A: PATTERN MEMORY ===== */}
       <div className="mb-8">
-        <h2 className="text-base font-semibold mb-4" style={{ color: '#18181b' }}>
+        <h2 className="text-[15px] font-bold tracking-tight mb-4" style={{ color: '#18181b' }}>
           Pattern Memory
         </h2>
 
@@ -513,7 +522,7 @@ export default function LearningsPage({ params }: PageProps) {
                       <div key={type} className="flex items-center justify-between gap-3">
                         <span className="text-sm capitalize" style={{ color: '#52525b' }}>{type}</span>
                         <div className="flex items-center gap-2 flex-1 max-w-[140px]">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e4e4e7' }}>
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e8e8ec' }}>
                             <div
                               className="h-full rounded-full"
                               style={{
@@ -567,12 +576,12 @@ export default function LearningsPage({ params }: PageProps) {
       {/* ===== SECTION B: CASE STUDIES ===== */}
       <div>
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <h2 className="text-base font-semibold" style={{ color: '#18181b' }}>
+          <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
             Case Studies
             {caseStudies.length > 0 && (
               <span
                 className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e8e8ec' }}
               >
                 {caseStudies.length}
               </span>
@@ -584,9 +593,9 @@ export default function LearningsPage({ params }: PageProps) {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by campaign or product..."
-              className="rounded-lg pl-8 pr-4 py-2 text-sm w-72"
-              style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
+              placeholder="Search by campaign or product…"
+              className="rounded-lg pl-8 pr-4 py-1.5 text-xs w-64"
+              style={{ background: '#f6f6f7', border: '1px solid #e8e8ec', color: '#18181b' }}
             />
           </div>
         </div>
@@ -594,7 +603,7 @@ export default function LearningsPage({ params }: PageProps) {
         {filteredStudies.length === 0 ? (
           <div
             className="rounded-xl py-12 text-center"
-            style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}
+            style={{ background: '#ffffff', border: '1px solid #e8e8ec' }}
           >
             <BookOpen size={28} className="mx-auto mb-3" style={{ color: '#d4d4d8' }} />
             <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>

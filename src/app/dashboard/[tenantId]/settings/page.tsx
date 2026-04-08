@@ -39,8 +39,8 @@ function StatusDot({ active }: { active: boolean }) {
 
 const sectionStyle = {
   background: '#ffffff',
-  border: '1px solid #e4e4e7',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+  border: '1px solid #e8e8ec',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
 }
 
 export default function SettingsPage({ params }: PageProps) {
@@ -185,20 +185,25 @@ export default function SettingsPage({ params }: PageProps) {
   const metaConnected = !!(company?.meta?.accessToken)
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-7 max-w-4xl mx-auto animate-fade-up">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5 mb-1">
-              <Settings size={18} style={{ color: '#0284c7' }} />
-              <h1 className="text-xl font-bold tracking-tight" style={{ color: '#18181b' }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: '#e0f2fe', border: '1px solid #bae6fd' }}
+            >
+              <Settings size={15} style={{ color: '#0284c7' }} />
+            </div>
+            <div>
+              <h1 className="text-[20px] font-bold tracking-tight" style={{ color: '#18181b' }}>
                 Settings
               </h1>
+              <p className="text-xs mt-0.5" style={{ color: '#a1a1aa' }}>
+                Manage your BriefOS configuration
+              </p>
             </div>
-            <p className="text-sm" style={{ color: '#71717a' }}>
-              Manage your Marketing Agent configuration
-            </p>
           </div>
           <button
             onClick={handleRegen}
@@ -211,7 +216,7 @@ export default function SettingsPage({ params }: PageProps) {
                 ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
                 : regenState === 'error'
                 ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }
-                : { background: '#ffffff', border: '1px solid #e4e4e7', color: '#52525b' }
+                : { background: '#ffffff', border: '1px solid #e8e8ec', color: '#52525b', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }
             }
           >
             {regenState === 'loading' ? (
@@ -269,7 +274,7 @@ export default function SettingsPage({ params }: PageProps) {
               { label: 'Target Audience', value: company?.targetAudience },
             ].map((item) => (
               <div key={item.label}>
-                <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>{item.label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: '#c4c4cc' }}>{item.label}</p>
                 <p className="text-sm font-medium" style={{ color: '#18181b' }}>{item.value || '—'}</p>
               </div>
             ))}
@@ -300,8 +305,8 @@ export default function SettingsPage({ params }: PageProps) {
                   }
                   className="rounded-lg px-3 py-2 text-sm cursor-pointer"
                   style={{
-                    background: '#ffffff',
-                    border: '1px solid #e4e4e7',
+                    background: '#fafafa',
+                    border: '1px solid #e8e8ec',
                     color: '#18181b',
                   }}
                 >
@@ -343,7 +348,7 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
             <div
               className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3"
-              style={{ borderTop: '1px solid #f0f0f1' }}
+              style={{ borderTop: '1px solid #f0f0f2' }}
             >
               <div>
                 <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Grace Period</p>
@@ -389,7 +394,7 @@ export default function SettingsPage({ params }: PageProps) {
                 className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm font-mono"
                 style={{
                   background: '#ffffff',
-                  border: '1px solid #e4e4e7',
+                  border: '1px solid #e8e8ec',
                   color: '#18181b',
                 }}
               />
@@ -492,7 +497,7 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
 
             {/* Editable: Pixel ID */}
-            <div className="sm:col-span-2 pt-3" style={{ borderTop: '1px solid #f0f0f1' }}>
+            <div className="sm:col-span-2 pt-3" style={{ borderTop: '1px solid #f0f0f2' }}>
               <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>Pixel ID</p>
               <div className="flex items-center gap-3">
                 <input
@@ -501,7 +506,7 @@ export default function SettingsPage({ params }: PageProps) {
                   onChange={(e) => setPixelId(e.target.value)}
                   placeholder="e.g. 123456789"
                   className="flex-1 rounded-lg px-3 py-2 text-sm font-mono"
-                  style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
+                  style={{ background: '#fafafa', border: '1px solid #e8e8ec', color: '#18181b' }}
                 />
               </div>
             </div>
@@ -521,7 +526,7 @@ export default function SettingsPage({ params }: PageProps) {
                   onChange={(e) => setAccountIdsRaw(e.target.value)}
                   placeholder="e.g. act_123, act_456"
                   className="flex-1 rounded-lg px-3 py-2 text-sm font-mono"
-                  style={{ background: '#ffffff', border: '1px solid #e4e4e7', color: '#18181b' }}
+                  style={{ background: '#fafafa', border: '1px solid #e8e8ec', color: '#18181b' }}
                 />
               </div>
             </div>
@@ -565,7 +570,7 @@ export default function SettingsPage({ params }: PageProps) {
               <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>Products</h2>
               <span
                 className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e8e8ec' }}
               >
                 {company.products.length}
               </span>
@@ -575,7 +580,7 @@ export default function SettingsPage({ params }: PageProps) {
                 <div
                   key={idx}
                   className="rounded-lg p-3"
-                  style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
+                  style={{ background: '#fafafa', border: '1px solid #e8e8ec' }}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <p className="text-sm font-semibold" style={{ color: '#18181b' }}>
@@ -615,7 +620,7 @@ export default function SettingsPage({ params }: PageProps) {
                     {product.category && (
                       <span
                         className="text-xs px-2 py-0.5 rounded-full"
-                        style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+                        style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e8e8ec' }}
                       >
                         {product.category}
                       </span>
@@ -640,7 +645,7 @@ export default function SettingsPage({ params }: PageProps) {
               <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>Competitors</h2>
               <span
                 className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e8e8ec' }}
               >
                 {company.competitors.length}
               </span>
@@ -650,7 +655,7 @@ export default function SettingsPage({ params }: PageProps) {
                 <span
                   key={idx}
                   className="text-sm px-3 py-1.5 rounded-lg"
-                  style={{ background: '#f4f4f5', border: '1px solid #e4e4e7', color: '#52525b' }}
+                  style={{ background: '#f4f4f5', border: '1px solid #e8e8ec', color: '#52525b' }}
                 >
                   {comp}
                 </span>

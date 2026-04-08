@@ -463,7 +463,10 @@ export default function CampaignDetailPage({ params }: PageProps) {
     )
   }
 
-  const adSets = campaign.metaAdSets || []
+  // Live ad sets (populated after Meta launch); fall back to planned config for pending campaigns
+  const liveAdSets = campaign.adSets || []
+  const plannedAdSets = campaign.campaignConfig?.adSets || []
+  const showPlanned = liveAdSets.length === 0 && plannedAdSets.length > 0
   const pendingActions = campaign.pendingActions || []
   const reviewDebateLog = campaign.reviewDebateLog || []
 
@@ -798,22 +801,47 @@ export default function CampaignDetailPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Review Notes */}
+      {(campaign.reviewNotes || campaign.reviewAdjustments?.budgetAdjusted) && (
+        <div className="rounded-xl p-5 mb-5" style={sectionStyle}>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: '#18181b' }}>Review Notes</h2>
+          {campaign.reviewAdjustments?.budgetAdjusted && (
+            <div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg text-sm" style={{ background: '#fef3c7', border: '1px solid #fde68a' }}>
+              <span style={{ color: '#b45309' }}>Budget adjusted:</span>
+              <span className="font-semibold" style={{ color: '#92400e' }}>
+                {campaign.reviewAdjustments.originalBudget > 0 && formatCurrency(campaign.reviewAdjustments.originalBudget) + ' → '}
+                {formatCurrency(campaign.reviewAdjustments.recommendedBudget)}
+              </span>
+            </div>
+          )}
+          {campaign.reviewNotes && (
+            <p className="text-sm leading-relaxed" style={{ color: '#52525b' }}>{campaign.reviewNotes}</p>
+          )}
+        </div>
+      )}
+
       {/* Ad Sets */}
       <div className="rounded-xl overflow-hidden mb-5" style={sectionStyle}>
-          <div className="px-5 py-3.5" style={{ borderBottom: '1px solid #f0f0f1' }}>
-            <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>Ad Sets</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>
-              Click a row to expand per-ad metrics
-            </p>
-          </div>
+        <div className="px-5 py-3.5" style={{ borderBottom: '1px solid #f0f0f1' }}>
+          <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>
+            {showPlanned ? 'Planned Ad Sets' : 'Ad Sets'}
+          </h2>
+          <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>
+            {showPlanned
+              ? 'Configured ad sets — live metrics will appear after campaign launches on Meta'
+              : 'Click a row to expand per-ad metrics'}
+          </p>
+        </div>
+
+        {showPlanned ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
-                  {['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'CPA', 'Freq.', 'Conv.'].map((h, i) => (
+                  {['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Optimization Goal'].map((h, i) => (
                     <th
                       key={h}
-                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}
+                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i === 0 ? 'text-left' : 'text-right'}`}
                       style={{ color: '#a1a1aa' }}
                     >
                       {h}
@@ -822,19 +850,92 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 </tr>
               </thead>
               <tbody>
-                {adSets.map((adSet, idx) => (
-                  <AdSetRow key={adSet.id || idx} adSet={adSet} />
+                {plannedAdSets.map((adSet, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-medium" style={{ color: '#18181b' }}>{adSet.name}</p>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded mt-0.5 inline-block"
+                        style={{ background: '#dbeafe', color: '#1d4ed8' }}
+                      >
+                        {adSet.audienceType}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
+                      {adSet.audienceType}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <span className="text-sm font-semibold" style={{ color: '#0284c7' }}>
+                        {adSet.budgetPercent}%
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
+                      {adSet.ageMin && adSet.ageMax ? `${adSet.ageMin}–${adSet.ageMax}` : '—'}
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: '#52525b' }}>
+                      {adSet.geoLocations?.join(', ') || '—'}
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-xs" style={{ color: '#71717a' }}>
+                      {adSet.optimizationGoal?.replace(/_/g, ' ') || '—'}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {adSets.length === 0 && (
-            <div className="px-5 py-8 text-center">
-              <p className="text-sm" style={{ color: '#a1a1aa' }}>No ad sets synced yet.</p>
-              <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>Ad sets will appear once the campaign is live and synced from Meta.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
+                    {['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'CPA', 'Freq.', 'Conv.'].map((h, i) => (
+                      <th
+                        key={h}
+                        className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}
+                        style={{ color: '#a1a1aa' }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveAdSets.map((adSet, idx) => (
+                    <AdSetRow key={adSet.metaAdSetId || idx} adSet={adSet} />
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+            {liveAdSets.length === 0 && (
+              <div className="px-5 py-8 text-center">
+                <p className="text-sm" style={{ color: '#a1a1aa' }}>No ad sets synced yet.</p>
+                <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>Ad sets appear once the campaign is live on Meta.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Scale / Pause rules */}
+        {(campaign.campaignConfig?.scaleRules || campaign.campaignConfig?.pauseRules) && (
+          <div className="px-5 py-4" style={{ borderTop: '1px solid #f0f0f1' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {campaign.campaignConfig.scaleRules && (
+                <div>
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#15803d' }}>📈 Scale Rules</p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{campaign.campaignConfig.scaleRules}</p>
+                </div>
+              )}
+              {campaign.campaignConfig.pauseRules && (
+                <div>
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#b91c1c' }}>⏸ Pause Rules</p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{campaign.campaignConfig.pauseRules}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Pending Actions */}
       {pendingActions.length > 0 && (

@@ -160,6 +160,7 @@ export interface CampaignAd {
 
 export interface CampaignAdSet {
   id?: string
+  metaAdSetId?: string
   name?: string
   audienceType?: string
   status?: string
@@ -218,6 +219,7 @@ export interface Campaign {
     pauseRules?: string
   }
   name?: string
+  adSets?: CampaignAdSet[]
   metaAdSets?: CampaignAdSet[]
   pendingActions?: PendingAction[]
   spend?: number
