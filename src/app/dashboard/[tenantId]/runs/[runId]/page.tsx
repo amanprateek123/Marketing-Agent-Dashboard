@@ -17,12 +17,13 @@ import {
   XCircle,
   ArrowRight,
   Megaphone,
+  ChevronDown,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
-import type { FullRunData, PipelineRun, IntelligenceBrief, CopyVariant, Campaign } from '@/types'
+import type { FullRunData, PipelineRun, IntelligenceBrief, CopyVariant, CreativePackage, Campaign } from '@/types'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -170,109 +171,531 @@ function ScoreBar({ score, max = 10 }: { score?: number; max?: number }) {
   )
 }
 
-// ── Idea card ─────────────────────────────────────────────────────────────────
+// ── Accordion section ─────────────────────────────────────────────────────────
+
+function AccordionSection({
+  title,
+  badge,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  badge?: React.ReactNode
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ borderTop: '1px solid #f0f0f1' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 px-1 py-3 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-semibold" style={{ color: '#374151' }}>
+            {title}
+          </span>
+          {badge}
+        </div>
+        <ChevronDown
+          size={14}
+          className="shrink-0 transition-transform duration-200"
+          style={{
+            color: '#9ca3af',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}
+        />
+      </button>
+      {open && <div className="pb-4">{children}</div>}
+    </div>
+  )
+}
+
+// ── Idea row (with optional inline creative + campaign) ────────────────────────
+
+function CreativeInlinePanel({
+  creativePackage,
+  copyVariants,
+  selectedCopyIndex,
+}: {
+  creativePackage: import('@/types').CreativePackage
+  copyVariants: import('@/types').CopyVariant[]
+  selectedCopyIndex?: number
+}) {
+  return (
+    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e4e4e7' }}>
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#a1a1aa' }}>
+        Creative Output
+      </p>
+
+      {copyVariants.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-medium" style={{ color: '#71717a' }}>Copy Variants</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {copyVariants.map((v, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg p-4 flex flex-col gap-2"
+                style={
+                  idx === selectedCopyIndex
+                    ? { background: '#f0f9ff', border: '2px solid #0284c7' }
+                    : { background: '#fafafa', border: '1px solid #e4e4e7' }
+                }
+              >
+                {idx === selectedCopyIndex && (
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full self-start"
+                    style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                  >
+                    Selected
+                  </span>
+                )}
+                {v.hookStyle && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full self-start"
+                    style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+                  >
+                    {v.hookStyle}
+                  </span>
+                )}
+                {v.headline && (
+                  <p className="text-sm font-semibold" style={{ color: '#18181b' }}>{v.headline}</p>
+                )}
+                <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{v.primaryText}</p>
+                {v.cta && (
+                  <span
+                    className="text-xs font-semibold px-2.5 py-1 rounded-md self-start"
+                    style={{ background: '#dbeafe', color: '#1d4ed8' }}
+                  >
+                    {v.cta}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {creativePackage.imagePrompt && (
+        <div>
+          <p className="text-xs font-medium mb-2" style={{ color: '#71717a' }}>Image Prompt</p>
+          <div className="rounded-lg p-4" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
+            <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>
+              {creativePackage.imagePrompt}
+            </p>
+          </div>
+          {creativePackage.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={creativePackage.imageUrl}
+              alt="Generated creative"
+              className="mt-3 rounded-lg max-w-full"
+              style={{ border: '1px solid #e4e4e7' }}
+            />
+          ) : (
+            <div
+              className="mt-2 h-20 rounded-lg flex items-center justify-center"
+              style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}
+            >
+              <p className="text-xs" style={{ color: '#d4d4d8' }}>Image not yet generated</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {creativePackage.complianceNotes && (
+        <div
+          className="rounded-lg p-3"
+          style={{ background: '#fffbeb', border: '1px solid #fde68a' }}
+        >
+          <p className="text-xs font-semibold mb-1" style={{ color: '#b45309' }}>Compliance Notes</p>
+          <p className="text-xs leading-relaxed" style={{ color: '#78350f' }}>{creativePackage.complianceNotes}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CampaignInlinePanel({
+  campaign,
+  onApprove,
+  approveState,
+  onRejectOpen,
+  rejectOpen,
+  rejectReason,
+  onRejectReasonChange,
+  onReject,
+  rejectState,
+  onRejectCancel,
+  tenantId,
+}: {
+  campaign: import('@/types').Campaign
+  onApprove: () => void
+  approveState: 'idle' | 'loading' | 'success' | 'error'
+  onRejectOpen: () => void
+  rejectOpen: boolean
+  rejectReason: string
+  onRejectReasonChange: (v: string) => void
+  onReject: () => void
+  rejectState: 'idle' | 'loading' | 'success' | 'error'
+  onRejectCancel: () => void
+  tenantId: string
+}) {
+  return (
+    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e4e4e7' }}>
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#a1a1aa' }}>
+        Campaign
+      </p>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+          <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Status</p>
+          <StatusBadge status={campaign.status} />
+        </div>
+        <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+          <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Budget</p>
+          <p className="text-sm font-semibold" style={{ color: '#18181b' }}>
+            {campaign.budget ? formatCurrency(campaign.budget) : '—'}
+          </p>
+        </div>
+        <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+          <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Objective</p>
+          <p className="text-xs" style={{ color: '#52525b' }}>{campaign.objective || '—'}</p>
+        </div>
+      </div>
+
+      {campaign.status === 'pending_approval' && (
+        <div
+          className="rounded-xl p-4 flex flex-col gap-3"
+          style={{ background: '#fafafa', border: '2px solid #e4e4e7' }}
+        >
+          <p className="text-xs font-semibold text-center" style={{ color: '#18181b' }}>
+            Awaiting your approval
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onApprove}
+              disabled={approveState !== 'idle'}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-60"
+              style={{
+                background: approveState !== 'idle' ? '#dcfce7' : '#15803d',
+                color: approveState !== 'idle' ? '#15803d' : '#ffffff',
+                border: '2px solid #15803d',
+              }}
+            >
+              {approveState === 'loading' ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <ThumbsUp size={14} />
+              )}
+              {approveState === 'loading' ? 'Approving…' : approveState === 'success' ? 'Approved!' : 'Approve & Launch'}
+            </button>
+            <button
+              onClick={onRejectOpen}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: '#fee2e2', color: '#b91c1c', border: '2px solid #fecaca' }}
+            >
+              <XCircle size={14} />
+              Reject
+            </button>
+          </div>
+
+          {rejectOpen && (
+            <div
+              className="rounded-lg p-3 flex flex-col gap-2"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+            >
+              <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>Reason for rejection</p>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => onRejectReasonChange(e.target.value)}
+                placeholder="Describe why…"
+                rows={2}
+                className="w-full rounded-lg px-3 py-2 text-xs resize-none"
+                style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#18181b', outline: 'none' }}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onReject}
+                  disabled={rejectState === 'loading' || !rejectReason.trim()}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                  style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
+                >
+                  {rejectState === 'loading' ? 'Rejecting…' : 'Confirm Reject'}
+                </button>
+                <button onClick={onRejectCancel} className="text-xs" style={{ color: '#a1a1aa' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {campaign._id && campaign.status !== 'pending_approval' && (
+        <Link
+          href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
+          className="inline-flex items-center gap-1 text-xs font-medium"
+          style={{ color: '#0284c7', textDecoration: 'none' }}
+        >
+          View full campaign <ArrowRight size={11} />
+        </Link>
+      )}
+    </div>
+  )
+}
 
 function IdeaCard({
   brief,
   isWinner,
   onProduce,
   producing,
+  producedRunId,
+  producedCampaign,
+  tenantId,
+  creativePackage,
+  copyVariants,
+  selectedCopyIndex,
+  campaign,
+  onApprove,
+  approveState,
+  onRejectOpen,
+  rejectOpen,
+  rejectReason,
+  onRejectReasonChange,
+  onReject,
+  rejectState,
+  onRejectCancel,
 }: {
-  brief: IntelligenceBrief
+  brief: import('@/types').IntelligenceBrief
   isWinner: boolean
   onProduce?: () => void
   producing?: boolean
+  producedRunId?: string
+  producedCampaign?: import('@/types').Campaign
+  tenantId?: string
+  creativePackage?: import('@/types').CreativePackage
+  copyVariants?: import('@/types').CopyVariant[]
+  selectedCopyIndex?: number
+  campaign?: import('@/types').Campaign
+  onApprove?: () => void
+  approveState?: 'idle' | 'loading' | 'success' | 'error'
+  onRejectOpen?: () => void
+  rejectOpen?: boolean
+  rejectReason?: string
+  onRejectReasonChange?: (v: string) => void
+  onReject?: () => void
+  rejectState?: 'idle' | 'loading' | 'success' | 'error'
+  onRejectCancel?: () => void
 }) {
+  const isProduced = isWinner || !!producedRunId
+
   return (
     <div
-      className="rounded-xl p-5 flex flex-col gap-3 transition-all"
+      className="rounded-2xl overflow-hidden"
       style={
         isWinner
-          ? {
-              background: '#fffbeb',
-              border: '2px solid #fbbf24',
-              boxShadow: '0 2px 8px rgba(251,191,36,0.12)',
-            }
-          : {
-              background: '#fafafa',
-              border: '1px solid #e4e4e7',
-            }
+          ? { background: '#ffffff', border: '2px solid #fbbf24', boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }
+          : producedRunId
+          ? { background: '#ffffff', border: '1.5px solid #bbf7d0', boxShadow: '0 1px 4px rgba(21,128,61,0.06)' }
+          : { background: '#ffffff', border: '1px solid #e4e4e7', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }
       }
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            {isWinner && (
-              <span
-                className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
-              >
-                <Star size={10} fill="currentColor" /> Selected
-              </span>
-            )}
-            <ScoreBadge score={brief.finalScore} />
+      {/* Accent bar */}
+      <div style={{ height: 3, background: isWinner ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : producedRunId ? '#22c55e' : '#e4e4e7' }} />
+
+      <div className="px-5 pt-4 pb-3 flex flex-col gap-3">
+        {/* ── Always-visible header ── */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            {/* Status + score row */}
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              {isWinner ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                  <Star size={9} fill="currentColor" /> Strategy Pick
+                </span>
+              ) : producedRunId ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                  <CheckCircle2 size={9} /> Produced
+                </span>
+              ) : (
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f4f4f5', color: '#a1a1aa', border: '1px solid #e4e4e7' }}>
+                  Not produced
+                </span>
+              )}
+              <ScoreBadge score={brief.finalScore} />
+            </div>
+
+            {/* Title */}
+            <h4 className="text-sm font-bold leading-snug" style={{ color: '#111827' }}>
+              {brief.topic}
+            </h4>
           </div>
-          <h4 className="text-sm font-semibold leading-snug" style={{ color: '#18181b' }}>
-            {brief.topic}
-          </h4>
+
+          {/* Campaign status pill — quick glance for winner */}
+          {isWinner && campaign && (
+            <StatusBadge status={campaign.status} />
+          )}
         </div>
-      </div>
-      {brief.finalScore !== undefined && (
-        <ScoreBar score={brief.finalScore} />
-      )}
-      {brief.angle && (
-        <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>
-          {brief.angle}
-        </p>
-      )}
-      {brief.hook && (
-        <p className="text-xs italic leading-relaxed" style={{ color: '#0284c7' }}>
-          &ldquo;{brief.hook}&rdquo;
-        </p>
-      )}
-      <div className="flex items-center gap-2 flex-wrap">
-        {brief.platform && (
-          <span
-            className="text-xs px-2 py-0.5 rounded-full"
-            style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
-          >
-            {brief.platform}
-          </span>
+
+        {/* Score bar */}
+        {brief.finalScore !== undefined && <ScoreBar score={brief.finalScore} />}
+
+        {/* Tags row */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {brief.platform && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd' }}>
+              {brief.platform}
+            </span>
+          )}
+          {brief.format && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}>
+              {brief.format}
+            </span>
+          )}
+          {brief.audience && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}>
+              {brief.audience}
+            </span>
+          )}
+        </div>
+
+        {/* ── Produced: accordion sections ── */}
+        {isProduced && (
+          <div className="flex flex-col mt-1">
+            {/* Brief Details accordion */}
+            {(brief.angle || brief.hook || brief.keyMessage) && (
+              <AccordionSection title="Brief Details">
+                <div className="flex flex-col gap-3">
+                  {brief.angle && (
+                    <p className="text-xs leading-relaxed" style={{ color: '#6b7280' }}>{brief.angle}</p>
+                  )}
+                  {brief.hook && (
+                    <div className="rounded-lg px-3 py-2" style={{ background: '#f0f9ff', borderLeft: '3px solid #0284c7' }}>
+                      <p className="text-xs italic leading-relaxed" style={{ color: '#0369a1' }}>&ldquo;{brief.hook}&rdquo;</p>
+                    </div>
+                  )}
+                  {brief.keyMessage && (
+                    <div>
+                      <p className="text-xs font-medium mb-0.5" style={{ color: '#9ca3af' }}>Key Message</p>
+                      <p className="text-xs leading-relaxed" style={{ color: '#374151' }}>{brief.keyMessage}</p>
+                    </div>
+                  )}
+                </div>
+              </AccordionSection>
+            )}
+
+            {/* Creative Output accordion — winner only */}
+            {isWinner && creativePackage && (
+              <AccordionSection title="Creative Output" badge={
+                creativePackage.copyVariants?.length ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0f9ff', color: '#0284c7' }}>
+                    {creativePackage.copyVariants.length} variants
+                  </span>
+                ) : undefined
+              }>
+                <CreativeInlinePanel
+                  creativePackage={creativePackage}
+                  copyVariants={copyVariants ?? []}
+                  selectedCopyIndex={selectedCopyIndex}
+                />
+              </AccordionSection>
+            )}
+
+            {/* Campaign accordion — winner only, auto-open if pending approval */}
+            {isWinner && campaign && tenantId && onApprove && onRejectOpen && (
+              <AccordionSection
+                title="Campaign"
+                defaultOpen={campaign.status === 'pending_approval'}
+                badge={
+                  campaign.status === 'pending_approval' ? (
+                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ background: '#fef3c7', color: '#b45309' }}>
+                      Needs approval
+                    </span>
+                  ) : undefined
+                }
+              >
+                <CampaignInlinePanel
+                  campaign={campaign}
+                  onApprove={onApprove}
+                  approveState={approveState ?? 'idle'}
+                  onRejectOpen={onRejectOpen}
+                  rejectOpen={rejectOpen ?? false}
+                  rejectReason={rejectReason ?? ''}
+                  onRejectReasonChange={onRejectReasonChange ?? (() => {})}
+                  onReject={onReject ?? (() => {})}
+                  rejectState={rejectState ?? 'idle'}
+                  onRejectCancel={onRejectCancel ?? (() => {})}
+                  tenantId={tenantId}
+                />
+              </AccordionSection>
+            )}
+
+            {/* Campaign accordion — produced non-winner */}
+            {!isWinner && producedRunId && tenantId && (
+              <AccordionSection title="Campaign">
+                {producedCampaign ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg p-2.5" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                        <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Status</p>
+                        <StatusBadge status={producedCampaign.status} />
+                      </div>
+                      <div className="rounded-lg p-2.5" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                        <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Budget</p>
+                        <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
+                          {producedCampaign.budget ? formatCurrency(producedCampaign.budget) : '—'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg p-2.5" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                        <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Objective</p>
+                        <p className="text-xs" style={{ color: '#52525b' }}>{producedCampaign.objective || '—'}</p>
+                      </div>
+                    </div>
+                    {producedCampaign._id && (
+                      <Link
+                        href={`/dashboard/${tenantId}/campaigns/${producedCampaign._id}`}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold"
+                        style={{ background: '#f0fdf4', border: '1px solid #86efac', color: '#15803d', textDecoration: 'none' }}
+                      >
+                        <span>View full campaign</span>
+                        <ArrowRight size={12} />
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs" style={{ color: '#a1a1aa' }}>Campaign not yet available</p>
+                )}
+              </AccordionSection>
+            )}
+          </div>
         )}
-        {brief.format && (
-          <span
-            className="text-xs px-2 py-0.5 rounded-full"
-            style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}
+
+        {/* ── Not produced: produce button ── */}
+        {!isProduced && onProduce && (
+          <button
+            onClick={onProduce}
+            disabled={producing}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-60"
+            style={{ background: '#f8fafc', border: '1.5px dashed #cbd5e1', color: '#475569' }}
+            onMouseEnter={(e) => {
+              ;(e.currentTarget as HTMLElement).style.background = '#e0f2fe'
+              ;(e.currentTarget as HTMLElement).style.color = '#0284c7'
+              ;(e.currentTarget as HTMLElement).style.borderColor = '#7dd3fc'
+              ;(e.currentTarget as HTMLElement).style.borderStyle = 'solid'
+            }}
+            onMouseLeave={(e) => {
+              ;(e.currentTarget as HTMLElement).style.background = '#f8fafc'
+              ;(e.currentTarget as HTMLElement).style.color = '#475569'
+              ;(e.currentTarget as HTMLElement).style.borderColor = '#cbd5e1'
+              ;(e.currentTarget as HTMLElement).style.borderStyle = 'dashed'
+            }}
           >
-            {brief.format}
-          </span>
+            {producing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {producing ? 'Starting production…' : 'Produce This Idea'}
+          </button>
         )}
       </div>
-      {!isWinner && onProduce && (
-        <button
-          onClick={onProduce}
-          disabled={producing}
-          className="mt-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all"
-          style={{
-            background: '#f4f4f5',
-            border: '1px solid #e4e4e7',
-            color: '#52525b',
-          }}
-          onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLElement).style.background = '#e0f2fe'
-            ;(e.currentTarget as HTMLElement).style.color = '#0284c7'
-            ;(e.currentTarget as HTMLElement).style.borderColor = '#bae6fd'
-          }}
-          onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLElement).style.background = '#f4f4f5'
-            ;(e.currentTarget as HTMLElement).style.color = '#52525b'
-            ;(e.currentTarget as HTMLElement).style.borderColor = '#e4e4e7'
-          }}
-        >
-          {producing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-          {producing ? 'Producing...' : 'Produce This'}
-        </button>
-      )}
     </div>
   )
 }
@@ -450,6 +873,218 @@ function SectionTabs({
   )
 }
 
+// ── Creative entry card (collapsible) ────────────────────────────────────────
+
+type CreativeEntryType = {
+  briefId: string
+  topic: string
+  isWinner: boolean
+  pkg: CreativePackage | null
+  variants: CopyVariant[]
+  selectedIdx?: number
+  campaignId?: string
+}
+
+function CreativeEntryCard({
+  entry,
+  tenantId,
+  defaultOpen,
+}: {
+  entry: CreativeEntryType
+  tenantId: string
+  defaultOpen: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  // Summary chips shown in collapsed header
+  const chips: string[] = []
+  if (entry.variants.length > 0) chips.push(`${entry.variants.length} variant${entry.variants.length !== 1 ? 's' : ''}`)
+  if (entry.pkg?.imageUrl) chips.push('image')
+  if (entry.pkg?.videoPrompt) chips.push('video')
+  if (entry.pkg?.complianceNotes) chips.push('compliance')
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={
+        entry.isWinner
+          ? { border: '2px solid #fbbf24', background: '#ffffff' }
+          : { border: '1px solid #e4e4e7', background: '#ffffff' }
+      }
+    >
+      {/* Clickable header — always visible */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+        style={{ background: entry.isWinner ? '#fffbeb' : '#fafafa' }}
+      >
+        {entry.isWinner ? (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+            <Star size={9} fill="currentColor" /> Strategy Pick
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+            <CheckCircle2 size={9} /> Produced
+          </span>
+        )}
+        <span className="text-sm font-semibold truncate flex-1" style={{ color: '#18181b' }}>
+          {entry.topic}
+        </span>
+        {!open && chips.length > 0 && (
+          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+            {chips.map((c) => (
+              <span key={c} className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>{c}</span>
+            ))}
+          </div>
+        )}
+        <ChevronDown
+          size={14}
+          className="shrink-0 transition-transform duration-200"
+          style={{ color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+        />
+      </button>
+
+      {/* Expanded content */}
+      {open && (
+        <div style={{ borderTop: `1px solid ${entry.isWinner ? '#fde68a' : '#e4e4e7'}` }}>
+          <div className="px-4 flex flex-col">
+            {!entry.pkg && entry.campaignId && (
+              <div className="py-3">
+                <div className="rounded-lg p-3 flex items-center justify-between gap-3" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                  <p className="text-xs" style={{ color: '#0369a1' }}>Creative package not yet available — view in campaign</p>
+                  <Link
+                    href={`/dashboard/${tenantId}/campaigns/${entry.campaignId}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold shrink-0"
+                    style={{ color: '#0284c7', textDecoration: 'none' }}
+                  >
+                    View Campaign <ArrowRight size={11} />
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Copy variants */}
+            {entry.pkg && entry.variants.length > 0 && (
+              <AccordionSection
+                title="Copy Variants"
+                defaultOpen={true}
+                badge={
+                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0f9ff', color: '#0284c7' }}>
+                    {entry.variants.length}
+                  </span>
+                }
+              >
+                <div className="flex flex-col gap-2">
+                  {entry.variants.map((v, idx) => {
+                    const isSel = idx === entry.selectedIdx
+                    return (
+                      <div
+                        key={idx}
+                        className="rounded-lg px-3 py-2.5 flex flex-col gap-1"
+                        style={isSel
+                          ? { background: '#f0f9ff', border: '1.5px solid #0284c7' }
+                          : { background: '#fafafa', border: '1px solid #e4e4e7' }
+                        }
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isSel && (
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: '#dbeafe', color: '#1d4ed8' }}>Selected</span>
+                          )}
+                          {v.hookStyle && (
+                            <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>{v.hookStyle}</span>
+                          )}
+                          {v.cta && (
+                            <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1d4ed8' }}>{v.cta}</span>
+                          )}
+                        </div>
+                        {v.headline && <p className="text-xs font-semibold" style={{ color: '#18181b' }}>{v.headline}</p>}
+                        <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{v.primaryText}</p>
+                      </div>
+                    )
+                  })}
+                  {entry.pkg.copySelectionReason && (
+                    <p className="text-xs italic pt-1" style={{ color: '#71717a' }}>{entry.pkg.copySelectionReason}</p>
+                  )}
+                </div>
+              </AccordionSection>
+            )}
+
+            {/* Image */}
+            {entry.pkg && entry.pkg.imagePrompt && (
+              <AccordionSection
+                title="Image"
+                defaultOpen={!!entry.pkg.imageUrl}
+                badge={entry.pkg.imageUrl
+                  ? <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0fdf4', color: '#15803d' }}>Generated</span>
+                  : undefined
+                }
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-xs" style={{ color: '#9ca3af' }}>Prompt</p>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(entry.pkg!.imagePrompt || '')}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs"
+                    style={{ background: '#f4f4f5', border: '1px solid #e4e4e7', color: '#52525b' }}
+                  >
+                    <Copy size={10} /> Copy
+                  </button>
+                </div>
+                <div className="rounded-lg p-3 mb-2" style={{ background: '#0f172a' }}>
+                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.imagePrompt}</p>
+                </div>
+                {entry.pkg.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={entry.pkg.imageUrl} alt="Generated creative" className="rounded-lg max-w-full" style={{ border: '1px solid #e4e4e7' }} />
+                ) : (
+                  <div className="h-14 rounded-lg flex items-center justify-center" style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}>
+                    <p className="text-xs" style={{ color: '#d4d4d8' }}>Not yet generated</p>
+                  </div>
+                )}
+              </AccordionSection>
+            )}
+
+            {/* Video */}
+            {entry.pkg && entry.pkg.videoPrompt && (
+              <AccordionSection title="Video Prompt">
+                <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Video size={11} style={{ color: '#64748b' }} />
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Script</span>
+                  </div>
+                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.videoPrompt}</p>
+                </div>
+              </AccordionSection>
+            )}
+
+            {/* Compliance */}
+            {entry.pkg && entry.pkg.complianceNotes && (
+              <AccordionSection title="Compliance Notes">
+                <div className="rounded-lg p-3" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <p className="text-xs leading-relaxed" style={{ color: '#78350f' }}>{entry.pkg.complianceNotes}</p>
+                </div>
+              </AccordionSection>
+            )}
+
+            {/* Debate */}
+            {entry.pkg && entry.pkg.debateLog && entry.pkg.debateLog.length > 0 && (
+              <AccordionSection
+                title="Creative Debate"
+                badge={
+                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                    {entry.pkg.debateLog.length} rounds
+                  </span>
+                }
+              >
+                <DebateLog rounds={entry.pkg.debateLog} />
+              </AccordionSection>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RunDetailPage({ params }: PageProps) {
@@ -460,6 +1095,17 @@ export default function RunDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [producingBrief, setProducingBrief] = useState<string | null>(null)
+  const [producedRuns, setProducedRuns] = useState<Record<string, string>>(() => {
+    try {
+      const saved = typeof window !== 'undefined'
+        ? localStorage.getItem(`producedRuns:${tenantId}:${runId}`)
+        : null
+      return saved ? JSON.parse(saved) : {}
+    } catch { return {} }
+  })
+  const [siblingCampaigns, setSiblingCampaigns] = useState<Record<string, import('@/types').Campaign>>({})
+  const [siblingCreativePackages, setSiblingCreativePackages] = useState<Record<string, import('@/types').CreativePackage>>({})
+
   const [approveState, setApproveState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -476,11 +1122,67 @@ export default function RunDetailPage({ params }: PageProps) {
 
   const fetchFull = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/pipeline/${tenantId}/runs/${runId}/full`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const fullData: FullRunData = await res.json()
+      const [fullRes] = await Promise.all([
+        fetch(`${API_BASE}/pipeline/${tenantId}/runs/${runId}/full`),
+      ])
+      if (!fullRes.ok) throw new Error(`HTTP ${fullRes.status}`)
+      const fullData: FullRunData = await fullRes.json()
       setData(fullData)
       setError(null)
+
+      // Use campaigns API to find produced non-winner briefs.
+      // campaign.briefId is the original brief ID (confirmed by backend schema).
+      if (fullData.briefs) {
+        const winnerBriefId = fullData.run?.selectedBriefId
+        const nonWinnerBriefIds = new Set(
+          fullData.briefs
+            .filter((b) => b.briefId !== winnerBriefId && !b.selected)
+            .map((b) => b.briefId)
+        )
+        try {
+          const campaignsRes = await fetch(`${API_BASE}/campaigns/${tenantId}`, { cache: 'no-store' })
+          if (campaignsRes.ok) {
+            const allCampaigns: import('@/types').Campaign[] = await campaignsRes.json().catch(() => [])
+            const sibCamps: Record<string, import('@/types').Campaign> = {}
+            for (const c of allCampaigns) {
+              if (c.briefId && nonWinnerBriefIds.has(c.briefId)) {
+                sibCamps[c.briefId] = c
+              }
+            }
+            if (Object.keys(sibCamps).length > 0) {
+              setSiblingCampaigns(sibCamps)
+              // Mark these briefs as produced (briefId → campaign._id as identifier)
+              const fromCampaigns: Record<string, string> = {}
+              for (const [briefId, camp] of Object.entries(sibCamps)) {
+                fromCampaigns[briefId] = camp._id
+              }
+              setProducedRuns((prev) => ({ ...prev, ...fromCampaigns }))
+
+              // Fetch creative packages for produced non-winner ideas
+              const pkgResults = await Promise.allSettled(
+                Object.entries(sibCamps)
+                  .filter(([, c]) => c.creativePackageId)
+                  .map(async ([briefId, c]) => {
+                    const r = await fetch(`${API_BASE}/creative/${tenantId}/packages/${c.creativePackageId}`, { cache: 'no-store' })
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+                    const pkg: import('@/types').CreativePackage = await r.json()
+                    return [briefId, pkg] as const
+                  })
+              )
+              const sibPkgs: Record<string, import('@/types').CreativePackage> = {}
+              for (const r of pkgResults) {
+                if (r.status === 'fulfilled') {
+                  const [briefId, pkg] = r.value
+                  sibPkgs[briefId] = pkg
+                }
+              }
+              if (Object.keys(sibPkgs).length > 0) setSiblingCreativePackages(sibPkgs)
+            }
+          }
+        } catch (e) {
+          // campaign cross-ref failed silently
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load run data')
     } finally {
@@ -492,6 +1194,14 @@ export default function RunDetailPage({ params }: PageProps) {
     fetchFull()
   }, [fetchFull])
 
+  // Persist producedRuns to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(`producedRuns:${tenantId}:${runId}`, JSON.stringify(producedRuns))
+    } catch {}
+  }, [producedRuns, tenantId, runId])
+
+
   // Poll while active
   useEffect(() => {
     if (!data?.run) return
@@ -501,7 +1211,6 @@ export default function RunDetailPage({ params }: PageProps) {
     return () => clearInterval(interval)
   }, [data?.run, fetchFull])
 
-
   async function handleProduce(briefId: string) {
     if (!window.confirm('Are you sure you want to produce this brief?')) return
     setProducingBrief(briefId)
@@ -510,6 +1219,10 @@ export default function RunDetailPage({ params }: PageProps) {
         method: 'POST',
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = await res.json().catch(() => ({}))
+      if (result?.runId) {
+        setProducedRuns((prev) => ({ ...prev, [briefId]: result.runId }))
+      }
       showToast('Production started!', 'success')
       fetchFull()
     } catch (err) {
@@ -635,7 +1348,7 @@ export default function RunDetailPage({ params }: PageProps) {
     research.length > 0,
     briefs.length > 0,
     !!creativePackage,
-    !!campaign,
+    !!campaign || Object.keys(siblingCampaigns).length > 0,
   ]
 
   // Scout platform tabs
@@ -1061,594 +1774,459 @@ export default function RunDetailPage({ params }: PageProps) {
         }
 
         {/* ===== SECTION D: STRATEGY ===== */}
-        {activeSection === 2 && <div className="rounded-xl p-6" style={sectionStyle}>
-          <SectionHeader
-            number="03"
-            title={`Strategy — ${briefs.length} ${briefs.length === 1 ? 'Idea' : 'Ideas'}`}
-            icon={<Sparkles size={16} style={{ color: '#0284c7' }} />}
-          />
+        {activeSection === 2 && (
+          <div className="rounded-xl p-6" style={sectionStyle}>
+            <SectionHeader
+              number="03"
+              title={`Strategy — ${briefs.length} ${briefs.length === 1 ? 'Idea' : 'Ideas'}`}
+              icon={<Sparkles size={16} style={{ color: '#0284c7' }} />}
+            />
 
-          {/* Selected brief summary */}
-          {creativeBrief && (
-            <div
-              className="rounded-xl p-5 mb-5 flex flex-col gap-3"
-              style={{ background: '#fffbeb', border: '2px solid #fbbf24', boxShadow: '0 2px 8px rgba(251,191,36,0.1)' }}
-            >
-              <div className="flex items-center gap-2">
-                <Star size={13} fill="currentColor" style={{ color: '#b45309' }} />
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
-                  Selected Brief
-                </span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: 'Topic', value: creativeBrief.topic },
-                  { label: 'Platform', value: creativeBrief.platform },
-                  { label: 'Format', value: creativeBrief.format },
-                  { label: 'Audience', value: creativeBrief.audience },
-                ]
-                  .filter((f) => f.value)
-                  .map((f) => (
-                    <div key={f.label}>
-                      <p className="text-xs mb-0.5" style={{ color: '#a1a1aa' }}>
-                        {f.label}
-                      </p>
-                      <p className="text-sm font-medium capitalize" style={{ color: '#18181b' }}>
-                        {f.value}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-              {creativeBrief.angle && (
-                <p className="text-xs leading-relaxed" style={{ color: '#71717a' }}>
-                  <span className="font-semibold" style={{ color: '#b45309' }}>
-                    Angle:{' '}
-                  </span>
-                  {creativeBrief.angle}
+            {briefs.length === 0 ? (
+              <div
+                className="rounded-lg p-5 text-center"
+                style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
+              >
+                <p className="text-sm" style={{ color: '#a1a1aa' }}>
+                  No intelligence briefs available yet.
                 </p>
-              )}
-              {creativeBrief.hook && (
-                <p className="text-xs italic leading-relaxed" style={{ color: '#0284c7' }}>
-                  &ldquo;{creativeBrief.hook}&rdquo;
-                </p>
-              )}
-              {creativeBrief.keyMessage && (
-                <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>
-                  <span className="font-semibold">Key Message: </span>
-                  {creativeBrief.keyMessage}
-                </p>
-              )}
-              <div className="flex items-center gap-4 flex-wrap">
-                {creativeBrief.suggestedBudget !== undefined && (
-                  <span className="text-xs" style={{ color: '#71717a' }}>
-                    Budget:{' '}
-                    <span className="font-semibold" style={{ color: '#15803d' }}>
-                      {formatCurrency(creativeBrief.suggestedBudget)}
-                    </span>
-                  </span>
-                )}
-                {creativeBrief.selectionReason && (
-                  <p className="text-xs italic flex-1" style={{ color: '#a1a1aa' }}>
-                    {creativeBrief.selectionReason}
-                  </p>
-                )}
               </div>
-            </div>
-          )}
-
-          {briefs.length === 0 ? (
-            <div
-              className="rounded-lg p-5 text-center"
-              style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-            >
-              <p className="text-sm" style={{ color: '#a1a1aa' }}>
-                No intelligence briefs available yet.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-              {briefs.map((brief) => (
+            ) : (
+              <div className="flex flex-col gap-4">
+              {/* Winner card - full width */}
+              {briefs.filter(b => b.selected === true || b.briefId === run?.selectedBriefId).map((brief) => (
                 <IdeaCard
                   key={brief.briefId}
                   brief={brief}
-                  isWinner={brief.selected === true || brief.briefId === run?.selectedBriefId}
+                  isWinner={true}
                   onProduce={() => handleProduce(brief.briefId)}
                   producing={producingBrief === brief.briefId}
+                  producedRunId={producedRuns[brief.briefId]}
+                  tenantId={tenantId}
+                  creativePackage={creativePackage}
+                  copyVariants={copyVariants}
+                  selectedCopyIndex={selectedCopyIndex}
+                  campaign={campaign ?? undefined}
+                  onApprove={handleApprove}
+                  approveState={approveState}
+                  onRejectOpen={() => setRejectOpen((o) => !o)}
+                  rejectOpen={rejectOpen}
+                  rejectReason={rejectReason}
+                  onRejectReasonChange={setRejectReason}
+                  onReject={handleReject}
+                  rejectState={rejectState}
+                  onRejectCancel={() => setRejectOpen(false)}
                 />
               ))}
-            </div>
-          )}
 
-          {creativeBrief?.debateLog && creativeBrief.debateLog.length > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
-                <span className="text-xs font-medium px-2" style={{ color: '#a1a1aa' }}>
-                  Brief Selection Debate
-                </span>
-                <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+              {/* Other ideas - 2 column grid */}
+              {briefs.filter(b => !(b.selected === true || b.briefId === run?.selectedBriefId)).length > 0 && (
+                <>
+                  <div className="flex items-center gap-3 mt-2">
+                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+                    <span className="text-xs font-medium px-2 shrink-0" style={{ color: '#a1a1aa' }}>
+                      Other ideas from this run
+                    </span>
+                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {briefs
+                      .filter(b => !(b.selected === true || b.briefId === run?.selectedBriefId))
+                      .map((brief) => (
+                        <IdeaCard
+                          key={brief.briefId}
+                          brief={brief}
+                          isWinner={false}
+                          onProduce={() => handleProduce(brief.briefId)}
+                          producing={producingBrief === brief.briefId}
+                          producedRunId={producedRuns[brief.briefId]}
+                          producedCampaign={siblingCampaigns[brief.briefId]}
+                          tenantId={tenantId}
+                        />
+                      ))}
+                  </div>
+                </>
+              )}
+
+                {/* Productions spawned from this run */}
+                {Object.keys(siblingCampaigns).length > 0 && (
+                  <div
+                    className="rounded-xl p-4"
+                    style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}
+                  >
+                    <p className="text-xs font-semibold mb-3" style={{ color: '#0284c7' }}>
+                      Productions from this run
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {Object.entries(siblingCampaigns).map(([briefId, camp]) => {
+                        const matchedBrief = briefs.find((b) => b.briefId === briefId)
+                        return (
+                          <div
+                            key={briefId}
+                            className="flex items-center justify-between gap-3 flex-wrap"
+                          >
+                            <span className="text-xs truncate flex-1" style={{ color: '#52525b' }}>
+                              {matchedBrief?.topic || briefId}
+                            </span>
+                            <Link
+                              href={`/dashboard/${tenantId}/campaigns/${camp._id}`}
+                              className="flex items-center gap-1 text-xs font-medium shrink-0"
+                              style={{ color: '#0284c7', textDecoration: 'none' }}
+                            >
+                              View Campaign <ArrowRight size={11} />
+                            </Link>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-              <DebateLog
-                rounds={creativeBrief.debateLog}
-                rationale={creativeBrief.debateRationale}
-              />
-            </div>
-          )}
-        </div>
+            )}
 
-        }
+            {creativeBrief?.debateLog && creativeBrief.debateLog.length > 0 && (
+              <div className="mt-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+                  <span className="text-xs font-medium px-2" style={{ color: '#a1a1aa' }}>
+                    Brief Selection Debate
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+                </div>
+                <DebateLog
+                  rounds={creativeBrief.debateLog}
+                  rationale={creativeBrief.debateRationale}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ===== SECTION E: CREATIVE OUTPUT ===== */}
-        {activeSection === 3 && <div className="rounded-xl p-6" style={sectionStyle}>
-          <SectionHeader
-            number="04"
-            title="Creative Output"
-            icon={<ImageIcon size={16} style={{ color: '#0284c7' }} />}
-          />
+        {activeSection === 3 && (() => {
+          const entries: CreativeEntryType[] = []
 
-          {!creativePackage ? (
-            <div
-              className="rounded-lg p-5 text-center"
-              style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-            >
-              <p className="text-sm" style={{ color: '#a1a1aa' }}>
-                No creative package available yet.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {/* Copy variants */}
-              {copyVariants.length > 0 && (
-                <div>
-                  <h3
-                    className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: '#a1a1aa' }}
-                  >
-                    Copy Variants
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {copyVariants.map((variant, idx) => (
-                      <CopyVariantCard
-                        key={idx}
-                        variant={variant}
-                        isSelected={idx === selectedCopyIndex}
-                      />
-                    ))}
-                  </div>
-                  {creativePackage.copySelectionReason && (
-                    <p className="mt-2 text-xs italic" style={{ color: '#71717a' }}>
-                      {creativePackage.copySelectionReason}
-                    </p>
-                  )}
+          // Winner
+          if (creativePackage) {
+            entries.push({
+              briefId: run?.selectedBriefId ?? 'winner',
+              topic: creativeBrief?.topic ?? 'Strategy Pick',
+              isWinner: true,
+              pkg: creativePackage,
+              variants: copyVariants,
+              selectedIdx: selectedCopyIndex,
+            })
+          }
+
+          // Produced non-winners — use fetched creative package if available
+          for (const [briefId, sibCamp] of Object.entries(siblingCampaigns)) {
+            const topic =
+              briefs.find((b) => b.briefId === briefId)?.topic ?? 'Produced Idea'
+            const pkg = siblingCreativePackages[briefId] ?? null
+            entries.push({
+              briefId,
+              topic,
+              isWinner: false,
+              pkg,
+              variants: pkg?.copyVariants ?? [],
+              selectedIdx: pkg?.selectedCopyIndex,
+              campaignId: pkg ? undefined : sibCamp._id,
+            })
+          }
+
+          return (
+            <div className="rounded-xl p-6" style={sectionStyle}>
+              <SectionHeader
+                number="04"
+                title={`Creative Output${entries.length > 1 ? ` — ${entries.length} ideas` : ''}`}
+                icon={<ImageIcon size={16} style={{ color: '#0284c7' }} />}
+              />
+
+              {entries.length === 0 ? (
+                <div className="rounded-lg p-5 text-center" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                  <p className="text-sm" style={{ color: '#a1a1aa' }}>No creative packages available yet.</p>
                 </div>
-              )}
-
-              {/* Image prompt */}
-              {creativePackage.imagePrompt && (
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                      <ImageIcon size={13} style={{ color: '#a1a1aa' }} />
-                      <h3
-                        className="text-xs font-semibold uppercase tracking-wider"
-                        style={{ color: '#a1a1aa' }}
-                      >
-                        Image Prompt
-                      </h3>
-                    </div>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(creativePackage.imagePrompt || '')}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all"
-                      style={{
-                        background: '#f4f4f5',
-                        border: '1px solid #e4e4e7',
-                        color: '#52525b',
-                      }}
-                      onMouseEnter={(e) => {
-                        ;(e.currentTarget as HTMLElement).style.background = '#e0f2fe'
-                        ;(e.currentTarget as HTMLElement).style.color = '#0284c7'
-                        ;(e.currentTarget as HTMLElement).style.borderColor = '#bae6fd'
-                      }}
-                      onMouseLeave={(e) => {
-                        ;(e.currentTarget as HTMLElement).style.background = '#f4f4f5'
-                        ;(e.currentTarget as HTMLElement).style.color = '#52525b'
-                        ;(e.currentTarget as HTMLElement).style.borderColor = '#e4e4e7'
-                      }}
-                    >
-                      <Copy size={11} /> Copy
-                    </button>
-                  </div>
-                  <div
-                    className="rounded-lg p-5"
-                    style={{ background: '#0f172a', border: '1px solid #1e293b' }}
-                  >
-                    <p
-                      className="text-xs font-mono leading-relaxed"
-                      style={{ color: '#94a3b8' }}
-                    >
-                      {creativePackage.imagePrompt}
-                    </p>
-                  </div>
-                  {creativePackage.imageUrl ? (
-                    <div className="mt-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={creativePackage.imageUrl}
-                        alt="Generated creative"
-                        className="rounded-lg max-w-full"
-                        style={{ border: '1px solid #e4e4e7' }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className="mt-2 h-24 rounded-lg flex items-center justify-center"
-                      style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}
-                    >
-                      <p className="text-xs" style={{ color: '#d4d4d8' }}>
-                        Image not yet generated
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Video prompt */}
-              {creativePackage.videoPrompt && (
-                <CollapsibleSection title="Video Prompt">
-                  <div
-                    className="rounded-lg p-4"
-                    style={{ background: '#0f172a', border: '1px solid #1e293b' }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Video size={12} style={{ color: '#64748b' }} />
-                      <span
-                        className="text-xs font-semibold uppercase tracking-wider"
-                        style={{ color: '#64748b' }}
-                      >
-                        Video Script
-                      </span>
-                    </div>
-                    <p
-                      className="text-xs font-mono leading-relaxed"
-                      style={{ color: '#94a3b8' }}
-                    >
-                      {creativePackage.videoPrompt}
-                    </p>
-                  </div>
-                </CollapsibleSection>
-              )}
-
-              {/* Compliance notes */}
-              {creativePackage.complianceNotes && (
-                <div
-                  className="rounded-xl p-4"
-                  style={{ background: '#fffbeb', border: '1px solid #fde68a' }}
-                >
-                  <p className="text-xs font-semibold mb-1" style={{ color: '#b45309' }}>
-                    Compliance Notes
-                  </p>
-                  <p className="text-sm leading-relaxed" style={{ color: '#78350f' }}>
-                    {creativePackage.complianceNotes}
-                  </p>
-                </div>
-              )}
-
-              {/* Creative debate log */}
-              {creativePackage.debateLog && creativePackage.debateLog.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
-                    <span className="text-xs font-medium px-2" style={{ color: '#a1a1aa' }}>
-                      Creative Debate
-                    </span>
-                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
-                  </div>
-                  <DebateLog rounds={creativePackage.debateLog} />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {entries.map((entry) => (
+                    <CreativeEntryCard
+                      key={entry.briefId}
+                      entry={entry}
+                      tenantId={tenantId}
+                      defaultOpen={entry.isWinner}
+                    />
+                  ))}
                 </div>
               )}
             </div>
-          )}
-        </div>
-
-        }
+          )
+        })()}
 
         {/* ===== SECTION F: CAMPAIGN REVIEW ===== */}
-        {activeSection === 4 && <div className="rounded-xl p-6" style={sectionStyle}>
-          <SectionHeader
-            number="05"
-            title="Campaign Review"
-            icon={<Megaphone size={16} style={{ color: '#0284c7' }} />}
-          />
+        {activeSection === 4 && (() => {
+          type CampaignEntry = {
+            briefId: string
+            topic: string
+            isWinner: boolean
+            camp: Campaign
+          }
+          const campEntries: CampaignEntry[] = []
 
-          {!campaign ? (
-            <div
-              className="rounded-lg p-5 text-center"
-              style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-            >
-              <p className="text-sm" style={{ color: '#a1a1aa' }}>
-                No campaign linked to this run yet.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-5">
-              {/* Status + budget + objective */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div
-                  className="rounded-lg p-3"
-                  style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-                >
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>
-                    Status
-                  </p>
-                  <StatusBadge status={campaign.status} />
+          if (campaign) {
+            campEntries.push({
+              briefId: run?.selectedBriefId ?? 'winner',
+              topic: creativeBrief?.topic ?? 'Strategy Pick',
+              isWinner: true,
+              camp: campaign,
+            })
+          }
+
+          for (const [briefId, sibCamp] of Object.entries(siblingCampaigns)) {
+            const topic =
+              briefs.find((b) => b.briefId === briefId)?.topic ?? 'Produced Idea'
+            campEntries.push({
+              briefId,
+              topic,
+              isWinner: false,
+              camp: sibCamp,
+            })
+          }
+
+          return (
+            <div className="rounded-xl p-6" style={sectionStyle}>
+              <SectionHeader
+                number="05"
+                title={`Campaign Review${campEntries.length > 1 ? ` — ${campEntries.length} campaigns` : ''}`}
+                icon={<Megaphone size={16} style={{ color: '#0284c7' }} />}
+              />
+
+              {campEntries.length === 0 ? (
+                <div className="rounded-lg p-5 text-center" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                  <p className="text-sm" style={{ color: '#a1a1aa' }}>No campaigns linked to this run yet.</p>
                 </div>
-                <div
-                  className="rounded-lg p-3"
-                  style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-                >
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>
-                    Budget
-                  </p>
-                  <p className="text-sm font-semibold" style={{ color: '#18181b' }}>
-                    {campaign.budget ? formatCurrency(campaign.budget) : '—'}
-                  </p>
-                  {campaign.reviewAdjustments?.budgetAdjusted && (
-                    <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
-                      orig. {formatCurrency(campaign.reviewAdjustments.originalBudget)} →{' '}
-                      {formatCurrency(campaign.reviewAdjustments.recommendedBudget)}
-                    </p>
-                  )}
-                </div>
-                <div
-                  className="rounded-lg p-3"
-                  style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
-                >
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>
-                    Objective
-                  </p>
-                  <p className="text-sm" style={{ color: '#52525b' }}>
-                    {campaign.objective || '—'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Ad set config */}
-              {campaign.campaignConfig?.adSets && campaign.campaignConfig.adSets.length > 0 && (
-                <div>
-                  <h3
-                    className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: '#a1a1aa' }}
-                  >
-                    Ad Set Configuration
-                  </h3>
-                  <div
-                    className="rounded-lg overflow-x-auto"
-                    style={{ border: '1px solid #e4e4e7' }}
-                  >
-                    <table className="w-full">
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
-                          {[
-                            'Name',
-                            'Audience',
-                            'Budget %',
-                            'Meta Audience ID',
-                            'Age',
-                            'Geo',
-                            'Optimization',
-                          ].map((h) => (
-                            <th
-                              key={h}
-                              className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
-                              style={{ color: '#a1a1aa' }}
-                            >
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {campaign.campaignConfig.adSets.map((adSet, idx) => (
-                          <tr
-                            key={idx}
-                            className="transition-colors hover:bg-zinc-50"
-                            style={{ borderBottom: '1px solid #f4f4f5' }}
-                          >
-                            <td className="px-4 py-3 text-sm" style={{ color: '#18181b' }}>
-                              {adSet.name}
-                            </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>
-                              {adSet.audienceType}
-                            </td>
-                            <td className="px-4 py-3 text-sm" style={{ color: '#52525b' }}>
-                              {adSet.budgetPercent}%
-                            </td>
-                            <td className="px-4 py-3 text-xs font-mono" style={{ color: '#a1a1aa' }}>
-                              {adSet.metaAudienceId || '—'}
-                            </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>
-                              {adSet.ageMin || adSet.ageMax
-                                ? `${adSet.ageMin ?? '?'}–${adSet.ageMax ?? '?'}`
-                                : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>
-                              {adSet.geoLocations?.join(', ') || '—'}
-                            </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>
-                              {adSet.optimizationGoal || '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Scale / pause rules */}
-              {campaign.campaignConfig?.scaleRules && (
-                <div>
-                  <h3
-                    className="text-xs font-semibold uppercase tracking-wider mb-2"
-                    style={{ color: '#a1a1aa' }}
-                  >
-                    Scale Rules
-                  </h3>
-                  <pre
-                    className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed"
-                    style={{ background: '#fafafa', border: '1px solid #e4e4e7', color: '#52525b' }}
-                  >
-                    {campaign.campaignConfig.scaleRules}
-                  </pre>
-                </div>
-              )}
-              {campaign.campaignConfig?.pauseRules && (
-                <div>
-                  <h3
-                    className="text-xs font-semibold uppercase tracking-wider mb-2"
-                    style={{ color: '#a1a1aa' }}
-                  >
-                    Pause Rules
-                  </h3>
-                  <pre
-                    className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed"
-                    style={{ background: '#fafafa', border: '1px solid #e4e4e7', color: '#52525b' }}
-                  >
-                    {campaign.campaignConfig.pauseRules}
-                  </pre>
-                </div>
-              )}
-
-              {/* Campaign review debate log */}
-              {campaign.reviewDebateLog && campaign.reviewDebateLog.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
-                    <span className="text-xs font-medium px-2" style={{ color: '#a1a1aa' }}>
-                      Review Debate
-                    </span>
-                    <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
-                  </div>
-                  <DebateLog rounds={campaign.reviewDebateLog} />
-                </div>
-              )}
-
-              {/* View full campaign link */}
-              {campaign._id && campaign.status !== 'pending_approval' && (
-                <div className="pt-1">
-                  <Link
-                    href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-                    className="inline-flex items-center gap-2 text-sm font-medium transition-colors"
-                    style={{ color: '#0284c7' }}
-                  >
-                    View full campaign details <ArrowRight size={14} />
-                  </Link>
-                </div>
-              )}
-
-              {/* ===== PENDING APPROVAL — PROMINENT ACTION BUTTONS ===== */}
-              {campaign.status === 'pending_approval' && (
-                <div
-                  className="rounded-xl p-5 mt-2 flex flex-col gap-4"
-                  style={{ background: '#fafafa', border: '2px solid #e4e4e7' }}
-                >
-                  <div className="text-center">
-                    <p className="text-sm font-semibold" style={{ color: '#18181b' }}>
-                      This campaign is awaiting your approval
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: '#71717a' }}>
-                      Review the details above before approving or rejecting
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={handleApprove}
-                      disabled={approveState !== 'idle'}
-                      className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl text-base font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                      style={{
-                        background: approveState !== 'idle' ? '#dcfce7' : '#15803d',
-                        color: approveState !== 'idle' ? '#15803d' : '#ffffff',
-                        border: '2px solid #15803d',
-                        boxShadow: approveState === 'idle' ? '0 4px 12px rgba(21,128,61,0.25)' : 'none',
-                      }}
-                    >
-                      {approveState === 'loading' ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <ThumbsUp size={18} />
-                      )}
-                      {approveState === 'loading'
-                        ? 'Approving…'
-                        : approveState === 'success'
-                        ? 'Approved!'
-                        : 'Approve & Launch Campaign'}
-                    </button>
-
-                    <button
-                      onClick={() => setRejectOpen((o) => !o)}
-                      className="w-full flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm font-semibold transition-all"
-                      style={{
-                        background: '#fee2e2',
-                        color: '#b91c1c',
-                        border: '2px solid #fecaca',
-                      }}
-                    >
-                      <XCircle size={16} />
-                      Reject Campaign
-                    </button>
-                  </div>
-
-                  {/* Inline reject form */}
-                  {rejectOpen && (
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {campEntries.map((entry) => (
                     <div
-                      className="rounded-xl p-4 flex flex-col gap-3"
-                      style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+                      key={entry.briefId}
+                      className="rounded-xl overflow-hidden"
+                      style={
+                        entry.isWinner
+                          ? { border: '2px solid #fbbf24', background: '#ffffff' }
+                          : { border: '1px solid #e4e4e7', background: '#ffffff' }
+                      }
                     >
-                      <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>
-                        Reason for rejection
-                      </p>
-                      <textarea
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        placeholder="Describe why this campaign is being rejected…"
-                        rows={3}
-                        className="w-full rounded-lg px-3 py-2 text-sm resize-none"
+                      {/* Campaign header */}
+                      <div
+                        className="px-5 py-3 flex items-center gap-3 flex-wrap"
                         style={{
-                          background: '#ffffff',
-                          border: '1px solid #fecaca',
-                          color: '#18181b',
-                          outline: 'none',
+                          background: entry.isWinner ? '#fffbeb' : '#fafafa',
+                          borderBottom: `1px solid ${entry.isWinner ? '#fde68a' : '#e4e4e7'}`,
                         }}
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleReject}
-                          disabled={rejectState === 'loading' || !rejectReason.trim()}
-                          className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            background: '#fee2e2',
-                            border: '1px solid #fecaca',
-                            color: '#b91c1c',
-                          }}
-                        >
-                          {rejectState === 'loading' ? 'Rejecting…' : 'Confirm Reject'}
-                        </button>
-                        <button
-                          onClick={() => setRejectOpen(false)}
-                          className="text-xs transition-colors"
-                          style={{ color: '#a1a1aa' }}
-                        >
-                          Cancel
-                        </button>
+                      >
+                        {entry.isWinner ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                            <Star size={9} fill="currentColor" /> Strategy Pick
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                            <CheckCircle2 size={9} /> Produced
+                          </span>
+                        )}
+                        <h3 className="text-sm font-semibold flex-1 truncate" style={{ color: '#18181b' }}>
+                          {entry.topic}
+                        </h3>
+                        <StatusBadge status={entry.camp.status} />
+                      </div>
+
+                      {/* Campaign content */}
+                      <div className="px-5 flex flex-col">
+                        {/* Always-visible: status / budget / objective */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 py-4">
+                          <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                            <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Status</p>
+                            <StatusBadge status={entry.camp.status} />
+                          </div>
+                          <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                            <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Budget</p>
+                            <p className="text-sm font-semibold" style={{ color: '#18181b' }}>
+                              {entry.camp.budget ? formatCurrency(entry.camp.budget) : '—'}
+                            </p>
+                            {entry.camp.reviewAdjustments?.budgetAdjusted && (
+                              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+                                orig. {formatCurrency(entry.camp.reviewAdjustments.originalBudget)} → {formatCurrency(entry.camp.reviewAdjustments.recommendedBudget)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-lg p-3" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                            <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Objective</p>
+                            <p className="text-sm" style={{ color: '#52525b' }}>{entry.camp.objective || '—'}</p>
+                          </div>
+                        </div>
+
+                        {/* Ad set config accordion */}
+                        {entry.camp.campaignConfig?.adSets && entry.camp.campaignConfig.adSets.length > 0 && (
+                          <AccordionSection
+                            title="Ad Set Configuration"
+                            badge={
+                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                                {entry.camp.campaignConfig.adSets.length} set{entry.camp.campaignConfig.adSets.length !== 1 ? 's' : ''}
+                              </span>
+                            }
+                          >
+                            <div className="rounded-lg overflow-x-auto" style={{ border: '1px solid #e4e4e7' }}>
+                              <table className="w-full">
+                                <thead>
+                                  <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
+                                    {['Name','Audience','Budget %','Meta Audience ID','Age','Geo','Optimization'].map((h) => (
+                                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#a1a1aa' }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {entry.camp.campaignConfig.adSets.map((adSet, idx) => (
+                                    <tr key={idx} className="transition-colors hover:bg-zinc-50" style={{ borderBottom: '1px solid #f4f4f5' }}>
+                                      <td className="px-4 py-3 text-sm" style={{ color: '#18181b' }}>{adSet.name}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>{adSet.audienceType}</td>
+                                      <td className="px-4 py-3 text-sm" style={{ color: '#52525b' }}>{adSet.budgetPercent}%</td>
+                                      <td className="px-4 py-3 text-xs font-mono" style={{ color: '#a1a1aa' }}>{adSet.metaAudienceId || '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>{adSet.ageMin || adSet.ageMax ? `${adSet.ageMin ?? '?'}–${adSet.ageMax ?? '?'}` : '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>{adSet.geoLocations?.join(', ') || '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#71717a' }}>{adSet.optimizationGoal || '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </AccordionSection>
+                        )}
+
+                        {/* Scale / pause rules accordion */}
+                        {(entry.camp.campaignConfig?.scaleRules || entry.camp.campaignConfig?.pauseRules) && (
+                          <AccordionSection title="Scale & Pause Rules">
+                            <div className="flex flex-col gap-3">
+                              {entry.camp.campaignConfig?.scaleRules && (
+                                <div>
+                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>Scale Rules</p>
+                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#fafafa', border: '1px solid #e4e4e7', color: '#52525b' }}>{entry.camp.campaignConfig.scaleRules}</pre>
+                                </div>
+                              )}
+                              {entry.camp.campaignConfig?.pauseRules && (
+                                <div>
+                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>Pause Rules</p>
+                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#fafafa', border: '1px solid #e4e4e7', color: '#52525b' }}>{entry.camp.campaignConfig.pauseRules}</pre>
+                                </div>
+                              )}
+                            </div>
+                          </AccordionSection>
+                        )}
+
+                        {/* Review debate accordion */}
+                        {entry.camp.reviewDebateLog && entry.camp.reviewDebateLog.length > 0 && (
+                          <AccordionSection
+                            title="Review Debate"
+                            badge={
+                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                                {entry.camp.reviewDebateLog.length} rounds
+                              </span>
+                            }
+                          >
+                            <DebateLog rounds={entry.camp.reviewDebateLog} />
+                          </AccordionSection>
+                        )}
+
+                        {/* View full / Approve+Reject */}
+                        {entry.camp._id && entry.camp.status !== 'pending_approval' && (
+                          <div className="py-3">
+                            <Link
+                              href={`/dashboard/${tenantId}/campaigns/${entry.camp._id}`}
+                              className="inline-flex items-center gap-2 text-sm font-medium transition-colors"
+                              style={{ color: '#0284c7' }}
+                            >
+                              View full campaign details <ArrowRight size={14} />
+                            </Link>
+                          </div>
+                        )}
+
+                        {entry.isWinner && entry.camp.status === 'pending_approval' && (
+                          <div className="rounded-xl p-5 flex flex-col gap-4 my-3" style={{ background: '#fafafa', border: '2px solid #e4e4e7' }}>
+                            <div className="text-center">
+                              <p className="text-sm font-semibold" style={{ color: '#18181b' }}>This campaign is awaiting your approval</p>
+                              <p className="text-xs mt-1" style={{ color: '#71717a' }}>Review the details above before approving or rejecting</p>
+                            </div>
+                            <div className="flex flex-col gap-3">
+                              <button
+                                onClick={handleApprove}
+                                disabled={approveState !== 'idle'}
+                                className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl text-base font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                style={{
+                                  background: approveState !== 'idle' ? '#dcfce7' : '#15803d',
+                                  color: approveState !== 'idle' ? '#15803d' : '#ffffff',
+                                  border: '2px solid #15803d',
+                                  boxShadow: approveState === 'idle' ? '0 4px 12px rgba(21,128,61,0.25)' : 'none',
+                                }}
+                              >
+                                {approveState === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <ThumbsUp size={18} />}
+                                {approveState === 'loading' ? 'Approving…' : approveState === 'success' ? 'Approved!' : 'Approve & Launch Campaign'}
+                              </button>
+                              <button
+                                onClick={() => setRejectOpen((o) => !o)}
+                                className="w-full flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm font-semibold transition-all"
+                                style={{ background: '#fee2e2', color: '#b91c1c', border: '2px solid #fecaca' }}
+                              >
+                                <XCircle size={16} /> Reject Campaign
+                              </button>
+                            </div>
+                            {rejectOpen && (
+                              <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                                <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>Reason for rejection</p>
+                                <textarea
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                  placeholder="Describe why this campaign is being rejected…"
+                                  rows={3}
+                                  className="w-full rounded-lg px-3 py-2 text-sm resize-none"
+                                  style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#18181b', outline: 'none' }}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={handleReject}
+                                    disabled={rejectState === 'loading' || !rejectReason.trim()}
+                                    className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
+                                  >
+                                    {rejectState === 'loading' ? 'Rejecting…' : 'Confirm Reject'}
+                                  </button>
+                                  <button onClick={() => setRejectOpen(false)} className="text-xs transition-colors" style={{ color: '#a1a1aa' }}>
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Non-winner pending approval — link to campaign */}
+                        {!entry.isWinner && entry.camp.status === 'pending_approval' && entry.camp._id && (
+                          <div className="rounded-xl p-4 flex items-center justify-between gap-3 my-3" style={{ background: '#fefce8', border: '1px solid #fde68a' }}>
+                            <p className="text-xs font-medium" style={{ color: '#b45309' }}>Awaiting approval</p>
+                            <Link
+                              href={`/dashboard/${tenantId}/campaigns/${entry.camp._id}`}
+                              className="inline-flex items-center gap-1 text-xs font-semibold shrink-0"
+                              style={{ color: '#b45309', textDecoration: 'none' }}
+                            >
+                              Review Campaign <ArrowRight size={11} />
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
-          )}
-        </div>}
+          )
+        })()}
       </div>
     </div>
   )
