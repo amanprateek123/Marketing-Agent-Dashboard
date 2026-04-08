@@ -22,11 +22,27 @@ import {
   BarChart3,
   RefreshCw,
   Target,
+  ChevronDown,
+  Image as ImageIcon,
+  Video,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { formatCurrency, formatDateTime, formatDate, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, PendingAction } from '@/types'
+
+interface CreativePackage {
+  _id: string
+  status: string
+  copyVariants: Array<{ primaryText: string; headline?: string; cta?: string; hookStyle?: string }>
+  selectedCopyIndex?: number
+  copySelectionReason?: string
+  imagePrompt?: string
+  imageUrl?: string
+  videoPrompt?: string
+  videoUrl?: string
+  complianceNotes?: string
+}
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -334,6 +350,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [rejectReason, setRejectReason] = useState('')
   const [rejectState, setRejectState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  // Approval flow
+  const [accountIds, setAccountIds] = useState<string[]>([])
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [creativePackage, setCreativePackage] = useState<CreativePackage | null>(null)
+  const [creativeLoading, setCreativeLoading] = useState(false)
+  const [videoExpanded, setVideoExpanded] = useState(false)
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type })
@@ -347,6 +369,28 @@ export default function CampaignDetailPage({ params }: PageProps) {
       const data: Campaign = await res.json()
       setCampaign(data)
       setError(null)
+
+      if (data.status === 'pending_approval') {
+        // Fetch accountIds from company
+        fetch(`${API_BASE}/companies/${tenantId}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(company => {
+            const ids: string[] = company?.meta?.accountIds || []
+            setAccountIds(ids)
+            if (ids.length > 0 && !selectedAccountId) setSelectedAccountId(ids[0])
+          })
+          .catch(() => {})
+
+        // Fetch creative package
+        if (data.creativePackageId) {
+          setCreativeLoading(true)
+          fetch(`${API_BASE}/creative/${tenantId}/packages/${data.creativePackageId}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(pkg => { if (pkg) setCreativePackage(pkg) })
+            .catch(() => {})
+            .finally(() => setCreativeLoading(false))
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load campaign')
     } finally {
@@ -390,14 +434,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
   }
 
   async function handleApprove() {
+    if (!selectedAccountId) {
+      showToast('Please select a Meta ad account first', 'error')
+      return
+    }
     setApproveState('loading')
     try {
       const res = await fetch(`${API_BASE}/campaigns/${tenantId}/${campaignId}/approve`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: selectedAccountId }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = await res.json()
       setApproveState('success')
-      showToast('Campaign approved and launching!', 'success')
+      showToast(`Campaign approved! Meta ID: ${result.metaCampaignId || 'assigned'}`, 'success')
       fetchCampaign()
     } catch (err) {
       setApproveState('error')
@@ -596,44 +647,8 @@ export default function CampaignDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons — non-pending statuses only */}
           <div className="flex items-center gap-2 flex-wrap">
-            {campaign.status === 'pending_approval' && (
-              <>
-                <button
-                  onClick={handleApprove}
-                  disabled={approveState !== 'idle'}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
-                  style={
-                    approveState !== 'idle'
-                      ? { background: '#dcfce7', color: '#86efac', cursor: 'not-allowed' }
-                      : { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
-                  }
-                >
-                  {approveState === 'loading' ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <ThumbsUp size={14} />
-                  )}
-                  {approveState === 'loading'
-                    ? 'Approving...'
-                    : approveState === 'success'
-                    ? 'Approved!'
-                    : 'Approve'}
-                </button>
-                <button
-                  onClick={() => setRejectOpen((o) => !o)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                  style={{
-                    background: '#fee2e2',
-                    border: '1px solid #fecaca',
-                    color: '#b91c1c',
-                  }}
-                >
-                  <XCircle size={14} /> Reject
-                </button>
-              </>
-            )}
             {campaign.status === 'active' && (
               <button
                 onClick={handlePause}
@@ -665,45 +680,6 @@ export default function CampaignDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Inline reject form */}
-        {rejectOpen && (
-          <div
-            className="mt-4 rounded-xl p-4 flex flex-col gap-3"
-            style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
-          >
-            <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>
-              Reason for rejection
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Describe why this campaign is being rejected..."
-              rows={3}
-              className="w-full rounded-lg px-3 py-2 text-sm resize-none"
-              style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#18181b' }}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleReject}
-                disabled={rejectState === 'loading' || !rejectReason.trim()}
-                className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
-              >
-                {rejectState === 'loading' ? 'Rejecting...' : 'Confirm Reject'}
-              </button>
-              <button
-                onClick={() => {
-                  setRejectOpen(false)
-                  setRejectReason('')
-                }}
-                className="text-xs transition-colors"
-                style={{ color: '#a1a1aa' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Budget utilization bar */}
         {campaign.budget && campaign.budget > 0 && (
@@ -798,6 +774,238 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
           </div>
           <DebateLog rounds={reviewDebateLog} />
+        </div>
+      )}
+
+      {/* ===== APPROVAL PANEL (pending_approval only) ===== */}
+      {campaign.status === 'pending_approval' && (
+        <div className="rounded-xl overflow-hidden mb-5" style={{ border: '2px solid #bbf7d0', background: '#f0fdf4' }}>
+          {/* Panel header */}
+          <div className="px-5 py-4 flex items-center gap-3" style={{ background: '#dcfce7', borderBottom: '1px solid #bbf7d0' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#15803d' }}>
+              <ThumbsUp size={15} color="white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ color: '#14532d' }}>Campaign Awaiting Approval</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#166534' }}>Review the creative and configuration below, then select a Meta account to launch.</p>
+            </div>
+          </div>
+
+          <div className="p-5 flex flex-col gap-6">
+
+            {/* Copy Variants */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#52525b' }}>Copy Variants</h3>
+              {creativeLoading ? (
+                <div className="flex items-center gap-2 py-4" style={{ color: '#a1a1aa' }}>
+                  <Loader2 size={14} className="animate-spin" /><span className="text-sm">Loading creative...</span>
+                </div>
+              ) : creativePackage?.copyVariants && creativePackage.copyVariants.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {creativePackage.copyVariants.map((v, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl p-4 flex flex-col gap-2"
+                      style={{
+                        background: i === (creativePackage.selectedCopyIndex ?? -1) ? '#fff' : '#f9fafb',
+                        border: i === (creativePackage.selectedCopyIndex ?? -1) ? '2px solid #15803d' : '1px solid #e4e4e7',
+                      }}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {i === (creativePackage.selectedCopyIndex ?? -1) && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                            ✓ Selected
+                          </span>
+                        )}
+                        {v.hookStyle && (
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}>
+                            {v.hookStyle}
+                          </span>
+                        )}
+                      </div>
+                      {v.headline && (
+                        <p className="text-sm font-semibold" style={{ color: '#18181b' }}>{v.headline}</p>
+                      )}
+                      <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{v.primaryText}</p>
+                      {v.cta && (
+                        <span className="self-start text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                          CTA: {v.cta}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm" style={{ color: '#a1a1aa' }}>No copy variants available.</p>
+              )}
+              {creativePackage?.copySelectionReason && (
+                <p className="text-xs mt-2 italic" style={{ color: '#71717a' }}>
+                  Selection rationale: {creativePackage.copySelectionReason}
+                </p>
+              )}
+            </div>
+
+            {/* Image */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#52525b' }}>
+                <span className="inline-flex items-center gap-1.5"><ImageIcon size={12} /> Creative Image</span>
+              </h3>
+              {creativePackage?.imageUrl ? (
+                <img
+                  src={creativePackage.imageUrl}
+                  alt="Campaign creative"
+                  className="rounded-xl object-cover"
+                  style={{ maxHeight: 280, maxWidth: '100%', border: '1px solid #e4e4e7' }}
+                />
+              ) : (
+                <div className="rounded-xl flex items-center justify-center" style={{ height: 120, background: '#f4f4f5', border: '1px dashed #d4d4d8' }}>
+                  <div className="text-center">
+                    <ImageIcon size={24} style={{ color: '#d4d4d8', margin: '0 auto 6px' }} />
+                    <p className="text-xs" style={{ color: '#a1a1aa' }}>Image not yet generated</p>
+                  </div>
+                </div>
+              )}
+              {creativePackage?.imagePrompt && (
+                <details className="mt-2">
+                  <summary className="text-xs cursor-pointer" style={{ color: '#71717a' }}>View image prompt</summary>
+                  <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b' }}>
+                    {creativePackage.imagePrompt}
+                  </p>
+                </details>
+              )}
+            </div>
+
+            {/* Video */}
+            {creativePackage?.videoPrompt && (
+              <div>
+                <button
+                  onClick={() => setVideoExpanded(e => !e)}
+                  className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: '#52525b' }}
+                >
+                  <Video size={12} /> Video Prompt
+                  <ChevronDown size={12} className={cn('transition-transform', videoExpanded && 'rotate-180')} />
+                </button>
+                {videoExpanded && (
+                  <>
+                    {creativePackage.videoUrl ? (
+                      <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e4e4e7' }}>
+                        <source src={creativePackage.videoUrl} />
+                      </video>
+                    ) : (
+                      <p className="text-xs font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}>
+                        {creativePackage.videoPrompt}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Compliance notes */}
+            {creativePackage?.complianceNotes && (
+              <div className="rounded-lg px-3 py-2.5" style={{ background: '#fef3c7', border: '1px solid #fde68a' }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: '#b45309' }}>⚠ Compliance Notes</p>
+                <p className="text-xs leading-relaxed" style={{ color: '#92400e' }}>{creativePackage.complianceNotes}</p>
+              </div>
+            )}
+
+            {/* Review debate (rationale) */}
+            {reviewDebateLog.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#52525b' }}>Review Team Debate</h3>
+                <DebateLog rounds={reviewDebateLog} />
+              </div>
+            )}
+
+            {/* Account selector + approve/reject */}
+            <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#ffffff', border: '1px solid #bbf7d0' }}>
+              <div>
+                <label className="block text-xs font-semibold mb-1.5" style={{ color: '#14532d' }}>
+                  Meta Ad Account
+                </label>
+                {accountIds.length === 0 ? (
+                  <p className="text-xs" style={{ color: '#a1a1aa' }}>No ad accounts found. Check company Meta settings.</p>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={selectedAccountId}
+                      onChange={e => setSelectedAccountId(e.target.value)}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm appearance-none pr-8"
+                      style={{ background: '#f9fafb', border: '1px solid #d1d5db', color: '#18181b' }}
+                    >
+                      {accountIds.map(id => (
+                        <option key={id} value={id}>act_{id}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#71717a' }} />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleApprove}
+                  disabled={approveState !== 'idle' || !selectedAccountId}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+                  style={
+                    approveState === 'success'
+                      ? { background: '#15803d', color: '#fff' }
+                      : approveState !== 'idle' || !selectedAccountId
+                      ? { background: '#dcfce7', color: '#86efac', cursor: 'not-allowed' }
+                      : { background: '#15803d', color: '#fff', boxShadow: '0 2px 8px rgba(21,128,61,0.3)' }
+                  }
+                >
+                  {approveState === 'loading' ? <Loader2 size={15} className="animate-spin" /> :
+                   approveState === 'success' ? <CheckCircle size={15} /> :
+                   <ThumbsUp size={15} />}
+                  {approveState === 'loading' ? 'Launching on Meta...' :
+                   approveState === 'success' ? 'Approved & Launched!' :
+                   'Approve & Launch on Meta'}
+                </button>
+                <button
+                  onClick={() => setRejectOpen(o => !o)}
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
+                  style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
+                >
+                  <XCircle size={14} className="inline mr-1.5" />Reject
+                </button>
+              </div>
+
+              {/* Reject form */}
+              {rejectOpen && (
+                <div className="flex flex-col gap-2 pt-2" style={{ borderTop: '1px solid #fecaca' }}>
+                  <p className="text-xs font-semibold" style={{ color: '#b91c1c' }}>Reason for rejection</p>
+                  <textarea
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                    placeholder="Describe why this campaign is being rejected..."
+                    rows={3}
+                    className="w-full rounded-lg px-3 py-2 text-sm resize-none"
+                    style={{ background: '#fff', border: '1px solid #fecaca', color: '#18181b' }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleReject}
+                      disabled={rejectState === 'loading' || !rejectReason.trim()}
+                      className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ background: '#b91c1c', color: '#fff' }}
+                    >
+                      {rejectState === 'loading' ? 'Rejecting...' : 'Confirm Reject'}
+                    </button>
+                    <button
+                      onClick={() => { setRejectOpen(false); setRejectReason('') }}
+                      className="text-xs transition-colors"
+                      style={{ color: '#a1a1aa' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
       )}
 

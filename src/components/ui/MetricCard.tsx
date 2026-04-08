@@ -40,23 +40,23 @@ export function MetricCard({
       )}
 
       <div className="p-5">
-        <div className="flex items-start justify-between gap-2 mb-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
           <p
-            className="text-[11px] font-semibold uppercase tracking-widest"
+            className="text-xs font-semibold uppercase tracking-wider leading-tight"
             style={{ color: '#94a3b8' }}
           >
             {label}
           </p>
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: iconBg }}
           >
-            <Icon size={17} style={{ color: iconColor }} strokeWidth={2} />
+            <Icon size={15} style={{ color: iconColor }} strokeWidth={2} />
           </div>
         </div>
 
         <p
-          className="text-[32px] font-bold leading-none tracking-tight"
+          className="text-[28px] font-bold leading-none tracking-tight truncate"
           style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}
         >
           {value}
@@ -77,7 +77,7 @@ export function MetricCard({
               </span>
             )}
             {sublabel && (
-              <p className="text-xs" style={{ color: '#94a3b8' }}>{sublabel}</p>
+              <p className="text-xs truncate" style={{ color: '#94a3b8' }}>{sublabel}</p>
             )}
           </div>
         )}
