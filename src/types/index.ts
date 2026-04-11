@@ -10,9 +10,31 @@ export interface Product {
   name: string
   description?: string
   price?: number
+  currency?: string
+  active?: boolean
   landingUrl?: string
-  conversionEvent?: string
+  languages?: string[]
+  trendKeywords?: string[]
+  differentiators?: string[]
+  // Conversion tracking — mutually exclusive modes
+  conversionEvent?: string       // Standard: 'Purchase'|'Lead'|etc. OR 'CustomEvent'
+  customEventName?: string       // Only when conversionEvent === 'CustomEvent'
+  customConversionId?: string    // Custom conversion from Meta Events Manager (takes priority)
+  pixelId?: string               // Per-product pixel override (blank = use company default)
+  conversionValue?: number
   category?: string
+}
+
+export interface BudgetSettings {
+  weeklyBudgetCap?: number
+  maxBudgetPerCampaign?: number
+  maxBudgetScalePercent?: number
+  targetROAS?: number
+  targetCPA?: number
+  pauseIfROASBelow?: number
+  pauseIfCTRBelow?: number
+  pauseIfFrequencyAbove?: number
+  scaleIfROASAbove?: number
 }
 
 export interface PipelineConfig {
@@ -32,6 +54,17 @@ export interface Company {
   products?: Product[]
   competitors?: string[]
   pipelineConfig?: PipelineConfig
+  budgetSettings?: BudgetSettings
+  // Budget fields may also appear at top level (API returns them flattened)
+  weeklyBudgetCap?: number
+  maxBudgetPerCampaign?: number
+  maxBudgetScalePercent?: number
+  targetROAS?: number
+  targetCPA?: number
+  pauseIfROASBelow?: number
+  pauseIfCTRBelow?: number
+  pauseIfFrequencyAbove?: number
+  scaleIfROASAbove?: number
   delivery?: { slackWebhook?: string }
   learnings?: {
     updatedAt?: string
@@ -156,6 +189,12 @@ export interface CampaignAd {
   clicks?: number
   ctr?: number
   cpc?: number
+  ctrBaseline?: number
+  metrics?: {
+    spend?: number
+    ctr?: number
+    conversions?: number
+  }
 }
 
 export interface CampaignAdSet {
@@ -175,6 +214,14 @@ export interface CampaignAdSet {
   cpa?: number
   frequency?: number
   ads?: CampaignAd[]
+  metrics?: {
+    spend?: number
+    ctr?: number
+    roas?: number
+    conversions?: number
+    frequency?: number
+    cpa?: number
+  }
 }
 
 export interface PendingAction {
@@ -189,11 +236,41 @@ export interface PendingAction {
   status: 'pending' | 'executed' | 'overridden'
 }
 
+export interface AuditSnapshot {
+  auditedAt: string
+  metrics: {
+    spend?: number
+    ctr?: number
+    roas?: number
+    conversions?: number
+  }
+  adSets?: Array<{
+    id?: string
+    name?: string
+    metrics?: {
+      spend?: number
+      ctr?: number
+      roas?: number
+      conversions?: number
+      frequency?: number
+      cpa?: number
+    }
+  }>
+  verdict: {
+    verdict: 'no_action' | 'watch' | 'act'
+    urgency?: 'immediate' | '48h' | '7d' | null
+    contextInsight?: string
+    recommendedActions?: string[]
+  }
+}
+
 export interface Campaign {
   _id: string
   status: 'pending_approval' | 'active' | 'paused' | 'completed' | 'failed'
   source?: 'agent' | 'manual'
   syncedAt?: string
+  metaAccountId?: string
+  lastAuditedAt?: string
   budget?: number
   objective?: string
   metaCampaignId?: string
