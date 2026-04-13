@@ -22,9 +22,8 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
-import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
-import type { FullRunData, PipelineRun, IntelligenceBrief, CopyVariant, CreativePackage, Campaign } from '@/types'
+import type { FullRunData, CopyVariant, CreativePackage, Campaign } from '@/types'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -159,7 +158,6 @@ function ScoreBar({ score, max = 10 }: { score?: number; max?: number }) {
   if (score === undefined || score === null) return null
   const pct = Math.max(0, Math.min(100, (score / max) * 100))
   const color = score >= 8 ? '#15803d' : score >= 6 ? '#b45309' : '#b91c1c'
-  const bg = score >= 8 ? '#dcfce7' : score >= 6 ? '#fef3c7' : '#fee2e2'
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, background: '#e2e8f0' }}>
@@ -561,6 +559,21 @@ function IdeaCard({
               {brief.format}
             </span>
           )}
+          {brief.product && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+              {brief.product}
+            </span>
+          )}
+          {brief.ideaSource && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+              {brief.ideaSource.replace(/_/g, ' ')}
+            </span>
+          )}
+          {brief.urgencyScore != null && brief.urgencyScore >= 8 && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+              🔥 Urgent
+            </span>
+          )}
           {brief.audience && (
             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
               {brief.audience}
@@ -708,66 +721,6 @@ function IdeaCard({
   )
 }
 
-// ── Copy variant card ─────────────────────────────────────────────────────────
-
-function CopyVariantCard({ variant, isSelected }: { variant: CopyVariant; isSelected: boolean }) {
-  return (
-    <div
-      className="rounded-xl p-5 flex flex-col gap-4"
-      style={
-        isSelected
-          ? {
-              background: '#f0f9ff',
-              border: '2px solid #0284c7',
-              boxShadow: '0 2px 8px rgba(2,132,199,0.1)',
-            }
-          : {
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-            }
-      }
-    >
-      <div className="flex items-center gap-2 flex-wrap">
-        {isSelected && (
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
-          >
-            Selected
-          </span>
-        )}
-        {variant.hookStyle && (
-          <span
-            className="text-xs px-2 py-0.5 rounded-full"
-            style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}
-          >
-            {variant.hookStyle}
-          </span>
-        )}
-      </div>
-      {variant.headline && (
-        <h4 className="text-base font-semibold leading-snug" style={{ color: '#0f172a' }}>
-          {variant.headline}
-        </h4>
-      )}
-      <p className="text-sm leading-relaxed" style={{ color: '#475569' }}>
-        {variant.primaryText}
-      </p>
-      {variant.cta && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: '#94a3b8' }}>CTA:</span>
-          <span
-            className="text-xs font-semibold px-2.5 py-1 rounded-md"
-            style={{ background: '#dbeafe', color: '#1d4ed8' }}
-          >
-            {variant.cta}
-          </span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Platform config ────────────────────────────────────────────────────────────
 
 function platformConfig(platform: string): {
@@ -825,6 +778,7 @@ function SectionHeader({
 const SECTIONS = [
   { label: 'Scouts', emoji: '📡' },
   { label: 'Research', emoji: '🔬' },
+  { label: 'Ad Library', emoji: '🏪' },
   { label: 'Strategy', emoji: '✨' },
   { label: 'Creative', emoji: '🎨' },
   { label: 'Campaign', emoji: '📣' },
@@ -1052,15 +1006,22 @@ function CreativeEntryCard({
             )}
 
             {/* Video */}
-            {entry.pkg && entry.pkg.videoPrompt && (
-              <AccordionSection title="Video Prompt">
-                <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Video size={11} style={{ color: '#64748b' }} />
-                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Script</span>
+            {entry.pkg && (entry.pkg.videoUrl || entry.pkg.videoPrompt) && (
+              <AccordionSection title="Video" defaultOpen={!!entry.pkg.videoUrl}>
+                {entry.pkg.videoUrl ? (
+                  <video controls className="rounded-lg w-full mb-2" style={{ maxHeight: 300, border: '1px solid #e4e4e7' }}>
+                    <source src={entry.pkg.videoUrl} type="video/mp4" />
+                  </video>
+                ) : null}
+                {entry.pkg.videoPrompt && (
+                  <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Video size={11} style={{ color: '#64748b' }} />
+                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Script</span>
+                    </div>
+                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.videoPrompt}</p>
                   </div>
-                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.videoPrompt}</p>
-                </div>
+                )}
               </AccordionSection>
             )}
 
@@ -1328,6 +1289,7 @@ export default function RunDetailPage({ params }: PageProps) {
   const scouts = data?.scouts || []
   const coordinator = data?.coordinator
   const research = data?.research || []
+  const adLibrary = data?.adLibrary ?? null
   const briefs = (data?.briefs || []).slice().sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0))
   const creativeBrief = data?.creativeBrief
   const creativePackage = data?.creativePackage
@@ -1351,9 +1313,11 @@ export default function RunDetailPage({ params }: PageProps) {
     : ''
 
   // data dot: whether each section has content
+  // Order: Scouts=0, Research=1, AdLibrary=2, Strategy=3, Creative=4, Campaign=5
   const dataDots = [
     scouts.length > 0,
     research.length > 0,
+    !!(adLibrary?.competitorAds?.length || adLibrary?.gaps?.length),
     briefs.length > 0,
     !!creativePackage,
     !!campaign || Object.keys(siblingCampaigns).length > 0,
@@ -1739,40 +1703,80 @@ export default function RunDetailPage({ params }: PageProps) {
               No research data available yet.
             </p>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {research.map((r, idx) => {
+                const insights = r.structured?.insights ?? []
+                const summary = r.structured?.rawSummary
                 const isExpanded = researchExpanded[idx] ?? false
-                const text = r.content || ''
-                const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text
+                const fallbackText = r.content || ''
+                const urgencyStyle = (u: string) =>
+                  u === 'high' ? { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' }
+                  : u === 'medium' ? { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }
+                  : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
                 return (
-                  <div
-                    key={idx}
-                    className="rounded-xl p-4"
-                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-                  >
-                    <h4
-                      className="text-xs font-semibold uppercase tracking-wider mb-2 capitalize"
-                      style={{ color: '#94a3b8' }}
-                    >
-                      {r.type} Research
-                    </h4>
-                    <p
-                      className="text-sm leading-relaxed whitespace-pre-wrap"
-                      style={{ color: '#475569' }}
-                    >
-                      {isExpanded ? text : truncated}
-                    </p>
-                    {text.length > 500 && (
-                      <button
-                        onClick={() =>
-                          setResearchExpanded((prev) => ({ ...prev, [idx]: !isExpanded }))
-                        }
-                        className="mt-2 text-xs font-medium transition-colors"
-                        style={{ color: '#0ea5e9' }}
-                      >
-                        {isExpanded ? 'Show less' : 'Read more'}
-                      </button>
-                    )}
+                  <div key={idx} className="rounded-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+                    {/* Header */}
+                    <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider capitalize" style={{ color: '#64748b' }}>
+                        {r.type === 'competitor' ? '🏆 Competitor' : '📊 Market'} Research
+                      </h4>
+                      {insights.length > 0 && (
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#e0f2fe', color: '#0ea5e9' }}>
+                          {insights.length} insight{insights.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-4">
+                      {/* Summary */}
+                      {summary && (
+                        <p className="text-sm leading-relaxed mb-4" style={{ color: '#475569' }}>{summary}</p>
+                      )}
+
+                      {/* Structured insights */}
+                      {insights.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          {insights.map((ins, i) => {
+                            const us = urgencyStyle(ins.urgency)
+                            return (
+                              <div key={i} className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                <div className="flex items-start justify-between gap-3 mb-1.5">
+                                  <p className="text-sm font-medium leading-snug flex-1" style={{ color: '#0f172a' }}>{ins.insight}</p>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: us.bg, color: us.color, border: `1px solid ${us.border}` }}>
+                                      {ins.urgency}
+                                    </span>
+                                    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#475569' }}>
+                                      {ins.score}/10
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>→ {ins.implication}</p>
+                                {ins.source && (
+                                  <a href={ins.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#0ea5e9' }}>
+                                    {ins.source}
+                                  </a>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : fallbackText ? (
+                        /* Fallback to raw text if no structured data */
+                        <>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#475569' }}>
+                            {isExpanded ? fallbackText : fallbackText.slice(0, 500) + (fallbackText.length > 500 ? '…' : '')}
+                          </p>
+                          {fallbackText.length > 500 && (
+                            <button onClick={() => setResearchExpanded(prev => ({ ...prev, [idx]: !isExpanded }))} className="mt-2 text-xs font-medium" style={{ color: '#0ea5e9' }}>
+                              {isExpanded ? 'Show less' : 'Read more'}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm" style={{ color: '#94a3b8' }}>No data available.</p>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -1783,11 +1787,103 @@ export default function RunDetailPage({ params }: PageProps) {
         }
 
         {/* ===== SECTION D: STRATEGY ===== */}
+        {/* ===== SECTION: AD LIBRARY ===== */}
         {activeSection === 2 && (
           <div className="rounded-xl p-6" style={sectionStyle}>
+            <SectionHeader number="03" title="Meta Ad Library" icon={<span>🏪</span>} />
+            {!adLibrary ? (
+              <p className="text-sm text-center py-6" style={{ color: '#94a3b8' }}>No ad library data available for this run.</p>
+            ) : (
+              <div className="flex flex-col gap-5">
+                {/* Summary strip */}
+                {(adLibrary.dominantFormat || adLibrary.rawSummary) && (
+                  <div className="rounded-xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    {adLibrary.rawSummary && <p className="text-sm leading-relaxed mb-2" style={{ color: '#475569' }}>{adLibrary.rawSummary}</p>}
+                    {adLibrary.dominantFormat && (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                        Dominant format: {adLibrary.dominantFormat}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Competitor ads */}
+                {adLibrary.competitorAds?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#94a3b8' }}>Competitor Ads Running Now</h3>
+                    <div className="flex flex-col gap-2">
+                      {adLibrary.competitorAds.map((ad, i) => (
+                        <div key={i} className="rounded-xl p-4" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+                                {ad.competitor}
+                              </span>
+                              {ad.format && (
+                                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}>{ad.format}</span>
+                              )}
+                              {ad.angle && (
+                                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>{ad.angle}</span>
+                              )}
+                              {ad.estimatedDaysRunning != null && (
+                                <span className="text-xs" style={{ color: '#94a3b8' }}>{ad.estimatedDaysRunning}d running</span>
+                              )}
+                            </div>
+                            {ad.score != null && (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded shrink-0" style={{ background: ad.score >= 8 ? '#dcfce7' : '#fef3c7', color: ad.score >= 8 ? '#15803d' : '#b45309' }}>
+                                {ad.score}/10
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium italic mb-1" style={{ color: '#0f172a' }}>&ldquo;{ad.hook}&rdquo;</p>
+                          {ad.cta && <p className="text-xs" style={{ color: '#64748b' }}>CTA: <span style={{ color: '#1d4ed8' }}>{ad.cta}</span></p>}
+                          {ad.source && (
+                            <a href={ad.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#0ea5e9' }}>{ad.source}</a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Gaps / opportunities */}
+                {adLibrary.gaps?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#94a3b8' }}>Untapped Angles — Nobody Is Running These</h3>
+                    <div className="flex flex-col gap-2">
+                      {adLibrary.gaps.map((g, i) => {
+                        const us = g.urgency === 'high'
+                          ? { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' }
+                          : g.urgency === 'medium'
+                          ? { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }
+                          : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+                        return (
+                          <div key={i} className="rounded-xl p-4" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                            <div className="flex items-start justify-between gap-3 mb-1.5">
+                              <p className="text-sm font-semibold flex-1" style={{ color: '#0f172a' }}>{g.gap}</p>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: us.bg, color: us.color, border: `1px solid ${us.border}` }}>{g.urgency}</span>
+                                {g.score != null && <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#475569' }}>{g.score}/10</span>}
+                              </div>
+                            </div>
+                            <p className="text-xs leading-relaxed" style={{ color: '#15803d' }}>→ {g.opportunity}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== SECTION: STRATEGY ===== */}
+        {activeSection === 3 && (
+          <div className="rounded-xl p-6" style={sectionStyle}>
             <SectionHeader
-              number="03"
-              title={`Strategy — ${briefs.length} ${briefs.length === 1 ? 'Idea' : 'Ideas'}`}
+              number="04"
+              title={`Strategy — ${run?.briefsGenerated ?? briefs.length} Ideas`}
               icon={<Sparkles size={16} style={{ color: '#0ea5e9' }} />}
             />
 
@@ -1912,7 +2008,7 @@ export default function RunDetailPage({ params }: PageProps) {
         )}
 
         {/* ===== SECTION E: CREATIVE OUTPUT ===== */}
-        {activeSection === 3 && (() => {
+        {activeSection === 4 && (() => {
           const entries: CreativeEntryType[] = []
 
           // Winner
@@ -1946,7 +2042,7 @@ export default function RunDetailPage({ params }: PageProps) {
           return (
             <div className="rounded-xl p-6" style={sectionStyle}>
               <SectionHeader
-                number="04"
+                number="05"
                 title={`Creative Output${entries.length > 1 ? ` — ${entries.length} ideas` : ''}`}
                 icon={<ImageIcon size={16} style={{ color: '#0ea5e9' }} />}
               />
@@ -1972,7 +2068,7 @@ export default function RunDetailPage({ params }: PageProps) {
         })()}
 
         {/* ===== SECTION F: CAMPAIGN REVIEW ===== */}
-        {activeSection === 4 && (() => {
+        {activeSection === 5 && (() => {
           type CampaignEntry = {
             briefId: string
             topic: string
@@ -2004,7 +2100,7 @@ export default function RunDetailPage({ params }: PageProps) {
           return (
             <div className="rounded-xl p-6" style={sectionStyle}>
               <SectionHeader
-                number="05"
+                number="06"
                 title={`Campaign Review${campEntries.length > 1 ? ` — ${campEntries.length} campaigns` : ''}`}
                 icon={<Megaphone size={16} style={{ color: '#0ea5e9' }} />}
               />

@@ -295,13 +295,13 @@ function PendingActionCard({
             </span>
             {action.targetName && (
               <span className="text-xs" style={{ color: '#71717a' }}>
-                {action.targetName}
+                {typeof action.targetName === 'string' ? action.targetName : JSON.stringify(action.targetName)}
               </span>
             )}
           </div>
           {action.reason && (
             <p className="text-sm leading-relaxed" style={{ color: '#52525b' }}>
-              {action.reason}
+              {typeof action.reason === 'string' ? action.reason : JSON.stringify(action.reason)}
             </p>
           )}
         </div>
@@ -508,10 +508,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
   }, [tenantId, campaignId])
 
   async function handlePause() {
+    const reason = window.prompt('Reason for pausing this campaign?', 'Manual pause')
+    if (!reason || !reason.trim()) return
     setPauseState('loading')
     try {
       const res = await fetch(`${API_BASE}/campaigns/${tenantId}/${campaignId}/pause`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setPauseState('success')
@@ -918,11 +922,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 )}
                 {v.recommendedActions && v.recommendedActions.length > 0 && (
                   <ul className="mt-1.5 flex flex-col gap-0.5">
-                    {v.recommendedActions.map((a, i) => (
-                      <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: verdictStyle.text }}>
-                        <ChevronRight size={10} className="mt-0.5 shrink-0" /> {a}
-                      </li>
-                    ))}
+                    {v.recommendedActions.map((a, i) => {
+                      const text = typeof a === 'string' ? a : (a.reason ?? a.targetName ?? a.type ?? '')
+                      return (
+                        <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: verdictStyle.text }}>
+                          <ChevronRight size={10} className="mt-0.5 shrink-0" /> {text}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>
@@ -1540,11 +1547,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
                           )}
                           {v.recommendedActions && v.recommendedActions.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
-                              {v.recommendedActions.map((a, j) => (
-                                <span key={j} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
-                                  {a}
-                                </span>
-                              ))}
+                              {v.recommendedActions.map((a, j) => {
+                                const text = typeof a === 'string' ? a : (a.reason ?? a.targetName ?? a.type ?? '')
+                                return (
+                                  <span key={j} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                                    {text}
+                                  </span>
+                                )
+                              })}
                             </div>
                           )}
                         </div>

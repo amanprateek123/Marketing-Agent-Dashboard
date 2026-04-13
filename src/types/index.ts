@@ -90,18 +90,54 @@ export interface PipelineRun {
   startedAt?: string
   completedAt?: string
   selectedBriefId?: string
+  briefsGenerated?: number
+  campaignId?: string
+  metaCampaignId?: string
   error?: string
 }
 
 export interface ScoutOutput {
   platform: 'instagram' | 'reddit' | 'twitter' | 'youtube'
   data: {
-    trending_topics: Array<{ topic: string; score?: number }>
-    viral_trends: Array<{ trend: string }>
+    trending_topics: Array<{
+      topic: string
+      angle?: string
+      engagementProof?: { metric: string; value: number; source: string }
+      recency?: 'high' | 'medium'
+      signalScore?: number
+      score?: number  // legacy
+    }>
+    viral_trends: Array<{
+      trend: string
+      brand_tie_in?: string
+      signalScore?: number
+      source?: string
+    }>
     format_insights: string[]
     hook_examples: string[]
-    raw_summary: string
+    raw_summary?: string
   }
+}
+
+export interface AdLibrary {
+  competitorAds: Array<{
+    competitor: string
+    hook: string
+    angle?: string
+    format?: string
+    cta?: string
+    estimatedDaysRunning?: number
+    score?: number
+    source?: string
+  }>
+  gaps: Array<{
+    gap: string
+    opportunity: string
+    urgency: 'high' | 'medium' | 'low'
+    score?: number
+  }>
+  dominantFormat?: string
+  rawSummary?: string
 }
 
 export interface CoordinatorSignal {
@@ -115,6 +151,7 @@ export interface IntelligenceBrief {
   briefId: string
   topic: string
   angle?: string
+  product?: string
   platform?: string
   format?: string
   audience?: string
@@ -123,8 +160,11 @@ export interface IntelligenceBrief {
   conversionBridge?: string
   suggestedBudget?: number
   finalScore?: number
+  urgencyScore?: number
   selected?: boolean
   sourcePlatforms?: string[]
+  ideaSource?: 'scout_signal' | 'viral_trend' | 'competitor_gap' | 'market_insight' | 'meta_ads_gap'
+  day7Performance?: null | Record<string, unknown>
 }
 
 export interface CreativeBrief {
@@ -226,10 +266,11 @@ export interface CampaignAdSet {
 
 export interface PendingAction {
   actionId: string
-  type: 'pause_ad' | 'pause_adset' | 'scale_adset'
+  type: 'pause_ad' | 'pause_adset' | 'scale_adset' | string
   targetId: string
   targetName: string
-  reason: string
+  reason: string | Record<string, unknown>
+  priority?: string | number
   metrics: Record<string, number>
   recommendedAt?: string
   executeAt?: string
@@ -260,7 +301,7 @@ export interface AuditSnapshot {
     verdict: 'no_action' | 'watch' | 'act'
     urgency?: 'immediate' | '48h' | '7d' | null
     contextInsight?: string
-    recommendedActions?: string[]
+    recommendedActions?: Array<string | { type: string; targetId?: string; targetName?: string; reason?: string; priority?: string }>
   }
 }
 
@@ -312,16 +353,38 @@ export interface Campaign {
 export interface FullRunData {
   run: PipelineRun
   scouts?: ScoutOutput[]
+  adLibrary?: AdLibrary | null
   coordinator?: {
     content: string
     topSignals: CoordinatorSignal[]
   }
-  research?: Array<{ type: 'competitor' | 'market'; content: string }>
+  research?: Array<{
+    type: 'competitor' | 'market'
+    content?: string  // raw text, for debugging only
+    structured?: {
+      insights: Array<{
+        insight: string
+        implication: string
+        urgency: 'high' | 'medium' | 'low'
+        score: number
+        source?: string
+      }>
+      rawSummary?: string
+    }
+  }>
   briefs?: IntelligenceBrief[]
   creativeBrief?: CreativeBrief
   creativePackage?: CreativePackage
   campaign?: Campaign
-  digests?: Array<{ type: string; content: string; delivered: boolean; deliveredAt?: string }>
+  digests?: Array<{
+    type: 'signals' | 'idea' | 'cta'
+    content: string
+    delivered: boolean
+    deliveredAt?: string
+    briefId?: string
+    ideaIndex?: number
+    recommended?: boolean
+  }>
 }
 
 export interface CaseStudy {
