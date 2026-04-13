@@ -21,34 +21,33 @@ export function MetricCard({
   trend,
   trendUp,
   className,
-  iconColor = '#0ea5e9',
-  iconBg = '#e0f2fe',
+  iconColor = '#4f46e5',
+  iconBg = '#e0e7ff',
   accentColor,
   sublabel,
 }: MetricCardProps) {
   return (
     <div
-      className={cn('rounded-xl overflow-hidden relative', className)}
+      className={cn('rounded-2xl overflow-hidden relative', className)}
       style={{
         background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
+        border: '1px solid #e5e7eb',
       }}
     >
       {accentColor && (
-        <div className="h-[3px] w-full" style={{ background: accentColor }} />
+        <div className="h-[2px] w-full" style={{ background: accentColor }} />
       )}
 
       <div className="p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <p
-            className="text-xs font-semibold uppercase tracking-wider leading-tight"
-            style={{ color: '#94a3b8' }}
+            className="text-[10px] font-bold uppercase tracking-[0.1em] leading-tight"
+            style={{ color: '#d1d5db' }}
           >
             {label}
           </p>
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: iconBg }}
           >
             <Icon size={15} style={{ color: iconColor }} strokeWidth={2} />
@@ -56,8 +55,8 @@ export function MetricCard({
         </div>
 
         <p
-          className="text-[28px] font-bold leading-none tracking-tight truncate"
-          style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}
+          className="text-[28px] font-black leading-none tracking-tight truncate font-mono"
+          style={{ color: '#111827', fontVariantNumeric: 'tabular-nums' }}
         >
           {value}
         </p>
@@ -66,18 +65,18 @@ export function MetricCard({
           <div className="flex items-center gap-2 mt-3">
             {trend && (
               <span
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
                 style={
                   trendUp
-                    ? { color: '#16a34a', background: '#dcfce7' }
-                    : { color: '#dc2626', background: '#fee2e2' }
+                    ? { color: '#15803d', background: '#f0fdf4' }
+                    : { color: '#dc2626', background: '#fef2f2' }
                 }
               >
-                {trendUp ? '↑' : '↓'} {trend}
+                {trendUp ? '\u2191' : '\u2193'} {trend}
               </span>
             )}
             {sublabel && (
-              <p className="text-xs truncate" style={{ color: '#94a3b8' }}>{sublabel}</p>
+              <p className="text-xs truncate" style={{ color: '#9ca3af' }}>{sublabel}</p>
             )}
           </div>
         )}

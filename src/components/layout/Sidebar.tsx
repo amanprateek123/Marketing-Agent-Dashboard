@@ -17,11 +17,11 @@ interface SidebarProps {
 }
 
 const navItems = (tenantId: string) => [
-  { href: `/dashboard/${tenantId}`,          label: 'Overview',      icon: LayoutDashboard },
-  { href: `/dashboard/${tenantId}/runs`,      label: 'Pipeline Runs', icon: Activity        },
-  { href: `/dashboard/${tenantId}/campaigns`, label: 'Campaigns',     icon: Megaphone       },
-  { href: `/dashboard/${tenantId}/learnings`, label: 'Learnings',     icon: BookOpen        },
-  { href: `/dashboard/${tenantId}/settings`,  label: 'Settings',      icon: Settings        },
+  { href: `/dashboard/${tenantId}`,          label: 'Overview',       icon: LayoutDashboard },
+  { href: `/dashboard/${tenantId}/runs`,      label: 'Pipeline Runs',  icon: Activity        },
+  { href: `/dashboard/${tenantId}/campaigns`, label: 'Campaigns',      icon: Megaphone       },
+  { href: `/dashboard/${tenantId}/learnings`, label: 'Learnings',      icon: BookOpen        },
+  { href: `/dashboard/${tenantId}/settings`,  label: 'Settings',       icon: Settings        },
 ]
 
 export function Sidebar({ tenantId }: SidebarProps) {
@@ -30,48 +30,29 @@ export function Sidebar({ tenantId }: SidebarProps) {
 
   return (
     <aside
-      className="w-[220px] shrink-0 flex flex-col h-screen sticky top-0"
-      style={{ background: '#ffffff', borderRight: '1px solid #e2e8f0' }}
+      className="w-[240px] shrink-0 flex flex-col h-screen sticky top-0 bg-white"
+      style={{ borderRight: '1px solid #e5e7eb' }}
     >
       {/* Brand */}
-      <div className="px-5 py-5" style={{ borderBottom: '1px solid #f1f5f9' }}>
+      <div className="px-5 pt-5 pb-4" style={{ borderBottom: '1px solid #f3f4f6' }}>
         <div className="flex items-center gap-2.5 mb-4">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{
-              background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-              boxShadow: '0 2px 8px rgba(14,165,233,0.35)',
-            }}
-          >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#4f46e5' }}>
             <Zap size={14} className="text-white" fill="white" />
           </div>
           <div>
-            <p className="text-[14px] font-bold tracking-tight" style={{ color: '#0f172a' }}>BriefOS</p>
-            <p className="text-[10px] leading-none mt-0.5" style={{ color: '#94a3b8' }}>Marketing Intelligence</p>
+            <p className="text-[14px] font-bold tracking-tight" style={{ color: '#111827' }}>BriefOS</p>
+            <p className="text-[10px] leading-none mt-0.5" style={{ color: '#9ca3af' }}>Marketing Intelligence</p>
           </div>
         </div>
 
-        {/* Workspace pill */}
-        <div
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
-          style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: '#22c55e', boxShadow: '0 0 0 2px #dcfce7' }}
-          />
-          <span className="text-[11px] font-mono truncate" style={{ color: '#64748b' }}>{tenantId}</span>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#059669' }} />
+          <span className="text-[11px] font-mono truncate" style={{ color: '#6b7280' }}>{tenantId}</span>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
-        <p
-          className="text-[10px] font-semibold uppercase tracking-widest px-2.5 pb-2"
-          style={{ color: '#cbd5e1' }}
-        >
-          Menu
-        </p>
         {items.map((item) => {
           const Icon = item.icon
           const isActive = item.href === `/dashboard/${tenantId}`
@@ -83,33 +64,20 @@ export function Sidebar({ tenantId }: SidebarProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 relative',
-                !isActive && 'hover:bg-slate-50 hover:text-slate-800'
+                'flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150',
+                !isActive && 'hover:bg-gray-50'
               )}
-              style={
-                isActive
-                  ? {
-                      background: '#f0f9ff',
-                      color: '#0284c7',
-                      borderLeft: '3px solid #0ea5e9',
-                      paddingLeft: '9px',
-                    }
-                  : { color: '#64748b' }
-              }
+              style={isActive ? { background: '#eef2ff', color: '#4338ca' } : { color: '#6b7280' }}
             >
-              <Icon
-                size={15}
-                style={{ color: isActive ? '#0ea5e9' : '#94a3b8' }}
-              />
+              <Icon size={16} style={{ color: isActive ? '#4f46e5' : '#9ca3af' }} strokeWidth={isActive ? 2 : 1.5} />
               {item.label}
             </Link>
           )
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-3.5" style={{ borderTop: '1px solid #f1f5f9' }}>
-        <p className="text-[11px]" style={{ color: '#cbd5e1' }}>v0.1.0 · AI Pipeline</p>
+      <div className="px-5 py-3" style={{ borderTop: '1px solid #f3f4f6' }}>
+        <p className="text-[10px]" style={{ color: '#d1d5db' }}>v0.1.0</p>
       </div>
     </aside>
   )

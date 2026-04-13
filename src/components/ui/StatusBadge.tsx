@@ -7,68 +7,44 @@ interface StatusBadgeProps {
 
 function getStatusConfig(status: string): {
   label: string
-  style: React.CSSProperties
+  bg: string
+  color: string
   dot?: string
   pulse?: boolean
 } {
   const s = status.toLowerCase()
 
-  if (s === 'active' || s === 'completed') {
+  if (s === 'active') return { label: 'Active', bg: '#ecfdf5', color: '#059669', dot: '#059669' }
+  if (s === 'completed') return { label: 'Completed', bg: '#ecfdf5', color: '#059669', dot: '#059669' }
+  if (s === 'pending_approval') return { label: 'Pending Approval', bg: '#eef2ff', color: '#4338ca', dot: '#4f46e5' }
+  if (s === 'pending') return { label: 'Pending', bg: '#eef2ff', color: '#4338ca', dot: '#4f46e5' }
+  if (s === 'failed') return { label: 'Failed', bg: '#fef2f2', color: '#dc2626', dot: '#dc2626' }
+  if (s === 'paused') return { label: 'Paused', bg: '#fffbeb', color: '#d97706', dot: '#d97706' }
+
+  if (s.includes('running') || s === 'campaign_launching') {
     return {
-      label: status.replace(/_/g, ' '),
-      style: { background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac' },
-      dot: '#16a34a',
-    }
-  }
-  if (s === 'pending_approval' || s === 'pending') {
-    return {
-      label: status.replace(/_/g, ' '),
-      style: { background: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d' },
-      dot: '#f59e0b',
-    }
-  }
-  if (s === 'failed') {
-    return {
-      label: status.replace(/_/g, ' '),
-      style: { background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' },
-      dot: '#dc2626',
-    }
-  }
-  if (s === 'paused') {
-    return {
-      label: status.replace(/_/g, ' '),
-      style: { background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa' },
-      dot: '#f97316',
-    }
-  }
-  if (
-    s === 'running' || s === 'scouts_running' || s === 'intelligence_running' ||
-    s === 'idea_pool_running' || s === 'creative_running' || s === 'campaign_launching'
-  ) {
-    return {
-      label: status.replace(/_/g, ' '),
-      style: { background: '#dbeafe', color: '#2563eb', border: '1px solid #93c5fd' },
-      dot: '#3b82f6',
+      label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      bg: '#eef2ff',
+      color: '#4f46e5',
+      dot: '#4f46e5',
       pulse: true,
     }
   }
-  return {
-    label: status.replace(/_/g, ' '),
-    style: { background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' },
-  }
+
+  return { label: status.replace(/_/g, ' '), bg: '#f3f4f6', color: '#6b7280' }
 }
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = getStatusConfig(status)
   return (
     <span
-      className={cn('inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize whitespace-nowrap', className)}
-      style={config.style}
+      className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap', className)}
+      style={{ background: config.bg, color: config.color }}
     >
       {config.dot && (
         <span className="relative flex h-1.5 w-1.5 shrink-0">
           {config.pulse && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: config.dot }} />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: config.dot }} />
           )}
           <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: config.dot }} />
         </span>

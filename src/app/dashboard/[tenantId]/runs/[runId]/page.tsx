@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
+import { StrategyTab } from '@/components/pipeline/StrategyTab'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import type { FullRunData, CopyVariant, CreativePackage, Campaign } from '@/types'
 
@@ -67,14 +68,15 @@ function PhaseProgress({ status }: { status: string }) {
   const isFailed = (status || '').toLowerCase() === 'failed'
 
   return (
-    <div className="mt-7">
-      {/* Track */}
-      <div className="relative flex items-center mb-3">
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full" style={{ background: '#e2e8f0' }} />
+    <div className="mt-6">
+      <div className="relative flex items-center mb-2">
+        {/* Track */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: '#e5e7eb' }} />
+        {/* Fill */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full transition-all duration-700"
+          className="absolute top-1/2 -translate-y-1/2 h-px transition-all duration-1000 ease-out"
           style={{
-            background: isFailed ? '#dc2626' : 'linear-gradient(90deg, #0ea5e9, #16a34a)',
+            background: isFailed ? '#dc2626' : '#059669',
             width: currentPhaseIdx === 5
               ? '100%'
               : currentPhaseIdx < 0
@@ -87,27 +89,27 @@ function PhaseProgress({ status }: { status: string }) {
             const done = currentPhaseIdx > idx || currentPhaseIdx === 5
             const active = currentPhaseIdx === idx && !isFailed
             return (
-              <div key={phase.key} className="flex flex-col items-center gap-0">
+              <div key={phase.key} className="flex flex-col items-center">
                 <div
-                  className={cn('w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all', active && 'animate-pulse')}
+                  className={cn('w-6 h-6 rounded-full flex items-center justify-center transition-all duration-300', active && 'animate-pulse')}
                   style={
                     done
-                      ? { background: '#16a34a', borderColor: '#16a34a', boxShadow: '0 0 0 3px #dcfce7' }
+                      ? { background: '#059669' }
                       : active
-                      ? { background: '#ffffff', borderColor: '#0ea5e9', boxShadow: '0 0 0 3px #e0f2fe' }
+                      ? { background: '#ffffff', border: '2px solid #4f46e5', boxShadow: '0 0 0 3px #eef2ff' }
                       : isFailed && idx <= currentPhaseIdx
-                      ? { background: '#dc2626', borderColor: '#dc2626' }
-                      : { background: '#ffffff', borderColor: '#e2e8f0' }
+                      ? { background: '#dc2626' }
+                      : { background: '#f8f9fb', border: '1.5px solid #e5e7eb' }
                   }
                 >
                   {done ? (
-                    <CheckCircle2 size={14} style={{ color: '#ffffff' }} />
+                    <CheckCircle2 size={12} style={{ color: '#ffffff' }} />
                   ) : active ? (
-                    <Loader2 size={13} className="animate-spin" style={{ color: '#0ea5e9' }} />
+                    <Loader2 size={11} className="animate-spin" style={{ color: '#4f46e5' }} />
                   ) : isFailed && idx <= currentPhaseIdx ? (
-                    <Circle size={12} style={{ color: '#ffffff' }} />
+                    <Circle size={8} style={{ color: '#ffffff' }} />
                   ) : (
-                    <span className="text-[10px] font-bold" style={{ color: '#cbd5e1' }}>{idx + 1}</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#d1d5db' }}>{idx + 1}</span>
                   )}
                 </div>
               </div>
@@ -115,7 +117,6 @@ function PhaseProgress({ status }: { status: string }) {
           })}
         </div>
       </div>
-      {/* Labels */}
       <div className="flex justify-between">
         {PHASES.map((phase, idx) => {
           const done = currentPhaseIdx > idx || currentPhaseIdx === 5
@@ -123,8 +124,8 @@ function PhaseProgress({ status }: { status: string }) {
           return (
             <span
               key={phase.key}
-              className="text-[11px] font-semibold text-center"
-              style={{ color: done ? '#16a34a' : active ? '#0ea5e9' : '#94a3b8', width: 64 }}
+              className="text-[10px] font-medium text-center"
+              style={{ color: done ? '#059669' : active ? '#4f46e5' : '#d1d5db', width: 64 }}
             >
               {phase.label}
             </span>
@@ -160,7 +161,7 @@ function ScoreBar({ score, max = 10 }: { score?: number; max?: number }) {
   const color = score >= 8 ? '#15803d' : score >= 6 ? '#b45309' : '#b91c1c'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, background: '#e2e8f0' }}>
+      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, background: '#e5e7eb' }}>
         <div
           style={{
             width: `${pct}%`,
@@ -192,7 +193,7 @@ function AccordionSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div style={{ borderTop: '1px solid #e2e8f0' }}>
+    <div style={{ borderTop: '1px solid #e5e7eb' }}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between gap-2 px-1 py-3 text-left"
@@ -207,7 +208,7 @@ function AccordionSection({
           size={14}
           className="shrink-0 transition-transform duration-200"
           style={{
-            color: '#94a3b8',
+            color: '#9ca3af',
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
           }}
         />
@@ -229,14 +230,14 @@ function CreativeInlinePanel({
   selectedCopyIndex?: number
 }) {
   return (
-    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
-      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e5e7eb' }}>
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
         Creative Output
       </p>
 
       {copyVariants.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="text-xs font-medium" style={{ color: '#64748b' }}>Copy Variants</p>
+          <p className="text-xs font-medium" style={{ color: '#4b5563' }}>Copy Variants</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {copyVariants.map((v, idx) => (
               <div
@@ -244,14 +245,14 @@ function CreativeInlinePanel({
                 className="rounded-lg p-4 flex flex-col gap-2"
                 style={
                   idx === selectedCopyIndex
-                    ? { background: '#f0f9ff', border: '2px solid #0284c7' }
-                    : { background: '#f8fafc', border: '1px solid #e2e8f0' }
+                    ? { background: '#eef2ff', border: '2px solid #4338ca' }
+                    : { background: '#f3f4f6', border: '1px solid #e5e7eb' }
                 }
               >
                 {idx === selectedCopyIndex && (
                   <span
                     className="text-xs font-semibold px-2 py-0.5 rounded-full self-start"
-                    style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                    style={{ background: '#e0e7ff', color: '#1d4ed8', border: '1px solid #c7d2fe' }}
                   >
                     Selected
                   </span>
@@ -259,19 +260,19 @@ function CreativeInlinePanel({
                 {v.hookStyle && (
                   <span
                     className="text-xs px-2 py-0.5 rounded-full self-start"
-                    style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}
+                    style={{ background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }}
                   >
                     {v.hookStyle}
                   </span>
                 )}
                 {v.headline && (
-                  <p className="text-sm font-semibold" style={{ color: '#0f172a' }}>{v.headline}</p>
+                  <p className="text-sm font-semibold" style={{ color: '#111827' }}>{v.headline}</p>
                 )}
-                <p className="text-xs leading-relaxed" style={{ color: '#475569' }}>{v.primaryText}</p>
+                <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>{v.primaryText}</p>
                 {v.cta && (
                   <span
                     className="text-xs font-semibold px-2.5 py-1 rounded-md self-start"
-                    style={{ background: '#dbeafe', color: '#1d4ed8' }}
+                    style={{ background: '#e0e7ff', color: '#1d4ed8' }}
                   >
                     {v.cta}
                   </span>
@@ -284,9 +285,9 @@ function CreativeInlinePanel({
 
       {creativePackage.imagePrompt && (
         <div>
-          <p className="text-xs font-medium mb-2" style={{ color: '#64748b' }}>Image Prompt</p>
-          <div className="rounded-lg p-4" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
-            <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>
+          <p className="text-xs font-medium mb-2" style={{ color: '#4b5563' }}>Image Prompt</p>
+          <div className="rounded-lg p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
+            <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>
               {creativePackage.imagePrompt}
             </p>
           </div>
@@ -296,14 +297,14 @@ function CreativeInlinePanel({
               src={creativePackage.imageUrl}
               alt="Generated creative"
               className="mt-3 rounded-lg max-w-full"
-              style={{ border: '1px solid #e2e8f0' }}
+              style={{ border: '1px solid #e5e7eb' }}
             />
           ) : (
             <div
               className="mt-2 h-20 rounded-lg flex items-center justify-center"
-              style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+              style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}
             >
-              <p className="text-xs" style={{ color: '#cbd5e1' }}>Image not yet generated</p>
+              <p className="text-xs" style={{ color: '#d1d5db' }}>Image not yet generated</p>
             </div>
           )}
         </div>
@@ -348,34 +349,34 @@ function CampaignInlinePanel({
   tenantId: string
 }) {
   return (
-    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
-      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+    <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid #e5e7eb' }}>
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
         Campaign
       </p>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Status</p>
+        <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+          <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Status</p>
           <StatusBadge status={campaign.status} />
         </div>
-        <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Budget</p>
-          <p className="text-sm font-semibold" style={{ color: '#0f172a' }}>
+        <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+          <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Budget</p>
+          <p className="text-sm font-semibold" style={{ color: '#111827' }}>
             {campaign.budget ? formatCurrency(campaign.budget) : '—'}
           </p>
         </div>
-        <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Objective</p>
-          <p className="text-xs" style={{ color: '#475569' }}>{campaign.objective || '—'}</p>
+        <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+          <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Objective</p>
+          <p className="text-xs" style={{ color: '#4b5563' }}>{campaign.objective || '—'}</p>
         </div>
       </div>
 
       {campaign.status === 'pending_approval' && (
         <div
           className="rounded-xl p-4 flex flex-col gap-3"
-          style={{ background: '#f8fafc', border: '2px solid #e2e8f0' }}
+          style={{ background: '#f3f4f6', border: '2px solid #e5e7eb' }}
         >
-          <p className="text-xs font-semibold text-center" style={{ color: '#0f172a' }}>
+          <p className="text-xs font-semibold text-center" style={{ color: '#111827' }}>
             Awaiting your approval
           </p>
           <div className="flex gap-2">
@@ -418,7 +419,7 @@ function CampaignInlinePanel({
                 placeholder="Describe why…"
                 rows={2}
                 className="w-full rounded-lg px-3 py-2 text-xs resize-none"
-                style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#0f172a', outline: 'none' }}
+                style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#111827', outline: 'none' }}
               />
               <div className="flex items-center gap-2">
                 <button
@@ -429,7 +430,7 @@ function CampaignInlinePanel({
                 >
                   {rejectState === 'loading' ? 'Rejecting…' : 'Confirm Reject'}
                 </button>
-                <button onClick={onRejectCancel} className="text-xs" style={{ color: '#94a3b8' }}>
+                <button onClick={onRejectCancel} className="text-xs" style={{ color: '#9ca3af' }}>
                   Cancel
                 </button>
               </div>
@@ -442,281 +443,11 @@ function CampaignInlinePanel({
         <Link
           href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
           className="inline-flex items-center gap-1 text-xs font-medium"
-          style={{ color: '#0ea5e9', textDecoration: 'none' }}
+          style={{ color: '#4f46e5', textDecoration: 'none' }}
         >
           View full campaign <ArrowRight size={11} />
         </Link>
       )}
-    </div>
-  )
-}
-
-function IdeaCard({
-  brief,
-  isWinner,
-  onProduce,
-  producing,
-  producedRunId,
-  producedCampaign,
-  tenantId,
-  creativePackage,
-  copyVariants,
-  selectedCopyIndex,
-  campaign,
-  onApprove,
-  approveState,
-  onRejectOpen,
-  rejectOpen,
-  rejectReason,
-  onRejectReasonChange,
-  onReject,
-  rejectState,
-  onRejectCancel,
-}: {
-  brief: import('@/types').IntelligenceBrief
-  isWinner: boolean
-  onProduce?: () => void
-  producing?: boolean
-  producedRunId?: string
-  producedCampaign?: import('@/types').Campaign
-  tenantId?: string
-  creativePackage?: import('@/types').CreativePackage
-  copyVariants?: import('@/types').CopyVariant[]
-  selectedCopyIndex?: number
-  campaign?: import('@/types').Campaign
-  onApprove?: () => void
-  approveState?: 'idle' | 'loading' | 'success' | 'error'
-  onRejectOpen?: () => void
-  rejectOpen?: boolean
-  rejectReason?: string
-  onRejectReasonChange?: (v: string) => void
-  onReject?: () => void
-  rejectState?: 'idle' | 'loading' | 'success' | 'error'
-  onRejectCancel?: () => void
-}) {
-  const isProduced = isWinner || !!producedRunId
-
-  return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={
-        isWinner
-          ? { background: '#ffffff', border: '2px solid #fbbf24', boxShadow: '0 4px 16px rgba(251,191,36,0.10)' }
-          : producedRunId
-          ? { background: '#ffffff', border: '1.5px solid #bbf7d0', boxShadow: '0 1px 4px rgba(21,128,61,0.06)' }
-          : { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(15,23,42,0.05)' }
-      }
-    >
-      {/* Accent bar */}
-      <div style={{ height: 3, background: isWinner ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : producedRunId ? '#22c55e' : '#e8e8ec' }} />
-
-      <div className="px-5 pt-4 pb-3 flex flex-col gap-3">
-        {/* ── Always-visible header ── */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            {/* Status + score row */}
-            <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              {isWinner ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-                  <Star size={9} fill="currentColor" /> Strategy Pick
-                </span>
-              ) : producedRunId ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
-                  <CheckCircle2 size={9} /> Produced
-                </span>
-              ) : (
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0' }}>
-                  Not produced
-                </span>
-              )}
-              <ScoreBadge score={brief.finalScore} />
-            </div>
-
-            {/* Title */}
-            <h4 className="text-sm font-bold leading-snug" style={{ color: '#0f172a' }}>
-              {brief.topic}
-            </h4>
-          </div>
-
-          {/* Campaign status pill — quick glance for winner */}
-          {isWinner && campaign && (
-            <StatusBadge status={campaign.status} />
-          )}
-        </div>
-
-        {/* Score bar */}
-        {brief.finalScore !== undefined && <ScoreBar score={brief.finalScore} />}
-
-        {/* Tags row */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {brief.platform && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#f0f9ff', color: '#0ea5e9', border: '1px solid #bae6fd' }}>
-              {brief.platform}
-            </span>
-          )}
-          {brief.format && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}>
-              {brief.format}
-            </span>
-          )}
-          {brief.product && (
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-              {brief.product}
-            </span>
-          )}
-          {brief.ideaSource && (
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
-              {brief.ideaSource.replace(/_/g, ' ')}
-            </span>
-          )}
-          {brief.urgencyScore != null && brief.urgencyScore >= 8 && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }}>
-              🔥 Urgent
-            </span>
-          )}
-          {brief.audience && (
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
-              {brief.audience}
-            </span>
-          )}
-        </div>
-
-        {/* ── Produced: accordion sections ── */}
-        {isProduced && (
-          <div className="flex flex-col mt-1">
-            {/* Brief Details accordion */}
-            {(brief.angle || brief.hook || brief.keyMessage) && (
-              <AccordionSection title="Brief Details">
-                <div className="flex flex-col gap-3">
-                  {brief.angle && (
-                    <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>{brief.angle}</p>
-                  )}
-                  {brief.hook && (
-                    <div className="rounded-lg px-3 py-2" style={{ background: '#f0f9ff', borderLeft: '3px solid #0284c7' }}>
-                      <p className="text-xs italic leading-relaxed" style={{ color: '#0284c7' }}>&ldquo;{brief.hook}&rdquo;</p>
-                    </div>
-                  )}
-                  {brief.keyMessage && (
-                    <div>
-                      <p className="text-xs font-medium mb-0.5" style={{ color: '#94a3b8' }}>Key Message</p>
-                      <p className="text-xs leading-relaxed" style={{ color: '#334155' }}>{brief.keyMessage}</p>
-                    </div>
-                  )}
-                </div>
-              </AccordionSection>
-            )}
-
-            {/* Creative Output accordion — winner only */}
-            {isWinner && creativePackage && (
-              <AccordionSection title="Creative Output" badge={
-                creativePackage.copyVariants?.length ? (
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0f9ff', color: '#0ea5e9' }}>
-                    {creativePackage.copyVariants.length} variants
-                  </span>
-                ) : undefined
-              }>
-                <CreativeInlinePanel
-                  creativePackage={creativePackage}
-                  copyVariants={copyVariants ?? []}
-                  selectedCopyIndex={selectedCopyIndex}
-                />
-              </AccordionSection>
-            )}
-
-            {/* Campaign accordion — winner only, auto-open if pending approval */}
-            {isWinner && campaign && tenantId && onApprove && onRejectOpen && (
-              <AccordionSection
-                title="Campaign"
-                defaultOpen={campaign.status === 'pending_approval'}
-                badge={
-                  campaign.status === 'pending_approval' ? (
-                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ background: '#fef3c7', color: '#b45309' }}>
-                      Needs approval
-                    </span>
-                  ) : undefined
-                }
-              >
-                <CampaignInlinePanel
-                  campaign={campaign}
-                  onApprove={onApprove}
-                  approveState={approveState ?? 'idle'}
-                  onRejectOpen={onRejectOpen}
-                  rejectOpen={rejectOpen ?? false}
-                  rejectReason={rejectReason ?? ''}
-                  onRejectReasonChange={onRejectReasonChange ?? (() => {})}
-                  onReject={onReject ?? (() => {})}
-                  rejectState={rejectState ?? 'idle'}
-                  onRejectCancel={onRejectCancel ?? (() => {})}
-                  tenantId={tenantId}
-                />
-              </AccordionSection>
-            )}
-
-            {/* Campaign accordion — produced non-winner */}
-            {!isWinner && producedRunId && tenantId && (
-              <AccordionSection title="Campaign">
-                {producedCampaign ? (
-                  <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-lg p-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                        <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Status</p>
-                        <StatusBadge status={producedCampaign.status} />
-                      </div>
-                      <div className="rounded-lg p-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                        <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Budget</p>
-                        <p className="text-xs font-semibold" style={{ color: '#0f172a' }}>
-                          {producedCampaign.budget ? formatCurrency(producedCampaign.budget) : '—'}
-                        </p>
-                      </div>
-                      <div className="rounded-lg p-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                        <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Objective</p>
-                        <p className="text-xs" style={{ color: '#475569' }}>{producedCampaign.objective || '—'}</p>
-                      </div>
-                    </div>
-                    {producedCampaign._id && (
-                      <Link
-                        href={`/dashboard/${tenantId}/campaigns/${producedCampaign._id}`}
-                        className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold"
-                        style={{ background: '#f0fdf4', border: '1px solid #86efac', color: '#15803d', textDecoration: 'none' }}
-                      >
-                        <span>View full campaign</span>
-                        <ArrowRight size={12} />
-                      </Link>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs" style={{ color: '#94a3b8' }}>Campaign not yet available</p>
-                )}
-              </AccordionSection>
-            )}
-          </div>
-        )}
-
-        {/* ── Not produced: produce button ── */}
-        {!isProduced && onProduce && (
-          <button
-            onClick={onProduce}
-            disabled={producing}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-60"
-            style={{ background: '#f8fafc', border: '1.5px dashed #cbd5e1', color: '#475569' }}
-            onMouseEnter={(e) => {
-              ;(e.currentTarget as HTMLElement).style.background = '#e0f2fe'
-              ;(e.currentTarget as HTMLElement).style.color = '#0ea5e9'
-              ;(e.currentTarget as HTMLElement).style.borderColor = '#7dd3fc'
-              ;(e.currentTarget as HTMLElement).style.borderStyle = 'solid'
-            }}
-            onMouseLeave={(e) => {
-              ;(e.currentTarget as HTMLElement).style.background = '#f8fafc'
-              ;(e.currentTarget as HTMLElement).style.color = '#475569'
-              ;(e.currentTarget as HTMLElement).style.borderColor = '#cbd5e1'
-              ;(e.currentTarget as HTMLElement).style.borderStyle = 'dashed'
-            }}
-          >
-            {producing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-            {producing ? 'Starting production…' : 'Produce This Idea'}
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -735,11 +466,11 @@ function platformConfig(platform: string): {
     case 'reddit':
       return { emoji: '🗨️', textColor: '#c2410c', bg: '#fff7ed', border: '#fed7aa' }
     case 'twitter':
-      return { emoji: '🐦', textColor: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' }
+      return { emoji: '🐦', textColor: '#1d4ed8', bg: '#eff6ff', border: '#c7d2fe' }
     case 'youtube':
       return { emoji: '📺', textColor: '#b91c1c', bg: '#fef2f2', border: '#fecaca' }
     default:
-      return { emoji: '📡', textColor: '#71717a', bg: '#f6f6f7', border: '#e8e8ec' }
+      return { emoji: '📡', textColor: '#71717a', bg: '#f6f6f7', border: '#e5e7eb' }
   }
 }
 
@@ -755,20 +486,15 @@ function SectionHeader({
   icon?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-3 mb-5">
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-        style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: '#ffffff', boxShadow: '0 2px 6px rgba(14,165,233,0.30)' }}
-      >
-        {number}
-      </div>
+    <div className="flex items-center gap-3 mb-6">
+      <span className="text-xs font-mono font-bold" style={{ color: '#d1d5db' }}>{number}</span>
       <div className="flex items-center gap-2">
         {icon}
-        <h2 className="text-[15px] font-bold" style={{ color: '#0f172a' }}>
+        <h2 className="text-[15px] font-bold" style={{ color: '#111827' }}>
           {title}
         </h2>
       </div>
-      <div className="flex-1 h-px" style={{ background: '#e2e8f0' }} />
+      <div className="flex-1 h-px" style={{ background: '#e5e7eb' }} />
     </div>
   )
 }
@@ -795,7 +521,7 @@ function SectionTabs({
 }) {
   return (
     <div
-      className="flex gap-1 p-1 overflow-x-auto"
+      className="flex overflow-x-auto"
       style={{ scrollbarWidth: 'none' }}
     >
       {SECTIONS.map((sec, idx) => {
@@ -804,29 +530,16 @@ function SectionTabs({
           <button
             key={sec.label}
             onClick={() => onSelect(idx)}
-            className="relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all shrink-0 flex-1 justify-center"
-            style={
-              isActive
-                ? {
-                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-                    color: '#ffffff',
-                    border: '1px solid transparent',
-                    boxShadow: '0 2px 8px rgba(14,165,233,0.30)',
-                  }
-                : {
-                    background: 'transparent',
-                    color: '#64748b',
-                    border: '1px solid transparent',
-                  }
-            }
+            className="relative flex items-center gap-2 px-5 py-3 text-[13px] font-medium whitespace-nowrap transition-colors shrink-0"
+            style={{ color: isActive ? '#111827' : '#9ca3af' }}
           >
-            <span>{sec.emoji}</span>
+            <span className="text-sm opacity-70">{sec.emoji}</span>
             {sec.label}
-            {dataDots[idx] && (
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: isActive ? '#bae6fd' : '#0ea5e9' }}
-              />
+            {dataDots[idx] && !isActive && (
+              <span className="w-1 h-1 rounded-full shrink-0" style={{ background: '#4f46e5' }} />
+            )}
+            {isActive && (
+              <div className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full" style={{ background: '#4f46e5' }} />
             )}
           </button>
         )
@@ -871,14 +584,14 @@ function CreativeEntryCard({
       style={
         entry.isWinner
           ? { border: '2px solid #fbbf24', background: '#ffffff' }
-          : { border: '1px solid #e2e8f0', background: '#ffffff' }
+          : { border: '1px solid #e5e7eb', background: '#ffffff' }
       }
     >
       {/* Clickable header — always visible */}
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left"
-        style={{ background: entry.isWinner ? '#fffbeb' : '#f8fafc' }}
+        style={{ background: entry.isWinner ? '#fffbeb' : '#f3f4f6' }}
       >
         {entry.isWinner ? (
           <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
@@ -889,35 +602,35 @@ function CreativeEntryCard({
             <CheckCircle2 size={9} /> Produced
           </span>
         )}
-        <span className="text-sm font-semibold truncate flex-1" style={{ color: '#0f172a' }}>
+        <span className="text-sm font-semibold truncate flex-1" style={{ color: '#111827' }}>
           {entry.topic}
         </span>
         {!open && chips.length > 0 && (
           <div className="hidden sm:flex items-center gap-1.5 shrink-0">
             {chips.map((c) => (
-              <span key={c} className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#64748b' }}>{c}</span>
+              <span key={c} className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>{c}</span>
             ))}
           </div>
         )}
         <ChevronDown
           size={14}
           className="shrink-0 transition-transform duration-200"
-          style={{ color: '#94a3b8', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          style={{ color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
         />
       </button>
 
       {/* Expanded content */}
       {open && (
-        <div style={{ borderTop: `1px solid ${entry.isWinner ? '#fde68a' : '#e2e8f0'}` }}>
+        <div style={{ borderTop: `1px solid ${entry.isWinner ? '#fde68a' : '#e5e7eb'}` }}>
           <div className="px-4 flex flex-col">
             {!entry.pkg && entry.campaignId && (
               <div className="py-3">
-                <div className="rounded-lg p-3 flex items-center justify-between gap-3" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-                  <p className="text-xs" style={{ color: '#0284c7' }}>Creative package not yet available — view in campaign</p>
+                <div className="rounded-lg p-3 flex items-center justify-between gap-3" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
+                  <p className="text-xs" style={{ color: '#4338ca' }}>Creative package not yet available — view in campaign</p>
                   <Link
                     href={`/dashboard/${tenantId}/campaigns/${entry.campaignId}`}
                     className="inline-flex items-center gap-1 text-xs font-semibold shrink-0"
-                    style={{ color: '#0ea5e9', textDecoration: 'none' }}
+                    style={{ color: '#4f46e5', textDecoration: 'none' }}
                   >
                     View Campaign <ArrowRight size={11} />
                   </Link>
@@ -931,7 +644,7 @@ function CreativeEntryCard({
                 title="Copy Variants"
                 defaultOpen={true}
                 badge={
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0f9ff', color: '#0ea5e9' }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#eef2ff', color: '#4f46e5' }}>
                     {entry.variants.length}
                   </span>
                 }
@@ -944,28 +657,28 @@ function CreativeEntryCard({
                         key={idx}
                         className="rounded-lg px-3 py-2.5 flex flex-col gap-1"
                         style={isSel
-                          ? { background: '#f0f9ff', border: '1.5px solid #0284c7' }
-                          : { background: '#f8fafc', border: '1px solid #e2e8f0' }
+                          ? { background: '#eef2ff', border: '1.5px solid #4338ca' }
+                          : { background: '#f3f4f6', border: '1px solid #e5e7eb' }
                         }
                       >
                         <div className="flex items-center gap-2 flex-wrap">
                           {isSel && (
-                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: '#dbeafe', color: '#1d4ed8' }}>Selected</span>
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: '#e0e7ff', color: '#1d4ed8' }}>Selected</span>
                           )}
                           {v.hookStyle && (
-                            <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#64748b' }}>{v.hookStyle}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>{v.hookStyle}</span>
                           )}
                           {v.cta && (
-                            <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1d4ed8' }}>{v.cta}</span>
+                            <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded" style={{ background: '#e0e7ff', color: '#1d4ed8' }}>{v.cta}</span>
                           )}
                         </div>
-                        {v.headline && <p className="text-xs font-semibold" style={{ color: '#0f172a' }}>{v.headline}</p>}
-                        <p className="text-xs leading-relaxed" style={{ color: '#475569' }}>{v.primaryText}</p>
+                        {v.headline && <p className="text-xs font-semibold" style={{ color: '#111827' }}>{v.headline}</p>}
+                        <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>{v.primaryText}</p>
                       </div>
                     )
                   })}
                   {entry.pkg.copySelectionReason && (
-                    <p className="text-xs italic pt-1" style={{ color: '#64748b' }}>{entry.pkg.copySelectionReason}</p>
+                    <p className="text-xs italic pt-1" style={{ color: '#4b5563' }}>{entry.pkg.copySelectionReason}</p>
                   )}
                 </div>
               </AccordionSection>
@@ -982,24 +695,24 @@ function CreativeEntryCard({
                 }
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-xs" style={{ color: '#94a3b8' }}>Prompt</p>
+                  <p className="text-xs" style={{ color: '#9ca3af' }}>Prompt</p>
                   <button
                     onClick={() => navigator.clipboard.writeText(entry.pkg!.imagePrompt || '')}
                     className="flex items-center gap-1 px-2 py-1 rounded text-xs"
-                    style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569' }}
+                    style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
                   >
                     <Copy size={10} /> Copy
                   </button>
                 </div>
-                <div className="rounded-lg p-3 mb-2" style={{ background: '#0f172a' }}>
-                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.imagePrompt}</p>
+                <div className="rounded-lg p-3 mb-2" style={{ background: '#111827' }}>
+                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>{entry.pkg.imagePrompt}</p>
                 </div>
                 {entry.pkg.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.pkg.imageUrl} alt="Generated creative" className="rounded-lg max-w-full" style={{ border: '1px solid #e2e8f0' }} />
+                  <img src={entry.pkg.imageUrl} alt="Generated creative" className="rounded-lg max-w-full" style={{ border: '1px solid #e5e7eb' }} />
                 ) : (
-                  <div className="h-14 rounded-lg flex items-center justify-center" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-                    <p className="text-xs" style={{ color: '#cbd5e1' }}>Not yet generated</p>
+                  <div className="h-14 rounded-lg flex items-center justify-center" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                    <p className="text-xs" style={{ color: '#d1d5db' }}>Not yet generated</p>
                   </div>
                 )}
               </AccordionSection>
@@ -1009,17 +722,17 @@ function CreativeEntryCard({
             {entry.pkg && (entry.pkg.videoUrl || entry.pkg.videoPrompt) && (
               <AccordionSection title="Video" defaultOpen={!!entry.pkg.videoUrl}>
                 {entry.pkg.videoUrl ? (
-                  <video controls className="rounded-lg w-full mb-2" style={{ maxHeight: 300, border: '1px solid #e4e4e7' }}>
+                  <video controls className="rounded-lg w-full mb-2" style={{ maxHeight: 300, border: '1px solid #e5e7eb' }}>
                     <source src={entry.pkg.videoUrl} type="video/mp4" />
                   </video>
                 ) : null}
                 {entry.pkg.videoPrompt && (
-                  <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                  <div className="rounded-lg p-3" style={{ background: '#111827' }}>
                     <div className="flex items-center gap-2 mb-1.5">
-                      <Video size={11} style={{ color: '#64748b' }} />
-                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Script</span>
+                      <Video size={11} style={{ color: '#4b5563' }} />
+                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#4b5563' }}>Script</span>
                     </div>
-                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#94a3b8' }}>{entry.pkg.videoPrompt}</p>
+                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>{entry.pkg.videoPrompt}</p>
                   </div>
                 )}
               </AccordionSection>
@@ -1039,7 +752,7 @@ function CreativeEntryCard({
               <AccordionSection
                 title="Creative Debate"
                 badge={
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                     {entry.pkg.debateLog.length} rounds
                   </span>
                 }
@@ -1181,7 +894,6 @@ export default function RunDetailPage({ params }: PageProps) {
   }, [data?.run, fetchFull])
 
   async function handleProduce(briefId: string) {
-    if (!window.confirm('Are you sure you want to produce this brief?')) return
     setProducingBrief(briefId)
     try {
       const res = await fetch(`${API_BASE}/pipeline/${tenantId}/runs/${runId}/produce/${briefId}`, {
@@ -1253,10 +965,10 @@ export default function RunDetailPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f0f2f5' }}>
+      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f8f9fb' }}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: '#0ea5e9' }} />
-          <p className="text-sm font-medium" style={{ color: '#64748b' }}>
+          <Loader2 size={28} className="animate-spin" style={{ color: '#4f46e5' }} />
+          <p className="text-sm font-medium" style={{ color: '#4b5563' }}>
             Loading pipeline run…
           </p>
         </div>
@@ -1297,10 +1009,10 @@ export default function RunDetailPage({ params }: PageProps) {
   const copyVariants: CopyVariant[] = creativePackage?.copyVariants || []
   const selectedCopyIndex = creativePackage?.selectedCopyIndex
 
-  const sectionStyle = {
+  const sectionStyle: React.CSSProperties = {
     background: '#ffffff',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 1px 3px rgba(15,23,42,0.05)',
+    borderRadius: 16,
+    boxShadow: '0 1px 3px rgba(26,26,26,0.04), 0 1px 2px rgba(26,26,26,0.02)',
   }
 
   const isActive =
@@ -1333,120 +1045,102 @@ export default function RunDetailPage({ params }: PageProps) {
   const activeScout = scoutPlatforms[scoutTab] ?? null
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
+    <div style={{ background: '#f8f9fb', minHeight: '100vh' }}>
       {/* Toast */}
       {toast && (
         <div
-          className="fixed top-4 right-4 z-50 px-4 py-3 rounded-lg text-sm font-medium shadow-lg"
+          className="fixed top-5 right-5 z-50 px-5 py-3 rounded-xl text-sm font-medium animate-scale-in"
           style={
             toast.type === 'success'
-              ? { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
-              : { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
+              ? { background: '#ecfdf5', color: '#059669', boxShadow: '0 8px 32px rgba(45,122,79,0.12)' }
+              : { background: '#fef2f2', color: '#dc2626', boxShadow: '0 8px 32px rgba(180,69,69,0.12)' }
           }
         >
           {toast.message}
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-7 pt-6 pb-3">
-        {/* Back */}
+      {/* Header area */}
+      <div className="max-w-5xl mx-auto px-8 pt-8 animate-fade-up">
+        {/* Back link */}
         <Link
           href={`/dashboard/${tenantId}/runs`}
-          className="inline-flex items-center gap-1.5 text-sm font-medium transition-all rounded-lg px-3 py-1.5 hover:bg-white hover:text-slate-700"
-          style={{ color: '#94a3b8' }}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors mb-6"
+          style={{ color: '#9ca3af' }}
         >
           <ArrowLeft size={13} /> Back to Runs
         </Link>
-      </div>
 
-      {/* ===== SECTION A: COMMAND CENTER HEADER ===== */}
-      <div className="max-w-5xl mx-auto px-7 mb-0 animate-fade-up">
-        <div className="rounded-t-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.06)', background: '#ffffff' }}>
-          {/* Gradient accent banner */}
-          <div style={{ height: 4, background: run?.status === 'failed' ? 'linear-gradient(90deg,#dc2626,#f87171)' : run?.status === 'completed' ? 'linear-gradient(90deg,#16a34a,#34d399)' : 'linear-gradient(90deg,#0ea5e9,#6366f1)' }} />
-
-          <div className="p-6">
-            {/* Top row */}
-            <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#e0f2fe', border: '1px solid #bae6fd' }}>
-                  <Activity size={18} style={{ color: '#0ea5e9' }} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                    <h1 className="text-xl font-bold" style={{ color: '#0f172a' }}>Pipeline Run</h1>
-                    {run && <StatusBadge status={run.status} />}
-                    {isActive && (
-                      <span
-                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                        style={{ background: '#dbeafe', color: '#2563eb', border: '1px solid #93c5fd' }}
-                      >
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#3b82f6' }} />
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: '#3b82f6' }} />
-                        </span>
-                        Live
+        {/* Run header card */}
+        <div className="rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 3px rgba(26,26,26,0.04), 0 1px 2px rgba(26,26,26,0.02)' }}>
+          <div className="p-7">
+            <div className="flex items-start justify-between gap-5 flex-wrap mb-5">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-xl font-bold" style={{ color: '#111827' }}>Pipeline Run</h1>
+                  {run && <StatusBadge status={run.status} />}
+                  {isActive && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold"
+                      style={{ background: '#eef2ff', color: '#4f46e5' }}>
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: '#4f46e5' }} />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: '#4f46e5' }} />
                       </span>
-                    )}
-                  </div>
-                  <code className="text-xs font-mono" style={{ color: '#94a3b8' }}>{runId}</code>
+                      Live
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-xs" style={{ color: '#9ca3af' }}>
+                  <code className="font-mono">{runId}</code>
+                  {run?.startedAt && (
+                    <>
+                      <span style={{ color: '#d1d5db' }}>&middot;</span>
+                      <span>{formatDateTime(run.startedAt)}</span>
+                    </>
+                  )}
+                  {run?.completedAt && (
+                    <>
+                      <span style={{ color: '#d1d5db' }}>&middot;</span>
+                      <span>{formatDateTime(run.completedAt)}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Duration pill */}
               {duration && (
-                <div className="rounded-xl px-4 py-3 text-right" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: '#94a3b8' }}>
+                <div className="text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#d1d5db' }}>
                     {run?.status === 'completed' ? 'Completed in' : run?.status === 'failed' ? 'Failed after' : 'Running for'}
                   </p>
-                  <p className="text-2xl font-bold tabular-nums" style={{ color: '#0f172a' }}>
+                  <p className="text-3xl font-black tabular-nums font-mono" style={{ color: '#111827' }}>
                     {duration}
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Times row */}
-            <div className="flex items-center gap-5 text-xs mb-1 flex-wrap" style={{ color: '#94a3b8' }}>
-              {run?.startedAt && (
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full" style={{ background: '#cbd5e1' }} />
-                  Started: <span style={{ color: '#475569' }}>{formatDateTime(run.startedAt)}</span>
-                </span>
-              )}
-              {run?.completedAt && (
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full" style={{ background: '#cbd5e1' }} />
-                  Completed: <span style={{ color: '#475569' }}>{formatDateTime(run.completedAt)}</span>
-                </span>
-              )}
-            </div>
-
-            {/* Phase stepper */}
             {run && <PhaseProgress status={run.status} />}
+          </div>
+
+          {/* Section tabs — attached to header */}
+          <div style={{ borderTop: '1px solid #f3f4f6' }}>
+            <SectionTabs
+              activeSection={activeSection}
+              dataDots={dataDots}
+              onSelect={selectSection}
+            />
           </div>
         </div>
       </div>
 
-      {/* ===== SECTION TABS ===== */}
-      <div className="max-w-5xl mx-auto px-7">
-        <div style={{ background: '#ffffff', borderLeft: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', padding: '8px', boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
-          <SectionTabs
-            activeSection={activeSection}
-            dataDots={dataDots}
-            onSelect={selectSection}
-          />
-        </div>
-      </div>
-
       {/* ===== CONTENT ===== */}
-      <div className="max-w-5xl mx-auto px-7 py-6">
+      <div className="max-w-5xl mx-auto px-8 py-6">
         {/* ===== SECTION B: SIGNAL SCOUTS ===== */}
         {activeSection === 0 && <div className="rounded-xl p-6" style={sectionStyle}>
-          <SectionHeader number="01" title="Signal Scouts" icon={<span style={{ color: '#0ea5e9' }}>📡</span>} />
+          <SectionHeader number="01" title="Signal Scouts" icon={<span style={{ color: '#4f46e5' }}>📡</span>} />
 
           {scouts.length === 0 ? (
-            <p className="text-sm text-center py-6" style={{ color: '#94a3b8' }}>
+            <p className="text-sm text-center py-6" style={{ color: '#9ca3af' }}>
               No scout data available yet.
             </p>
           ) : (
@@ -1472,7 +1166,7 @@ export default function RunDetailPage({ params }: PageProps) {
                         </span>
                       </div>
                       <div>
-                        <p className="text-xs" style={{ color: '#94a3b8' }}>
+                        <p className="text-xs" style={{ color: '#9ca3af' }}>
                           Signals
                         </p>
                         <p className="text-xl font-bold" style={{ color: cfg.textColor }}>
@@ -1480,10 +1174,10 @@ export default function RunDetailPage({ params }: PageProps) {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs" style={{ color: '#94a3b8' }}>
+                        <p className="text-xs" style={{ color: '#9ca3af' }}>
                           Viral Trends
                         </p>
-                        <p className="text-sm font-semibold" style={{ color: '#475569' }}>
+                        <p className="text-sm font-semibold" style={{ color: '#4b5563' }}>
                           {viralCount}
                         </p>
                       </div>
@@ -1496,12 +1190,12 @@ export default function RunDetailPage({ params }: PageProps) {
               {scoutPlatforms.length > 0 && (
                 <div
                   className="rounded-xl overflow-hidden"
-                  style={{ border: '1px solid #e2e8f0' }}
+                  style={{ border: '1px solid #e5e7eb' }}
                 >
                   {/* Platform tab switcher */}
                   <div
                     className="flex gap-1 p-3"
-                    style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}
+                    style={{ borderBottom: '1px solid #f3f4f6', background: '#f3f4f6' }}
                   >
                     {scoutPlatforms.map((scout, idx) => {
                       const cfg = platformConfig(scout.platform)
@@ -1520,8 +1214,8 @@ export default function RunDetailPage({ params }: PageProps) {
                                 }
                               : {
                                   background: '#ffffff',
-                                  color: '#64748b',
-                                  border: '1px solid #e2e8f0',
+                                  color: '#4b5563',
+                                  border: '1px solid #e5e7eb',
                                 }
                           }
                         >
@@ -1549,13 +1243,13 @@ export default function RunDetailPage({ params }: PageProps) {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                           {topics.length > 0 && (
                             <div>
-                              <p className="text-xs font-medium mb-2.5" style={{ color: '#94a3b8' }}>
+                              <p className="text-xs font-medium mb-2.5" style={{ color: '#9ca3af' }}>
                                 Trending Topics
                               </p>
                               <div className="flex flex-col gap-1.5">
                                 {topics.slice(0, 5).map((t, i) => (
                                   <div key={i} className="flex items-center justify-between gap-2">
-                                    <span className="text-xs truncate" style={{ color: '#475569' }}>
+                                    <span className="text-xs truncate" style={{ color: '#4b5563' }}>
                                       {t.topic}
                                     </span>
                                     {t.score !== undefined && (
@@ -1573,7 +1267,7 @@ export default function RunDetailPage({ params }: PageProps) {
                           )}
                           {hooks.length > 0 && (
                             <div>
-                              <p className="text-xs font-medium mb-2.5" style={{ color: '#94a3b8' }}>
+                              <p className="text-xs font-medium mb-2.5" style={{ color: '#9ca3af' }}>
                                 Hook Examples
                               </p>
                               <div className="flex flex-col gap-1.5">
@@ -1581,7 +1275,7 @@ export default function RunDetailPage({ params }: PageProps) {
                                   <p
                                     key={i}
                                     className="text-xs italic leading-relaxed"
-                                    style={{ color: '#64748b' }}
+                                    style={{ color: '#4b5563' }}
                                   >
                                     &ldquo;{h}&rdquo;
                                   </p>
@@ -1591,12 +1285,12 @@ export default function RunDetailPage({ params }: PageProps) {
                           )}
                           {formats.length > 0 && (
                             <div>
-                              <p className="text-xs font-medium mb-2.5" style={{ color: '#94a3b8' }}>
+                              <p className="text-xs font-medium mb-2.5" style={{ color: '#9ca3af' }}>
                                 Format Insights
                               </p>
                               <div className="flex flex-col gap-1.5">
                                 {formats.slice(0, 4).map((f, i) => (
-                                  <p key={i} className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                                  <p key={i} className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>
                                     • {f}
                                   </p>
                                 ))}
@@ -1615,19 +1309,19 @@ export default function RunDetailPage({ params }: PageProps) {
                 <div>
                   <h3
                     className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: '#94a3b8' }}
+                    style={{ color: '#9ca3af' }}
                   >
                     Top Signals
                   </h3>
-                  <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+                  <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
                     <table className="w-full">
                       <thead>
-                        <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                        <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#f3f4f6' }}>
                           {['Rank', 'Topic', 'Platforms', 'Score', 'Rationale'].map((h) => (
                             <th
                               key={h}
                               className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
-                              style={{ color: '#94a3b8' }}
+                              style={{ color: '#9ca3af' }}
                             >
                               {h}
                             </th>
@@ -1646,12 +1340,12 @@ export default function RunDetailPage({ params }: PageProps) {
                             <tr
                               key={idx}
                               className="transition-colors hover:bg-slate-50"
-                              style={{ borderBottom: '1px solid #f1f5f9' }}
+                              style={{ borderBottom: '1px solid #f3f4f6' }}
                             >
-                              <td className="px-4 py-3 text-sm" style={{ color: '#94a3b8' }}>
+                              <td className="px-4 py-3 text-sm" style={{ color: '#9ca3af' }}>
                                 {idx + 1}
                               </td>
-                              <td className="px-4 py-3 text-sm font-medium" style={{ color: '#0f172a' }}>
+                              <td className="px-4 py-3 text-sm font-medium" style={{ color: '#111827' }}>
                                 {sig.topic}
                               </td>
                               <td className="px-4 py-3">
@@ -1660,7 +1354,7 @@ export default function RunDetailPage({ params }: PageProps) {
                                     <span
                                       key={p}
                                       className="text-xs px-1.5 py-0.5 rounded"
-                                      style={{ background: '#f1f5f9', color: '#64748b' }}
+                                      style={{ background: '#f3f4f6', color: '#4b5563' }}
                                     >
                                       {p}
                                     </span>
@@ -1677,7 +1371,7 @@ export default function RunDetailPage({ params }: PageProps) {
                               </td>
                               <td
                                 className="px-4 py-3 text-xs max-w-[200px] truncate"
-                                style={{ color: '#64748b' }}
+                                style={{ color: '#4b5563' }}
                               >
                                 {sig.rationale}
                               </td>
@@ -1699,7 +1393,7 @@ export default function RunDetailPage({ params }: PageProps) {
         {activeSection === 1 && <div className="rounded-xl p-6" style={sectionStyle}>
           <SectionHeader number="02" title="Research" icon={<span>🔬</span>} />
           {research.length === 0 ? (
-            <p className="text-sm text-center py-6" style={{ color: '#94a3b8' }}>
+            <p className="text-sm text-center py-6" style={{ color: '#9ca3af' }}>
               No research data available yet.
             </p>
           ) : (
@@ -1712,16 +1406,16 @@ export default function RunDetailPage({ params }: PageProps) {
                 const urgencyStyle = (u: string) =>
                   u === 'high' ? { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' }
                   : u === 'medium' ? { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }
-                  : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+                  : { bg: '#f3f4f6', color: '#4b5563', border: '#e5e7eb' }
                 return (
-                  <div key={idx} className="rounded-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+                  <div key={idx} className="rounded-xl overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
                     {/* Header */}
-                    <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider capitalize" style={{ color: '#64748b' }}>
+                    <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#f3f4f6', borderBottom: '1px solid #f3f4f6' }}>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider capitalize" style={{ color: '#4b5563' }}>
                         {r.type === 'competitor' ? '🏆 Competitor' : '📊 Market'} Research
                       </h4>
                       {insights.length > 0 && (
-                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#e0f2fe', color: '#0ea5e9' }}>
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#e0e7ff', color: '#4f46e5' }}>
                           {insights.length} insight{insights.length !== 1 ? 's' : ''}
                         </span>
                       )}
@@ -1730,7 +1424,7 @@ export default function RunDetailPage({ params }: PageProps) {
                     <div className="p-4">
                       {/* Summary */}
                       {summary && (
-                        <p className="text-sm leading-relaxed mb-4" style={{ color: '#475569' }}>{summary}</p>
+                        <p className="text-sm leading-relaxed mb-4" style={{ color: '#4b5563' }}>{summary}</p>
                       )}
 
                       {/* Structured insights */}
@@ -1739,21 +1433,21 @@ export default function RunDetailPage({ params }: PageProps) {
                           {insights.map((ins, i) => {
                             const us = urgencyStyle(ins.urgency)
                             return (
-                              <div key={i} className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                              <div key={i} className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #f3f4f6' }}>
                                 <div className="flex items-start justify-between gap-3 mb-1.5">
-                                  <p className="text-sm font-medium leading-snug flex-1" style={{ color: '#0f172a' }}>{ins.insight}</p>
+                                  <p className="text-sm font-medium leading-snug flex-1" style={{ color: '#111827' }}>{ins.insight}</p>
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: us.bg, color: us.color, border: `1px solid ${us.border}` }}>
                                       {ins.urgency}
                                     </span>
-                                    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#475569' }}>
+                                    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                                       {ins.score}/10
                                     </span>
                                   </div>
                                 </div>
-                                <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>→ {ins.implication}</p>
+                                <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>→ {ins.implication}</p>
                                 {ins.source && (
-                                  <a href={ins.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#0ea5e9' }}>
+                                  <a href={ins.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#4f46e5' }}>
                                     {ins.source}
                                   </a>
                                 )}
@@ -1764,17 +1458,17 @@ export default function RunDetailPage({ params }: PageProps) {
                       ) : fallbackText ? (
                         /* Fallback to raw text if no structured data */
                         <>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#475569' }}>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#4b5563' }}>
                             {isExpanded ? fallbackText : fallbackText.slice(0, 500) + (fallbackText.length > 500 ? '…' : '')}
                           </p>
                           {fallbackText.length > 500 && (
-                            <button onClick={() => setResearchExpanded(prev => ({ ...prev, [idx]: !isExpanded }))} className="mt-2 text-xs font-medium" style={{ color: '#0ea5e9' }}>
+                            <button onClick={() => setResearchExpanded(prev => ({ ...prev, [idx]: !isExpanded }))} className="mt-2 text-xs font-medium" style={{ color: '#4f46e5' }}>
                               {isExpanded ? 'Show less' : 'Read more'}
                             </button>
                           )}
                         </>
                       ) : (
-                        <p className="text-sm" style={{ color: '#94a3b8' }}>No data available.</p>
+                        <p className="text-sm" style={{ color: '#9ca3af' }}>No data available.</p>
                       )}
                     </div>
                   </div>
@@ -1792,15 +1486,15 @@ export default function RunDetailPage({ params }: PageProps) {
           <div className="rounded-xl p-6" style={sectionStyle}>
             <SectionHeader number="03" title="Meta Ad Library" icon={<span>🏪</span>} />
             {!adLibrary ? (
-              <p className="text-sm text-center py-6" style={{ color: '#94a3b8' }}>No ad library data available for this run.</p>
+              <p className="text-sm text-center py-6" style={{ color: '#9ca3af' }}>No ad library data available for this run.</p>
             ) : (
               <div className="flex flex-col gap-5">
                 {/* Summary strip */}
                 {(adLibrary.dominantFormat || adLibrary.rawSummary) && (
-                  <div className="rounded-xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    {adLibrary.rawSummary && <p className="text-sm leading-relaxed mb-2" style={{ color: '#475569' }}>{adLibrary.rawSummary}</p>}
+                  <div className="rounded-xl p-4" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                    {adLibrary.rawSummary && <p className="text-sm leading-relaxed mb-2" style={{ color: '#4b5563' }}>{adLibrary.rawSummary}</p>}
                     {adLibrary.dominantFormat && (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe' }}>
                         Dominant format: {adLibrary.dominantFormat}
                       </span>
                     )}
@@ -1810,10 +1504,10 @@ export default function RunDetailPage({ params }: PageProps) {
                 {/* Competitor ads */}
                 {adLibrary.competitorAds?.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#94a3b8' }}>Competitor Ads Running Now</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>Competitor Ads Running Now</h3>
                     <div className="flex flex-col gap-2">
                       {adLibrary.competitorAds.map((ad, i) => (
-                        <div key={i} className="rounded-xl p-4" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+                        <div key={i} className="rounded-xl p-4" style={{ background: '#fff', border: '1px solid #e5e7eb' }}>
                           <div className="flex items-start justify-between gap-3 mb-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }}>
@@ -1823,10 +1517,10 @@ export default function RunDetailPage({ params }: PageProps) {
                                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}>{ad.format}</span>
                               )}
                               {ad.angle && (
-                                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>{ad.angle}</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }}>{ad.angle}</span>
                               )}
                               {ad.estimatedDaysRunning != null && (
-                                <span className="text-xs" style={{ color: '#94a3b8' }}>{ad.estimatedDaysRunning}d running</span>
+                                <span className="text-xs" style={{ color: '#9ca3af' }}>{ad.estimatedDaysRunning}d running</span>
                               )}
                             </div>
                             {ad.score != null && (
@@ -1835,10 +1529,10 @@ export default function RunDetailPage({ params }: PageProps) {
                               </span>
                             )}
                           </div>
-                          <p className="text-sm font-medium italic mb-1" style={{ color: '#0f172a' }}>&ldquo;{ad.hook}&rdquo;</p>
-                          {ad.cta && <p className="text-xs" style={{ color: '#64748b' }}>CTA: <span style={{ color: '#1d4ed8' }}>{ad.cta}</span></p>}
+                          <p className="text-sm font-medium italic mb-1" style={{ color: '#111827' }}>&ldquo;{ad.hook}&rdquo;</p>
+                          {ad.cta && <p className="text-xs" style={{ color: '#4b5563' }}>CTA: <span style={{ color: '#1d4ed8' }}>{ad.cta}</span></p>}
                           {ad.source && (
-                            <a href={ad.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#0ea5e9' }}>{ad.source}</a>
+                            <a href={ad.source} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 block truncate" style={{ color: '#4f46e5' }}>{ad.source}</a>
                           )}
                         </div>
                       ))}
@@ -1849,21 +1543,21 @@ export default function RunDetailPage({ params }: PageProps) {
                 {/* Gaps / opportunities */}
                 {adLibrary.gaps?.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#94a3b8' }}>Untapped Angles — Nobody Is Running These</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>Untapped Angles — Nobody Is Running These</h3>
                     <div className="flex flex-col gap-2">
                       {adLibrary.gaps.map((g, i) => {
                         const us = g.urgency === 'high'
                           ? { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' }
                           : g.urgency === 'medium'
                           ? { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }
-                          : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+                          : { bg: '#f3f4f6', color: '#4b5563', border: '#e5e7eb' }
                         return (
                           <div key={i} className="rounded-xl p-4" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                             <div className="flex items-start justify-between gap-3 mb-1.5">
-                              <p className="text-sm font-semibold flex-1" style={{ color: '#0f172a' }}>{g.gap}</p>
+                              <p className="text-sm font-semibold flex-1" style={{ color: '#111827' }}>{g.gap}</p>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: us.bg, color: us.color, border: `1px solid ${us.border}` }}>{g.urgency}</span>
-                                {g.score != null && <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#475569' }}>{g.score}/10</span>}
+                                {g.score != null && <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>{g.score}/10</span>}
                               </div>
                             </div>
                             <p className="text-xs leading-relaxed" style={{ color: '#15803d' }}>→ {g.opportunity}</p>
@@ -1880,131 +1574,30 @@ export default function RunDetailPage({ params }: PageProps) {
 
         {/* ===== SECTION: STRATEGY ===== */}
         {activeSection === 3 && (
-          <div className="rounded-xl p-6" style={sectionStyle}>
-            <SectionHeader
-              number="04"
-              title={`Strategy — ${run?.briefsGenerated ?? briefs.length} Ideas`}
-              icon={<Sparkles size={16} style={{ color: '#0ea5e9' }} />}
-            />
-
-            {briefs.length === 0 ? (
-              <div
-                className="rounded-lg p-5 text-center"
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-              >
-                <p className="text-sm" style={{ color: '#94a3b8' }}>
-                  No intelligence briefs available yet.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-              {/* Winner card - full width */}
-              {briefs.filter(b => b.selected === true || b.briefId === run?.selectedBriefId).map((brief) => (
-                <IdeaCard
-                  key={brief.briefId}
-                  brief={brief}
-                  isWinner={true}
-                  onProduce={() => handleProduce(brief.briefId)}
-                  producing={producingBrief === brief.briefId}
-                  producedRunId={producedRuns[brief.briefId]}
-                  tenantId={tenantId}
-                  creativePackage={creativePackage}
-                  copyVariants={copyVariants}
-                  selectedCopyIndex={selectedCopyIndex}
-                  campaign={campaign ?? undefined}
-                  onApprove={handleApprove}
-                  approveState={approveState}
-                  onRejectOpen={() => setRejectOpen((o) => !o)}
-                  rejectOpen={rejectOpen}
-                  rejectReason={rejectReason}
-                  onRejectReasonChange={setRejectReason}
-                  onReject={handleReject}
-                  rejectState={rejectState}
-                  onRejectCancel={() => setRejectOpen(false)}
-                />
-              ))}
-
-              {/* Other ideas - 2 column grid */}
-              {briefs.filter(b => !(b.selected === true || b.briefId === run?.selectedBriefId)).length > 0 && (
-                <>
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex-1 h-px" style={{ background: '#e8e8ec' }} />
-                    <span className="text-xs font-medium px-2 shrink-0" style={{ color: '#94a3b8' }}>
-                      Other ideas from this run
-                    </span>
-                    <div className="flex-1 h-px" style={{ background: '#e8e8ec' }} />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {briefs
-                      .filter(b => !(b.selected === true || b.briefId === run?.selectedBriefId))
-                      .map((brief) => (
-                        <IdeaCard
-                          key={brief.briefId}
-                          brief={brief}
-                          isWinner={false}
-                          onProduce={() => handleProduce(brief.briefId)}
-                          producing={producingBrief === brief.briefId}
-                          producedRunId={producedRuns[brief.briefId]}
-                          producedCampaign={siblingCampaigns[brief.briefId]}
-                          tenantId={tenantId}
-                        />
-                      ))}
-                  </div>
-                </>
-              )}
-
-                {/* Productions spawned from this run */}
-                {Object.keys(siblingCampaigns).length > 0 && (
-                  <div
-                    className="rounded-xl p-4"
-                    style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}
-                  >
-                    <p className="text-xs font-semibold mb-3" style={{ color: '#0ea5e9' }}>
-                      Productions from this run
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      {Object.entries(siblingCampaigns).map(([briefId, camp]) => {
-                        const matchedBrief = briefs.find((b) => b.briefId === briefId)
-                        return (
-                          <div
-                            key={briefId}
-                            className="flex items-center justify-between gap-3 flex-wrap"
-                          >
-                            <span className="text-xs truncate flex-1" style={{ color: '#475569' }}>
-                              {matchedBrief?.topic || briefId}
-                            </span>
-                            <Link
-                              href={`/dashboard/${tenantId}/campaigns/${camp._id}`}
-                              className="flex items-center gap-1 text-xs font-medium shrink-0"
-                              style={{ color: '#0ea5e9', textDecoration: 'none' }}
-                            >
-                              View Campaign <ArrowRight size={11} />
-                            </Link>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {creativeBrief?.debateLog && creativeBrief.debateLog.length > 0 && (
-              <div className="mt-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex-1 h-px" style={{ background: '#e8e8ec' }} />
-                  <span className="text-xs font-medium px-2" style={{ color: '#94a3b8' }}>
-                    Brief Selection Debate
-                  </span>
-                  <div className="flex-1 h-px" style={{ background: '#e8e8ec' }} />
-                </div>
-                <DebateLog
-                  rounds={creativeBrief.debateLog}
-                  rationale={creativeBrief.debateRationale}
-                />
-              </div>
-            )}
-          </div>
+          <StrategyTab
+            briefs={briefs}
+            run={run}
+            tenantId={tenantId}
+            creativeBrief={creativeBrief}
+            creativePackage={creativePackage}
+            copyVariants={copyVariants}
+            selectedCopyIndex={selectedCopyIndex}
+            campaign={campaign ?? undefined}
+            siblingCampaigns={siblingCampaigns}
+            producedRuns={producedRuns}
+            producingBrief={producingBrief}
+            onProduce={handleProduce}
+            onApprove={handleApprove}
+            approveState={approveState}
+            rejectOpen={rejectOpen}
+            onRejectOpen={() => setRejectOpen((o) => !o)}
+            rejectReason={rejectReason}
+            onRejectReasonChange={setRejectReason}
+            onReject={handleReject}
+            rejectState={rejectState}
+            onRejectCancel={() => setRejectOpen(false)}
+            sectionStyle={sectionStyle}
+          />
         )}
 
         {/* ===== SECTION E: CREATIVE OUTPUT ===== */}
@@ -2044,12 +1637,12 @@ export default function RunDetailPage({ params }: PageProps) {
               <SectionHeader
                 number="05"
                 title={`Creative Output${entries.length > 1 ? ` — ${entries.length} ideas` : ''}`}
-                icon={<ImageIcon size={16} style={{ color: '#0ea5e9' }} />}
+                icon={<ImageIcon size={16} style={{ color: '#4f46e5' }} />}
               />
 
               {entries.length === 0 ? (
-                <div className="rounded-lg p-5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-sm" style={{ color: '#94a3b8' }}>No creative packages available yet.</p>
+                <div className="rounded-lg p-5 text-center" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                  <p className="text-sm" style={{ color: '#9ca3af' }}>No creative packages available yet.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -2102,12 +1695,12 @@ export default function RunDetailPage({ params }: PageProps) {
               <SectionHeader
                 number="06"
                 title={`Campaign Review${campEntries.length > 1 ? ` — ${campEntries.length} campaigns` : ''}`}
-                icon={<Megaphone size={16} style={{ color: '#0ea5e9' }} />}
+                icon={<Megaphone size={16} style={{ color: '#4f46e5' }} />}
               />
 
               {campEntries.length === 0 ? (
-                <div className="rounded-lg p-5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-sm" style={{ color: '#94a3b8' }}>No campaigns linked to this run yet.</p>
+                <div className="rounded-lg p-5 text-center" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                  <p className="text-sm" style={{ color: '#9ca3af' }}>No campaigns linked to this run yet.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -2118,15 +1711,15 @@ export default function RunDetailPage({ params }: PageProps) {
                       style={
                         entry.isWinner
                           ? { border: '2px solid #fbbf24', background: '#ffffff' }
-                          : { border: '1px solid #e2e8f0', background: '#ffffff' }
+                          : { border: '1px solid #e5e7eb', background: '#ffffff' }
                       }
                     >
                       {/* Campaign header */}
                       <div
                         className="px-5 py-3 flex items-center gap-3 flex-wrap"
                         style={{
-                          background: entry.isWinner ? '#fffbeb' : '#f8fafc',
-                          borderBottom: `1px solid ${entry.isWinner ? '#fde68a' : '#e2e8f0'}`,
+                          background: entry.isWinner ? '#fffbeb' : '#f3f4f6',
+                          borderBottom: `1px solid ${entry.isWinner ? '#fde68a' : '#e5e7eb'}`,
                         }}
                       >
                         {entry.isWinner ? (
@@ -2138,7 +1731,7 @@ export default function RunDetailPage({ params }: PageProps) {
                             <CheckCircle2 size={9} /> Produced
                           </span>
                         )}
-                        <h3 className="text-sm font-semibold flex-1 truncate" style={{ color: '#0f172a' }}>
+                        <h3 className="text-sm font-semibold flex-1 truncate" style={{ color: '#111827' }}>
                           {entry.topic}
                         </h3>
                         <StatusBadge status={entry.camp.status} />
@@ -2148,13 +1741,13 @@ export default function RunDetailPage({ params }: PageProps) {
                       <div className="px-5 flex flex-col">
                         {/* Always-visible: status / budget / objective */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 py-4">
-                          <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                            <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Status</p>
+                          <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Status</p>
                             <StatusBadge status={entry.camp.status} />
                           </div>
-                          <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                            <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Budget</p>
-                            <p className="text-sm font-semibold" style={{ color: '#0f172a' }}>
+                          <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Budget</p>
+                            <p className="text-sm font-semibold" style={{ color: '#111827' }}>
                               {entry.camp.budget ? formatCurrency(entry.camp.budget) : '—'}
                             </p>
                             {entry.camp.reviewAdjustments?.budgetAdjusted && (
@@ -2163,9 +1756,9 @@ export default function RunDetailPage({ params }: PageProps) {
                               </p>
                             )}
                           </div>
-                          <div className="rounded-lg p-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                            <p className="text-xs mb-1" style={{ color: '#94a3b8' }}>Objective</p>
-                            <p className="text-sm" style={{ color: '#475569' }}>{entry.camp.objective || '—'}</p>
+                          <div className="rounded-lg p-3" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                            <p className="text-xs mb-1" style={{ color: '#9ca3af' }}>Objective</p>
+                            <p className="text-sm" style={{ color: '#4b5563' }}>{entry.camp.objective || '—'}</p>
                           </div>
                         </div>
 
@@ -2174,30 +1767,30 @@ export default function RunDetailPage({ params }: PageProps) {
                           <AccordionSection
                             title="Ad Set Configuration"
                             badge={
-                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                                 {entry.camp.campaignConfig.adSets.length} set{entry.camp.campaignConfig.adSets.length !== 1 ? 's' : ''}
                               </span>
                             }
                           >
-                            <div className="rounded-lg overflow-x-auto" style={{ border: '1px solid #e2e8f0' }}>
+                            <div className="rounded-lg overflow-x-auto" style={{ border: '1px solid #e5e7eb' }}>
                               <table className="w-full">
                                 <thead>
-                                  <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                                  <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#f3f4f6' }}>
                                     {['Name','Audience','Budget %','Meta Audience ID','Age','Geo','Optimization'].map((h) => (
-                                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>{h}</th>
+                                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>{h}</th>
                                     ))}
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {entry.camp.campaignConfig.adSets.map((adSet, idx) => (
-                                    <tr key={idx} className="transition-colors hover:bg-slate-50" style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                      <td className="px-4 py-3 text-sm" style={{ color: '#0f172a' }}>{adSet.name}</td>
-                                      <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{adSet.audienceType}</td>
-                                      <td className="px-4 py-3 text-sm" style={{ color: '#475569' }}>{adSet.budgetPercent}%</td>
-                                      <td className="px-4 py-3 text-xs font-mono" style={{ color: '#94a3b8' }}>{adSet.metaAudienceId || '—'}</td>
-                                      <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{adSet.ageMin || adSet.ageMax ? `${adSet.ageMin ?? '?'}–${adSet.ageMax ?? '?'}` : '—'}</td>
-                                      <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{adSet.geoLocations?.join(', ') || '—'}</td>
-                                      <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{adSet.optimizationGoal || '—'}</td>
+                                    <tr key={idx} className="transition-colors hover:bg-slate-50" style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                      <td className="px-4 py-3 text-sm" style={{ color: '#111827' }}>{adSet.name}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#4b5563' }}>{adSet.audienceType}</td>
+                                      <td className="px-4 py-3 text-sm" style={{ color: '#4b5563' }}>{adSet.budgetPercent}%</td>
+                                      <td className="px-4 py-3 text-xs font-mono" style={{ color: '#9ca3af' }}>{adSet.metaAudienceId || '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#4b5563' }}>{adSet.ageMin || adSet.ageMax ? `${adSet.ageMin ?? '?'}–${adSet.ageMax ?? '?'}` : '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#4b5563' }}>{adSet.geoLocations?.join(', ') || '—'}</td>
+                                      <td className="px-4 py-3 text-xs" style={{ color: '#4b5563' }}>{adSet.optimizationGoal || '—'}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2212,14 +1805,14 @@ export default function RunDetailPage({ params }: PageProps) {
                             <div className="flex flex-col gap-3">
                               {entry.camp.campaignConfig?.scaleRules && (
                                 <div>
-                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#94a3b8' }}>Scale Rules</p>
-                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569' }}>{entry.camp.campaignConfig.scaleRules}</pre>
+                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>Scale Rules</p>
+                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}>{entry.camp.campaignConfig.scaleRules}</pre>
                                 </div>
                               )}
                               {entry.camp.campaignConfig?.pauseRules && (
                                 <div>
-                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#94a3b8' }}>Pause Rules</p>
-                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569' }}>{entry.camp.campaignConfig.pauseRules}</pre>
+                                  <p className="text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>Pause Rules</p>
+                                  <pre className="text-xs rounded-lg p-3 whitespace-pre-wrap leading-relaxed" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}>{entry.camp.campaignConfig.pauseRules}</pre>
                                 </div>
                               )}
                             </div>
@@ -2231,7 +1824,7 @@ export default function RunDetailPage({ params }: PageProps) {
                           <AccordionSection
                             title="Review Debate"
                             badge={
-                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                                 {entry.camp.reviewDebateLog.length} rounds
                               </span>
                             }
@@ -2246,7 +1839,7 @@ export default function RunDetailPage({ params }: PageProps) {
                             <Link
                               href={`/dashboard/${tenantId}/campaigns/${entry.camp._id}`}
                               className="inline-flex items-center gap-2 text-sm font-medium transition-colors"
-                              style={{ color: '#0ea5e9' }}
+                              style={{ color: '#4f46e5' }}
                             >
                               View full campaign details <ArrowRight size={14} />
                             </Link>
@@ -2254,10 +1847,10 @@ export default function RunDetailPage({ params }: PageProps) {
                         )}
 
                         {entry.isWinner && entry.camp.status === 'pending_approval' && (
-                          <div className="rounded-xl p-5 flex flex-col gap-4 my-3" style={{ background: '#f8fafc', border: '2px solid #e2e8f0' }}>
+                          <div className="rounded-xl p-5 flex flex-col gap-4 my-3" style={{ background: '#f3f4f6', border: '2px solid #e5e7eb' }}>
                             <div className="text-center">
-                              <p className="text-sm font-semibold" style={{ color: '#0f172a' }}>This campaign is awaiting your approval</p>
-                              <p className="text-xs mt-1" style={{ color: '#64748b' }}>Review the details above before approving or rejecting</p>
+                              <p className="text-sm font-semibold" style={{ color: '#111827' }}>This campaign is awaiting your approval</p>
+                              <p className="text-xs mt-1" style={{ color: '#4b5563' }}>Review the details above before approving or rejecting</p>
                             </div>
                             <div className="flex flex-col gap-3">
                               <button
@@ -2291,7 +1884,7 @@ export default function RunDetailPage({ params }: PageProps) {
                                   placeholder="Describe why this campaign is being rejected…"
                                   rows={3}
                                   className="w-full rounded-lg px-3 py-2 text-sm resize-none"
-                                  style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#0f172a', outline: 'none' }}
+                                  style={{ background: '#ffffff', border: '1px solid #fecaca', color: '#111827', outline: 'none' }}
                                 />
                                 <div className="flex items-center gap-2">
                                   <button
@@ -2302,7 +1895,7 @@ export default function RunDetailPage({ params }: PageProps) {
                                   >
                                     {rejectState === 'loading' ? 'Rejecting…' : 'Confirm Reject'}
                                   </button>
-                                  <button onClick={() => setRejectOpen(false)} className="text-xs transition-colors" style={{ color: '#94a3b8' }}>
+                                  <button onClick={() => setRejectOpen(false)} className="text-xs transition-colors" style={{ color: '#9ca3af' }}>
                                     Cancel
                                   </button>
                                 </div>

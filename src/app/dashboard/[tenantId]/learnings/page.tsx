@@ -31,8 +31,8 @@ function TagList({
     green:  { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
     red:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
     amber:  { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },
-    blue:   { background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' },
-    zinc:   { background: '#f4f4f5', border: '1px solid #e8e8ec', color: '#52525b' },
+    blue:   { background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#1d4ed8' },
+    zinc:   { background: '#f8f9fb', border: '1px solid #e5e7eb', color: '#52525b' },
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -51,7 +51,7 @@ function InsightList({ items, bullet }: { items: string[] | string; bullet?: str
     <ul className="flex flex-col gap-1.5">
       {list.map((item, i) => (
         <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
-          <span className="mt-0.5 shrink-0" style={{ color: '#0284c7' }}>
+          <span className="mt-0.5 shrink-0" style={{ color: '#4338ca' }}>
             {bullet ?? '•'}
           </span>
           {item}
@@ -69,8 +69,8 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       className="rounded-xl overflow-hidden transition-all"
       style={{
         background: '#ffffff',
-        border: '1px solid #e8e8ec',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        border: '1px solid #e5e7eb',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
       }}
     >
       <button
@@ -109,7 +109,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f0f0f2' }}>
+        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f3f4f6' }}>
           {study.context && (
             <p className="text-sm leading-relaxed mt-4" style={{ color: '#71717a' }}>
               {study.context}
@@ -142,7 +142,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               )}
               <div className="flex gap-3 flex-wrap mt-1">
                 {study.whatWorked.bestCPA !== undefined && (
-                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e8e8ec' }}>
+                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e5e7eb' }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best CPA</p>
                     <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
                       {formatCurrency(study.whatWorked.bestCPA)}
@@ -150,7 +150,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
                   </div>
                 )}
                 {study.whatWorked.bestROAS !== undefined && (
-                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e8e8ec' }}>
+                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e5e7eb' }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best ROAS</p>
                     <p className="text-xs font-semibold" style={{ color: '#15803d' }}>
                       {Number(study.whatWorked.bestROAS).toFixed(2)}x
@@ -191,9 +191,9 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             )}
 
           {study.lesson && (
-            <div className="rounded-xl p-3" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-              <p className="text-xs font-semibold mb-1" style={{ color: '#0284c7' }}>💡 Lesson</p>
-              <p className="text-sm leading-relaxed" style={{ color: '#0369a1' }}>{study.lesson}</p>
+            <div className="rounded-xl p-3" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: '#4338ca' }}>💡 Lesson</p>
+              <p className="text-sm leading-relaxed" style={{ color: '#4338ca' }}>{study.lesson}</p>
             </div>
           )}
         </div>
@@ -300,9 +300,9 @@ export default function LearningsPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f4f4f5' }}>
+      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f8f9fb' }}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: '#0284c7' }} />
+          <Loader2 size={28} className="animate-spin" style={{ color: '#4338ca' }} />
           <p className="text-sm" style={{ color: '#71717a' }}>Loading learnings...</p>
         </div>
       </div>
@@ -323,8 +323,8 @@ export default function LearningsPage({ params }: PageProps) {
 
   const cardStyle: React.CSSProperties = {
     background: '#ffffff',
-    border: '1px solid #e8e8ec',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    border: '1px solid #e5e7eb',
+    boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
   }
 
   const hasPatternData =
@@ -366,12 +366,12 @@ export default function LearningsPage({ params }: PageProps) {
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all"
             style={
               importPhase === 'importing'
-                ? { background: '#f4f4f5', color: '#a1a1aa', cursor: 'not-allowed' }
+                ? { background: '#f8f9fb', color: '#a1a1aa', cursor: 'not-allowed' }
                 : importPhase === 'completed'
                 ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
                 : importPhase === 'failed'
                 ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }
-                : { background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: '#ffffff', boxShadow: '0 2px 6px rgba(2,132,199,0.35)' }
+                : { background: 'linear-gradient(135deg, #4338ca 0%, #4338ca 100%)', color: '#ffffff', boxShadow: '0 2px 6px rgba(2,132,199,0.35)' }
             }
           >
             {importPhase === 'importing' ? (
@@ -399,7 +399,7 @@ export default function LearningsPage({ params }: PageProps) {
             <div className="flex items-center justify-between text-xs">
               <span
                 className="font-medium capitalize"
-                style={{ color: importProgress.status === 'completed' ? '#15803d' : '#0284c7' }}
+                style={{ color: importProgress.status === 'completed' ? '#15803d' : '#4338ca' }}
               >
                 {importProgress.status === 'completed' ? '✓ Completed' :
                  importProgress.status === 'failed' ? '✗ Failed' :
@@ -411,12 +411,12 @@ export default function LearningsPage({ params }: PageProps) {
                 {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} case studies`}
               </span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e8e8ec' }}>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${importProgress.progress}%`,
-                  background: importProgress.status === 'completed' ? '#15803d' : '#0284c7',
+                  background: importProgress.status === 'completed' ? '#15803d' : '#4338ca',
                 }}
               />
             </div>
@@ -511,7 +511,7 @@ export default function LearningsPage({ params }: PageProps) {
               <div className="rounded-xl p-5" style={cardStyle}>
                 <h3
                   className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#0284c7' }}
+                  style={{ color: '#4338ca' }}
                 >
                   Audience Scores
                 </h3>
@@ -522,7 +522,7 @@ export default function LearningsPage({ params }: PageProps) {
                       <div key={type} className="flex items-center justify-between gap-3">
                         <span className="text-sm capitalize" style={{ color: '#52525b' }}>{type}</span>
                         <div className="flex items-center gap-2 flex-1 max-w-[140px]">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e8e8ec' }}>
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
                             <div
                               className="h-full rounded-full"
                               style={{
@@ -581,7 +581,7 @@ export default function LearningsPage({ params }: PageProps) {
             {caseStudies.length > 0 && (
               <span
                 className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-                style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e8e8ec' }}
+                style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
               >
                 {caseStudies.length}
               </span>
@@ -595,7 +595,7 @@ export default function LearningsPage({ params }: PageProps) {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by campaign or product…"
               className="rounded-lg pl-8 pr-4 py-1.5 text-xs w-64"
-              style={{ background: '#f6f6f7', border: '1px solid #e8e8ec', color: '#18181b' }}
+              style={{ background: '#f6f6f7', border: '1px solid #e5e7eb', color: '#18181b' }}
             />
           </div>
         </div>
@@ -603,7 +603,7 @@ export default function LearningsPage({ params }: PageProps) {
         {filteredStudies.length === 0 ? (
           <div
             className="rounded-xl py-12 text-center"
-            style={{ background: '#ffffff', border: '1px solid #e8e8ec' }}
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
           >
             <BookOpen size={28} className="mx-auto mb-3" style={{ color: '#d4d4d8' }} />
             <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>

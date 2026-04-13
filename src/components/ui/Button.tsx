@@ -6,8 +6,8 @@ type Variant = 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'gho
 type Size = 'sm' | 'md'
 
 const variantStyles: Record<Variant, React.CSSProperties> = {
-  primary:   { background: '#0284c7', color: '#ffffff', boxShadow: '0 1px 3px rgba(2,132,199,0.25)' },
-  secondary: { background: '#ffffff', border: '1px solid #e4e4e7', color: '#52525b' },
+  primary:   { background: '#4338ca', color: '#ffffff', boxShadow: '0 1px 3px rgba(2,132,199,0.25)' },
+  secondary: { background: '#ffffff', border: '1px solid #e5e7eb', color: '#52525b' },
   success:   { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
   danger:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
   warning:   { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },

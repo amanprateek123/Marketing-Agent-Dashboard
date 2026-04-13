@@ -9,7 +9,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
   const { tenantId } = await params
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#f0f2f5' }}>
+    <div className="flex min-h-screen" style={{ background: '#f8f9fb' }}>
       <Sidebar tenantId={tenantId} />
       <main className="flex-1 overflow-auto min-w-0">
         {children}

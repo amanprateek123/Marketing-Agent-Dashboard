@@ -64,7 +64,7 @@ function AdRow({ ad }: { ad: CampaignAd }) {
   const isFatigued = ctr != null && ad.ctrBaseline != null && ctr < ad.ctrBaseline * 0.65
 
   return (
-    <tr className="transition-colors hover:bg-zinc-50" style={{ borderBottom: '1px solid #f4f4f5' }}>
+    <tr className="transition-colors hover:bg-zinc-50" style={{ borderBottom: '1px solid #f3f4f6' }}>
       <td className="px-4 py-2.5">
         <div>
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -77,12 +77,12 @@ function AdRow({ ad }: { ad: CampaignAd }) {
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {ad.hookStyle && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#71717a' }}>
                 {ad.hookStyle}
               </span>
             )}
             {ad.format && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#e0e7ff', color: '#1d4ed8' }}>
                 {ad.format}
               </span>
             )}
@@ -137,7 +137,7 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
     <>
       <tr
         className="transition-colors hover:bg-zinc-50 cursor-pointer"
-        style={{ borderBottom: '1px solid #f4f4f5' }}
+        style={{ borderBottom: '1px solid #f3f4f6' }}
         onClick={() => setExpanded(!expanded)}
       >
         <td className="px-5 py-3.5">
@@ -145,7 +145,7 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
             <ChevronRight
               size={13}
               className={cn('transition-transform', expanded && 'rotate-90')}
-              style={{ color: ads.length > 0 ? '#0284c7' : '#d4d4d8' }}
+              style={{ color: ads.length > 0 ? '#4338ca' : '#d4d4d8' }}
             />
             <div>
               <p className="text-sm font-medium truncate" style={{ color: '#18181b', maxWidth: 200 }}>
@@ -198,10 +198,10 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
       {expanded && ads.length > 0 && (
         <tr style={{ background: '#f9fafb' }}>
           <td colSpan={10} className="px-8 py-3">
-            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #e4e4e7' }}>
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
               <table className="w-full">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
+                  <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
                     {['Ad / Hook / Format', 'Status', 'Spend', 'CTR', 'CPC', 'Impr.'].map((h, i) => (
                       <th
                         key={h}
@@ -282,7 +282,7 @@ function PendingActionCard({
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-3"
-      style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
+      style={{ background: '#fafafa', border: '1px solid #e5e7eb' }}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -314,7 +314,7 @@ function PendingActionCard({
             <div
               key={key}
               className="rounded-lg px-2.5 py-1.5"
-              style={{ background: '#f4f4f5', border: '1px solid #e4e4e7' }}
+              style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}
             >
               <p className="text-xs" style={{ color: '#a1a1aa' }}>{key}</p>
               <p className="text-xs font-semibold" style={{ color: '#52525b' }}>
@@ -366,7 +366,7 @@ function PendingActionCard({
           onClick={handleOverride}
           disabled={overrideState !== 'idle'}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          style={{ background: '#f4f4f5', border: '1px solid #e4e4e7', color: '#71717a' }}
+          style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#71717a' }}
         >
           {overrideState === 'loading' ? <Loader2 size={11} className="animate-spin" /> : null}
           {overrideState === 'loading'
@@ -588,9 +588,9 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f4f4f5' }}>
+      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f3f4f6' }}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: '#0284c7' }} />
+          <Loader2 size={28} className="animate-spin" style={{ color: '#4338ca' }} />
           <p className="text-sm" style={{ color: '#71717a' }}>Loading campaign...</p>
         </div>
       </div>
@@ -633,7 +633,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
   const sectionStyle = {
     background: '#ffffff',
-    border: '1px solid #e4e4e7',
+    border: '1px solid #e5e7eb',
     boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
   }
 
@@ -671,9 +671,9 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <div className="flex items-center gap-3 mb-2 flex-wrap">
               <div
                 className="p-2 rounded-xl"
-                style={{ background: '#e0f2fe', border: '1px solid #bae6fd' }}
+                style={{ background: '#e0e7ff', border: '1px solid #c7d2fe' }}
               >
-                <Megaphone size={16} style={{ color: '#0284c7' }} />
+                <Megaphone size={16} style={{ color: '#4338ca' }} />
               </div>
               <div>
                 <h1 className="text-xl font-bold leading-tight" style={{ color: '#18181b' }}>
@@ -687,14 +687,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   {campaign.source === 'agent' ? (
                     <span
                       className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                      style={{ background: '#e0e7ff', color: '#1d4ed8', border: '1px solid #c7d2fe' }}
                     >
                       <Bot size={10} /> Agent Launched
                     </span>
                   ) : campaign.source === 'manual' ? (
                     <span
                       className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                      style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                     >
                       <User size={10} /> Manual
                     </span>
@@ -711,7 +711,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
               {campaign.objective && (
                 <span
                   className="text-xs px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                  style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                 >
                   {campaign.objective}
                 </span>
@@ -756,7 +756,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <Link
                   href={`/dashboard/${tenantId}/runs/${campaign.runId}`}
                   className="font-medium transition-colors hover:text-sky-500"
-                  style={{ color: '#0284c7' }}
+                  style={{ color: '#4338ca' }}
                 >
                   View Run →
                 </Link>
@@ -789,7 +789,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <button
                 onClick={handleResume}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                style={{ background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8' }}
+                style={{ background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#1d4ed8' }}
               >
                 <Play size={14} fill="currentColor" /> Resume
               </button>
@@ -800,7 +800,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
         {/* Budget + spend summary */}
         {campaign.budget && campaign.budget > 0 && (
-          <div className="mt-5 rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+          <div className="mt-5 rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4" style={{ background: '#fafafa', border: '1px solid #e5e7eb' }}>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide mb-1" style={{ color: '#a1a1aa' }}>Daily Budget</p>
               <p className="text-sm font-semibold tabular-nums" style={{ color: '#18181b' }}>{formatCurrency(campaign.budget)}</p>
@@ -837,13 +837,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
               icon: Eye,
               label: 'Impressions',
               value: campaign.impressions ? campaign.impressions.toLocaleString() : '—',
-              iconColor: '#52525b', iconBg: '#f4f4f5',
+              iconColor: '#52525b', iconBg: '#f3f4f6',
             },
             {
               icon: MousePointerClick,
               label: 'Clicks',
               value: campaign.clicks ? campaign.clicks.toLocaleString() : '—',
-              iconColor: '#1d4ed8', iconBg: '#dbeafe',
+              iconColor: '#1d4ed8', iconBg: '#e0e7ff',
             },
             {
               icon: BarChart3,
@@ -855,7 +855,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
               icon: DollarSign,
               label: 'CPC',
               value: campaign.cpc ? formatCurrency(campaign.cpc) : '—',
-              iconColor: '#52525b', iconBg: '#f4f4f5',
+              iconColor: '#52525b', iconBg: '#f3f4f6',
             },
             {
               icon: TrendingUp,
@@ -874,7 +874,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <div
               key={item.label}
               className="rounded-xl p-3 flex flex-col gap-2"
-              style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}
+              style={{ background: '#fafafa', border: '1px solid #e5e7eb' }}
             >
               <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: item.iconBg }}>
                 <item.icon size={13} style={{ color: item.iconColor }} />
@@ -942,11 +942,11 @@ export default function CampaignDetailPage({ params }: PageProps) {
       {reviewDebateLog.length > 0 && (
         <div className="rounded-xl p-5 mb-5" style={sectionStyle}>
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+            <div className="flex-1 h-px" style={{ background: '#e5e7eb' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wider px-2" style={{ color: '#a1a1aa' }}>
               Review Debate
             </h2>
-            <div className="flex-1 h-px" style={{ background: '#e4e4e7' }} />
+            <div className="flex-1 h-px" style={{ background: '#e5e7eb' }} />
           </div>
           <DebateLog rounds={reviewDebateLog} />
         </div>
@@ -954,8 +954,8 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
       {/* ===== CREATIVE PACKAGE (all statuses) ===== */}
       {campaign.creativePackageId && campaign.status !== 'pending_approval' && (
-        <div className="rounded-xl mb-5 overflow-hidden" style={{ border: '1px solid #e4e4e7', background: '#fff' }}>
-          <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #f4f4f5', background: '#fafafa' }}>
+        <div className="rounded-xl mb-5 overflow-hidden" style={{ border: '1px solid #e5e7eb', background: '#fff' }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
             <ImageIcon size={13} style={{ color: '#52525b' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#52525b' }}>Creative Package</h2>
           </div>
@@ -968,7 +968,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   onClick={retryImage}
                   disabled={imageRetryState !== 'idle'}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                  style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                  style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                 >
                   <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
                   {imageRetryState === 'idle' ? 'Retry' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
@@ -977,41 +977,41 @@ export default function CampaignDetailPage({ params }: PageProps) {
               {creativeLoading ? (
                 <div className="flex items-center gap-2 text-xs" style={{ color: '#a1a1aa' }}><Loader2 size={12} className="animate-spin" /> Loading…</div>
               ) : creativePackage?.imageUrl ? (
-                <img src={creativePackage.imageUrl} alt="Campaign creative" className="rounded-xl object-cover" style={{ maxHeight: 280, maxWidth: '100%', border: '1px solid #e4e4e7' }} />
+                <img src={creativePackage.imageUrl} alt="Campaign creative" className="rounded-xl object-cover" style={{ maxHeight: 280, maxWidth: '100%', border: '1px solid #e5e7eb' }} />
               ) : (
-                <div className="rounded-xl flex items-center justify-center" style={{ height: 100, background: '#f4f4f5', border: '1px dashed #d4d4d8' }}>
+                <div className="rounded-xl flex items-center justify-center" style={{ height: 100, background: '#f3f4f6', border: '1px dashed #d4d4d8' }}>
                   <p className="text-xs" style={{ color: '#a1a1aa' }}>{imageRetryState === 'polling' ? 'Generating image…' : 'No image yet'}</p>
                 </div>
               )}
               {creativePackage?.imagePrompt && (
                 <details className="mt-2">
                   <summary className="text-xs cursor-pointer" style={{ color: '#71717a' }}>View prompt</summary>
-                  <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b' }}>{creativePackage.imagePrompt}</p>
+                  <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f3f4f6', color: '#52525b' }}>{creativePackage.imagePrompt}</p>
                 </details>
               )}
             </div>
 
             {/* Video */}
             {(creativePackage?.videoPrompt || creativePackage?.videoUrl) && (
-              <div style={{ borderTop: '1px solid #f4f4f5', paddingTop: 16 }}>
+              <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#71717a' }}>Video</p>
                   <button
                     onClick={retryVideo}
                     disabled={videoRetryState !== 'idle'}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                    style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                    style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                   >
                     <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
                     {videoRetryState === 'idle' ? 'Retry' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
                   </button>
                 </div>
                 {creativePackage?.videoUrl ? (
-                  <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e4e4e7' }}>
+                  <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e5e7eb' }}>
                     <source src={creativePackage.videoUrl} />
                   </video>
                 ) : (
-                  <p className="text-xs font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}>
+                  <p className="text-xs font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}>
                     {videoRetryState === 'polling' ? 'Generating video…' : creativePackage?.videoPrompt}
                   </p>
                 )}
@@ -1052,7 +1052,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       className="rounded-xl p-4 flex flex-col gap-2"
                       style={{
                         background: i === (creativePackage.selectedCopyIndex ?? -1) ? '#fff' : '#f9fafb',
-                        border: i === (creativePackage.selectedCopyIndex ?? -1) ? '2px solid #15803d' : '1px solid #e4e4e7',
+                        border: i === (creativePackage.selectedCopyIndex ?? -1) ? '2px solid #15803d' : '1px solid #e5e7eb',
                       }}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1062,7 +1062,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                           </span>
                         )}
                         {v.hookStyle && (
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f4f4f5', color: '#71717a', border: '1px solid #e4e4e7' }}>
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f3f4f6', color: '#71717a', border: '1px solid #e5e7eb' }}>
                             {v.hookStyle}
                           </span>
                         )}
@@ -1072,7 +1072,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       )}
                       <p className="text-xs leading-relaxed" style={{ color: '#52525b' }}>{v.primaryText}</p>
                       {v.cta && (
-                        <span className="self-start text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                        <span className="self-start text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: '#e0e7ff', color: '#1d4ed8' }}>
                           CTA: {v.cta}
                         </span>
                       )}
@@ -1100,7 +1100,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     onClick={retryImage}
                     disabled={imageRetryState !== 'idle'}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                    style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                    style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                   >
                     <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
                     {imageRetryState === 'idle' ? 'Retry' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
@@ -1112,10 +1112,10 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   src={creativePackage.imageUrl}
                   alt="Campaign creative"
                   className="rounded-xl object-cover"
-                  style={{ maxHeight: 280, maxWidth: '100%', border: '1px solid #e4e4e7' }}
+                  style={{ maxHeight: 280, maxWidth: '100%', border: '1px solid #e5e7eb' }}
                 />
               ) : (
-                <div className="rounded-xl flex items-center justify-center" style={{ height: 120, background: '#f4f4f5', border: '1px dashed #d4d4d8' }}>
+                <div className="rounded-xl flex items-center justify-center" style={{ height: 120, background: '#f3f4f6', border: '1px dashed #d4d4d8' }}>
                   <div className="text-center">
                     <ImageIcon size={24} style={{ color: '#d4d4d8', margin: '0 auto 6px' }} />
                     <p className="text-xs" style={{ color: '#a1a1aa' }}>
@@ -1127,7 +1127,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
               {creativePackage?.imagePrompt && (
                 <details className="mt-2">
                   <summary className="text-xs cursor-pointer" style={{ color: '#71717a' }}>View image prompt</summary>
-                  <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b' }}>
+                  <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f3f4f6', color: '#52525b' }}>
                     {creativePackage.imagePrompt}
                   </p>
                 </details>
@@ -1146,7 +1146,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       onClick={retryVideo}
                       disabled={videoRetryState !== 'idle'}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                      style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}
+                      style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
                     >
                       <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
                       {videoRetryState === 'idle' ? 'Retry' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
@@ -1154,18 +1154,18 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   )}
                 </div>
                 {creativePackage.videoUrl ? (
-                  <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e4e4e7' }}>
+                  <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e5e7eb' }}>
                     <source src={creativePackage.videoUrl} />
                   </video>
                 ) : (
-                  <p className="text-xs font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' }}>
+                  <p className="text-xs font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}>
                     {videoRetryState === 'polling' ? 'Generating video…' : creativePackage.videoPrompt}
                   </p>
                 )}
                 {creativePackage.videoPrompt && creativePackage.videoUrl && (
                   <details className="mt-2">
                     <summary className="text-xs cursor-pointer" style={{ color: '#71717a' }}>View video prompt</summary>
-                    <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f4f4f5', color: '#52525b' }}>{creativePackage.videoPrompt}</p>
+                    <p className="text-xs mt-1 font-mono leading-relaxed p-3 rounded-lg" style={{ background: '#f3f4f6', color: '#52525b' }}>{creativePackage.videoPrompt}</p>
                   </details>
                 )}
               </div>
@@ -1299,7 +1299,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
       {/* Ad Sets */}
       <div className="rounded-xl overflow-hidden mb-5" style={sectionStyle}>
-        <div className="px-5 py-3.5" style={{ borderBottom: '1px solid #f0f0f1' }}>
+        <div className="px-5 py-3.5" style={{ borderBottom: '1px solid #f3f4f6' }}>
           <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>
             {showPlanned ? 'Planned Ad Sets' : 'Ad Sets'}
           </h2>
@@ -1314,7 +1314,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
+                <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
                   {['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Optimization Goal'].map((h, i) => (
                     <th
                       key={h}
@@ -1328,12 +1328,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
               </thead>
               <tbody>
                 {plannedAdSets.map((adSet, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
+                  <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td className="px-5 py-3.5">
                       <p className="text-sm font-medium" style={{ color: '#18181b' }}>{adSet.name}</p>
                       <span
                         className="text-xs px-1.5 py-0.5 rounded mt-0.5 inline-block"
-                        style={{ background: '#dbeafe', color: '#1d4ed8' }}
+                        style={{ background: '#e0e7ff', color: '#1d4ed8' }}
                       >
                         {adSet.audienceType}
                       </span>
@@ -1342,7 +1342,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       {adSet.audienceType}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <span className="text-sm font-semibold" style={{ color: '#0284c7' }}>
+                      <span className="text-sm font-semibold" style={{ color: '#4338ca' }}>
                         {adSet.budgetPercent}%
                       </span>
                     </td>
@@ -1365,7 +1365,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #f0f0f1', background: '#fafafa' }}>
+                  <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
                     {['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => (
                       <th
                         key={h}
@@ -1395,7 +1395,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
         {/* Scale / Pause rules */}
         {(campaign.campaignConfig?.scaleRules || campaign.campaignConfig?.pauseRules) && (
-          <div className="px-5 py-4" style={{ borderTop: '1px solid #f0f0f1' }}>
+          <div className="px-5 py-4" style={{ borderTop: '1px solid #f3f4f6' }}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {campaign.campaignConfig.scaleRules && (
                 <div>
@@ -1417,14 +1417,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
       {/* ── Audit History ─────────────────────────────────────────── */}
       {(auditLoading || auditSnapshots.length > 0) && (
         <div className="rounded-xl overflow-hidden mb-5" style={sectionStyle}>
-          <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: '1px solid #f0f0f1' }}>
+          <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: '1px solid #f3f4f6' }}>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#f0f9ff' }}>
-                <Activity size={12} style={{ color: '#0284c7' }} />
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#eef2ff' }}>
+                <Activity size={12} style={{ color: '#4338ca' }} />
               </div>
               <h2 className="text-sm font-semibold" style={{ color: '#18181b' }}>Audit History</h2>
               {auditSnapshots.length > 0 && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                   {auditSnapshots.length} snapshots
                 </span>
               )}
@@ -1446,7 +1446,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   <div className="grid grid-cols-2 gap-4">
                     {[
                       { label: 'ROAS Trend', data: roasData,  color: '#16a34a', unit: 'x', icon: TrendingUp },
-                      { label: 'Spend Trend', data: spendData, color: '#0284c7', unit: '$', icon: DollarSign },
+                      { label: 'Spend Trend', data: spendData, color: '#4338ca', unit: '$', icon: DollarSign },
                     ].map(({ label, data, color, unit, icon: Icon }) => {
                       const latest = data[data.length - 1]
                       const prev   = data[data.length - 2] ?? latest
@@ -1456,7 +1456,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       const W = 160, H = 44
                       const pts = data.map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * H}`).join(' ')
                       return (
-                        <div key={label} className="rounded-xl p-4" style={{ background: '#fafafa', border: '1px solid #e4e4e7' }}>
+                        <div key={label} className="rounded-xl p-4" style={{ background: '#fafafa', border: '1px solid #e5e7eb' }}>
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-1.5">
                               <Icon size={12} style={{ color }} />
@@ -1509,13 +1509,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       <div
                         key={i}
                         className="flex items-start gap-3 py-3"
-                        style={{ borderBottom: i < Math.min(auditSnapshots.length, 15) - 1 ? '1px solid #f4f4f5' : 'none' }}
+                        style={{ borderBottom: i < Math.min(auditSnapshots.length, 15) - 1 ? '1px solid #f3f4f6' : 'none' }}
                       >
                         {/* Timeline dot */}
                         <div className="flex flex-col items-center shrink-0 mt-0.5">
                           <div className="w-2 h-2 rounded-full" style={{ background: verdictColor }} />
                           {i < Math.min(auditSnapshots.length, 15) - 1 && (
-                            <div className="w-px flex-1 mt-1" style={{ background: '#e4e4e7', minHeight: 16 }} />
+                            <div className="w-px flex-1 mt-1" style={{ background: '#e5e7eb', minHeight: 16 }} />
                           )}
                         </div>
 
@@ -1550,7 +1550,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                               {v.recommendedActions.map((a, j) => {
                                 const text = typeof a === 'string' ? a : (a.reason ?? a.targetName ?? a.type ?? '')
                                 return (
-                                  <span key={j} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f4f4f5', color: '#71717a' }}>
+                                  <span key={j} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#71717a' }}>
                                     {text}
                                   </span>
                                 )

@@ -26,9 +26,9 @@ export function CollapsibleSection({
     <Collapsible.Root open={open} onOpenChange={setOpen} className={className}>
       <Collapsible.Trigger
         className="flex w-full items-center justify-between py-2.5 px-4 rounded-lg transition-colors cursor-pointer group"
-        style={{ background: open ? '#f4f4f5' : '#fafafa' }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#f4f4f5' }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = open ? '#f4f4f5' : '#fafafa' }}
+        style={{ background: open ? '#f3f4f6' : '#fafafa' }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#f3f4f6' }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = open ? '#f3f4f6' : '#fafafa' }}
       >
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold" style={{ color: '#18181b' }}>
@@ -37,7 +37,7 @@ export function CollapsibleSection({
           {badge !== undefined && (
             <span
               className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{ background: '#dbeafe', color: '#1d4ed8' }}
+              style={{ background: '#e0e7ff', color: '#1d4ed8' }}
             >
               {badge}
             </span>

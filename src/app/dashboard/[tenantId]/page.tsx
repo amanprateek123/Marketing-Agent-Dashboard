@@ -93,33 +93,33 @@ export default function DashboardPage({ params }: PageProps) {
   const latestRun   = runs[0] ?? null
 
   return (
-    <div className="min-h-screen" style={{ background: '#f4f6f9' }}>
+    <div className="min-h-screen" style={{ background: '#f8f9fb' }}>
 
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
       <div
         className="sticky top-0 z-10 px-6 py-3.5 flex items-center justify-between gap-4 flex-wrap"
-        style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 0 rgba(15,23,42,0.04)' }}
+        style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb' }}
       >
         {/* Company identity */}
         <div className="flex items-center gap-3 min-w-0">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}
+            style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}
           >
-            <Building2 size={16} style={{ color: '#0ea5e9' }} />
+            <Building2 size={16} style={{ color: '#4f46e5' }} />
           </div>
           <div className="min-w-0">
-            <h1 className="text-[15px] font-bold leading-tight truncate" style={{ color: '#0f172a' }}>
+            <h1 className="text-[15px] font-bold leading-tight truncate" style={{ color: '#111827' }}>
               {company?.name || tenantId}
             </h1>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {company?.industry && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                   {company.industry}
                 </span>
               )}
               {company?.pipelineConfig?.campaignStrategy && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium capitalize" style={{ background: '#e0f2fe', color: '#0284c7' }}>
+                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium capitalize" style={{ background: '#e0e7ff', color: '#4338ca' }}>
                   {company.pipelineConfig.campaignStrategy}
                 </span>
               )}
@@ -146,7 +146,7 @@ export default function DashboardPage({ params }: PageProps) {
             <Link
               href={`/dashboard/${tenantId}/runs/${latestRun.runId}`}
               className="hidden md:inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:border-sky-300"
-              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569' }}
+              style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
             >
               <Activity size={11} />
               <span className="font-mono">{latestRun.runId.slice(0, 8)}</span>
@@ -162,8 +162,8 @@ export default function DashboardPage({ params }: PageProps) {
             style={
               triggerState === 'success' ? { background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac' }
               : triggerState === 'error'   ? { background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }
-              : triggerState === 'loading' ? { background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd' }
-              : { background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: '#ffffff', boxShadow: '0 2px 8px rgba(14,165,233,0.30)', border: '1px solid transparent' }
+              : triggerState === 'loading' ? { background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe' }
+              : { background: 'linear-gradient(135deg,#4f46e5,#4338ca)', color: '#ffffff', boxShadow: '0 2px 8px rgba(14,165,233,0.30)', border: '1px solid transparent' }
             }
           >
             {triggerState === 'loading' ? <Loader2 size={13} className="animate-spin" />
@@ -250,8 +250,8 @@ export default function DashboardPage({ params }: PageProps) {
             icon={Megaphone}
             value={campaigns.length}
             label="Total Campaigns"
-            iconColor="#475569"
-            iconBg="#f1f5f9"
+            iconColor="#4b5563"
+            iconBg="#f3f4f6"
           />
           <MetricCard
             icon={DollarSign}
@@ -273,9 +273,9 @@ export default function DashboardPage({ params }: PageProps) {
             icon={BarChart3}
             value={activeCampaigns}
             label="Active Campaigns"
-            iconColor="#0ea5e9"
-            iconBg="#e0f2fe"
-            accentColor="#0ea5e9"
+            iconColor="#4f46e5"
+            iconBg="#e0e7ff"
+            accentColor="#4f46e5"
           />
         </div>
 
@@ -285,17 +285,17 @@ export default function DashboardPage({ params }: PageProps) {
           {/* Recent Campaigns — wider */}
           <div
             className="xl:col-span-3 rounded-xl overflow-hidden"
-            style={{ background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
           >
             {/* Card header */}
-            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f1f5f9' }}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f3f4f6' }}>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#f0f9ff' }}>
-                  <Megaphone size={12} style={{ color: '#0ea5e9' }} />
+                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#eef2ff' }}>
+                  <Megaphone size={12} style={{ color: '#4f46e5' }} />
                 </div>
-                <h2 className="text-sm font-semibold" style={{ color: '#0f172a' }}>Recent Campaigns</h2>
+                <h2 className="text-sm font-semibold" style={{ color: '#111827' }}>Recent Campaigns</h2>
                 {recentCampaigns.length > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                     {recentCampaigns.length}
                   </span>
                 )}
@@ -303,7 +303,7 @@ export default function DashboardPage({ params }: PageProps) {
               <Link
                 href={`/dashboard/${tenantId}/campaigns`}
                 className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: '#0ea5e9' }}
+                style={{ color: '#4f46e5' }}
               >
                 View all <ChevronRight size={11} />
               </Link>
@@ -317,20 +317,20 @@ export default function DashboardPage({ params }: PageProps) {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                      <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8', width: '40%' }}>
+                    <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #f3f4f6' }}>
+                      <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af', width: '40%' }}>
                         Campaign
                       </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
                         Status
                       </th>
-                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
                         Budget
                       </th>
-                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
                         ROAS
                       </th>
-                      <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+                      <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
                         Launched
                       </th>
                     </tr>
@@ -340,20 +340,20 @@ export default function DashboardPage({ params }: PageProps) {
                       <tr
                         key={campaign._id || idx}
                         className="group transition-colors hover:bg-slate-50"
-                        style={{ borderBottom: idx < recentCampaigns.length - 1 ? '1px solid #f8fafc' : 'none' }}
+                        style={{ borderBottom: idx < recentCampaigns.length - 1 ? '1px solid #f3f4f6' : 'none' }}
                       >
                         {/* Name */}
                         <td className="px-5 py-3" style={{ maxWidth: 0 }}>
                           <Link
                             href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
                             className="block text-sm font-medium truncate hover:text-sky-600 transition-colors"
-                            style={{ color: '#0f172a' }}
+                            style={{ color: '#111827' }}
                             title={campaign.name || campaign.topic || 'Untitled'}
                           >
                             {campaign.name || campaign.topic || 'Untitled'}
                           </Link>
                           {campaign.name && campaign.topic && (
-                            <p className="text-[11px] truncate mt-0.5" style={{ color: '#94a3b8' }}>{campaign.topic}</p>
+                            <p className="text-[11px] truncate mt-0.5" style={{ color: '#9ca3af' }}>{campaign.topic}</p>
                           )}
                         </td>
 
@@ -363,8 +363,8 @@ export default function DashboardPage({ params }: PageProps) {
                         </td>
 
                         {/* Budget */}
-                        <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#475569' }}>
-                          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
+                          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#d1d5db' }}>—</span>}
                         </td>
 
                         {/* ROAS */}
@@ -375,11 +375,11 @@ export default function DashboardPage({ params }: PageProps) {
                             }}>
                               {campaign.roas.toFixed(2)}x
                             </span>
-                          ) : <span className="text-sm" style={{ color: '#cbd5e1' }}>—</span>}
+                          ) : <span className="text-sm" style={{ color: '#d1d5db' }}>—</span>}
                         </td>
 
                         {/* Launched */}
-                        <td className="px-5 py-3 text-right text-xs tabular-nums whitespace-nowrap" style={{ color: '#94a3b8' }}>
+                        <td className="px-5 py-3 text-right text-xs tabular-nums whitespace-nowrap" style={{ color: '#9ca3af' }}>
                           {formatDateTime(campaign.launchedAt)}
                         </td>
                       </tr>
@@ -393,17 +393,17 @@ export default function DashboardPage({ params }: PageProps) {
           {/* Pipeline Runs — narrower */}
           <div
             className="xl:col-span-2 rounded-xl overflow-hidden"
-            style={{ background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
           >
             {/* Card header */}
-            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f1f5f9' }}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f3f4f6' }}>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#f0fdf4' }}>
                   <Activity size={12} style={{ color: '#16a34a' }} />
                 </div>
-                <h2 className="text-sm font-semibold" style={{ color: '#0f172a' }}>Pipeline Runs</h2>
+                <h2 className="text-sm font-semibold" style={{ color: '#111827' }}>Pipeline Runs</h2>
                 {recentRuns.length > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
                     {recentRuns.length}
                   </span>
                 )}
@@ -411,7 +411,7 @@ export default function DashboardPage({ params }: PageProps) {
               <Link
                 href={`/dashboard/${tenantId}/runs`}
                 className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: '#0ea5e9' }}
+                style={{ color: '#4f46e5' }}
               >
                 View all <ChevronRight size={11} />
               </Link>
@@ -420,7 +420,7 @@ export default function DashboardPage({ params }: PageProps) {
             {recentRuns.length === 0 ? (
               <EmptyState icon={Activity} title="No runs yet" iconSize={24} />
             ) : (
-              <div className="divide-y" style={{ borderColor: '#f8fafc' }}>
+              <div className="divide-y" style={{ borderColor: '#f3f4f6' }}>
                 {recentRuns.map((run) => (
                   <Link
                     key={run.runId}
@@ -429,12 +429,12 @@ export default function DashboardPage({ params }: PageProps) {
                   >
                     {/* Run ID + time */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono font-semibold truncate" style={{ color: '#0284c7' }}>
+                      <p className="text-xs font-mono font-semibold truncate" style={{ color: '#4338ca' }}>
                         {run.runId.slice(0, 14)}…
                       </p>
                       <div className="flex items-center gap-1 mt-1">
-                        <Clock size={10} style={{ color: '#cbd5e1' }} />
-                        <p className="text-[11px] tabular-nums" style={{ color: '#94a3b8' }}>
+                        <Clock size={10} style={{ color: '#d1d5db' }} />
+                        <p className="text-[11px] tabular-nums" style={{ color: '#9ca3af' }}>
                           {formatDateTime(run.startedAt)}
                         </p>
                       </div>
@@ -446,7 +446,7 @@ export default function DashboardPage({ params }: PageProps) {
                       <ArrowRight
                         size={12}
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ color: '#94a3b8' }}
+                        style={{ color: '#9ca3af' }}
                       />
                     </div>
                   </Link>
@@ -456,8 +456,8 @@ export default function DashboardPage({ params }: PageProps) {
 
             {/* Footer hint */}
             {recentRuns.length > 0 && (
-              <div className="px-5 py-3" style={{ borderTop: '1px solid #f1f5f9' }}>
-                <p className="text-[11px]" style={{ color: '#cbd5e1' }}>Click any run to view full pipeline output</p>
+              <div className="px-5 py-3" style={{ borderTop: '1px solid #f3f4f6' }}>
+                <p className="text-[11px]" style={{ color: '#d1d5db' }}>Click any run to view full pipeline output</p>
               </div>
             )}
           </div>
@@ -467,47 +467,47 @@ export default function DashboardPage({ params }: PageProps) {
         {company && (
           <div
             className="rounded-xl px-5 py-4 flex items-center justify-between gap-6 flex-wrap"
-            style={{ background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
           >
             <div className="flex items-center gap-5 flex-wrap min-w-0">
               {company.tone && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>Tone</p>
-                  <p className="text-sm font-medium capitalize truncate" style={{ color: '#0f172a' }}>{company.tone}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Tone</p>
+                  <p className="text-sm font-medium capitalize truncate" style={{ color: '#111827' }}>{company.tone}</p>
                 </div>
               )}
               {company.targetAudience && (
                 <div className="min-w-0" style={{ maxWidth: 240 }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>Target Audience</p>
-                  <p className="text-sm font-medium truncate" style={{ color: '#0f172a' }} title={company.targetAudience}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Target Audience</p>
+                  <p className="text-sm font-medium truncate" style={{ color: '#111827' }} title={company.targetAudience}>
                     {company.targetAudience}
                   </p>
                 </div>
               )}
               {company.products && company.products.length > 0 && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>Products</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Products</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {company.products.slice(0, 3).map((p, i) => (
                       <span
                         key={i}
                         className="text-xs px-2 py-0.5 rounded-full font-medium truncate max-w-30"
-                        style={{ background: '#f1f5f9', color: '#475569' }}
+                        style={{ background: '#f3f4f6', color: '#4b5563' }}
                         title={p.name}
                       >
                         {p.name}
                       </span>
                     ))}
                     {company.products.length > 3 && (
-                      <span className="text-xs" style={{ color: '#94a3b8' }}>+{company.products.length - 3} more</span>
+                      <span className="text-xs" style={{ color: '#9ca3af' }}>+{company.products.length - 3} more</span>
                     )}
                   </div>
                 </div>
               )}
               {company.meta?.accountId && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>Meta Account</p>
-                  <code className="text-xs font-mono" style={{ color: '#64748b' }}>{company.meta.accountId}</code>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Meta Account</p>
+                  <code className="text-xs font-mono" style={{ color: '#4b5563' }}>{company.meta.accountId}</code>
                 </div>
               )}
             </div>
@@ -515,7 +515,7 @@ export default function DashboardPage({ params }: PageProps) {
             <Link
               href={`/dashboard/${tenantId}/settings`}
               className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 transition-opacity hover:opacity-70"
-              style={{ color: '#94a3b8' }}
+              style={{ color: '#9ca3af' }}
             >
               <Settings size={12} /> Edit profile
             </Link>
