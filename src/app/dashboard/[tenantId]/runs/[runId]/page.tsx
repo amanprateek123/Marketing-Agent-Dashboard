@@ -558,18 +558,96 @@ type CreativeEntryType = {
   variants: CopyVariant[]
   selectedIdx?: number
   campaignId?: string
+  creativePackageId?: string
 }
 
 function CreativeEntryCard({
   entry,
   tenantId,
   defaultOpen,
+  onRefresh,
 }: {
   entry: CreativeEntryType
   tenantId: string
   defaultOpen: boolean
+  onRefresh?: () => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [imageRegenState, setImageRegenState] = useState<'idle' | 'loading' | 'polling'>('idle')
+  const [videoRegenState, setVideoRegenState] = useState<'idle' | 'loading' | 'polling'>('idle')
+
+  async function pollUntilReady(field: 'imageUrl' | 'videoUrl', pkgId: string, setStateBack: () => void) {
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const pkg = await r.json()
+        if (pkg[field]) {
+          clearInterval(poll)
+          setStateBack()
+          onRefresh?.()
+        }
+      } catch { /* keep polling */ }
+    }, 4000)
+    // Stop after 3 minutes
+    setTimeout(() => { clearInterval(poll); setStateBack() }, 180000)
+  }
+
+  async function handleRegenImage() {
+    const pkgId = entry.creativePackageId
+    if (!pkgId) return
+    setImageRegenState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setImageRegenState('polling')
+      pollUntilReady('imageUrl', pkgId, () => setImageRegenState('idle'))
+    } catch {
+      setImageRegenState('idle')
+    }
+  }
+
+  async function handleRewriteImagePrompt() {
+    const pkgId = entry.creativePackageId
+    if (!pkgId) return
+    setImageRegenState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image-prompt`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setImageRegenState('polling')
+      pollUntilReady('imageUrl', pkgId, () => setImageRegenState('idle'))
+    } catch {
+      setImageRegenState('idle')
+    }
+  }
+
+  async function handleRegenVideo() {
+    const pkgId = entry.creativePackageId
+    if (!pkgId) return
+    setVideoRegenState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-video`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setVideoRegenState('polling')
+      pollUntilReady('videoUrl', pkgId, () => setVideoRegenState('idle'))
+    } catch {
+      setVideoRegenState('idle')
+    }
+  }
+
+  async function handleRewriteVideoPrompt() {
+    const pkgId = entry.creativePackageId
+    if (!pkgId) return
+    setVideoRegenState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-video-prompt`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setVideoRegenState('polling')
+      pollUntilReady('videoUrl', pkgId, () => setVideoRegenState('idle'))
+    } catch {
+      setVideoRegenState('idle')
+    }
+  }
 
   // Summary chips shown in collapsed header
   const chips: string[] = []
@@ -690,22 +768,48 @@ function CreativeEntryCard({
                 title="Image"
                 defaultOpen={!!entry.pkg.imageUrl}
                 badge={entry.pkg.imageUrl
-                  ? <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#f0fdf4', color: '#15803d' }}>Generated</span>
+                  ? <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#ecfdf5', color: '#059669' }}>Generated</span>
                   : undefined
                 }
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-xs" style={{ color: '#9ca3af' }}>Prompt</p>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(entry.pkg!.imagePrompt || '')}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs"
-                    style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
-                  >
-                    <Copy size={10} /> Copy
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(entry.pkg!.imagePrompt || '')}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs"
+                      style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
+                    >
+                      <Copy size={10} /> Copy
+                    </button>
+                    {entry.creativePackageId && (
+                      <>
+                        <button
+                          onClick={handleRegenImage}
+                          disabled={imageRegenState !== 'idle'}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
+                          style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
+                        >
+                          {imageRegenState === 'idle' ? (
+                            <><ImageIcon size={10} /> Re-roll</>
+                          ) : (
+                            <><Loader2 size={10} className="animate-spin" /> {imageRegenState === 'loading' ? 'Starting...' : 'Generating...'}</>
+                          )}
+                        </button>
+                        <button
+                          onClick={handleRewriteImagePrompt}
+                          disabled={imageRegenState !== 'idle'}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
+                          style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4f46e5' }}
+                        >
+                          <Sparkles size={10} /> Rewrite
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="rounded-lg p-3 mb-2" style={{ background: '#111827' }}>
-                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>{entry.pkg.imagePrompt}</p>
+                <div className="rounded-lg p-3 mb-2" style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#6b7280' }}>{entry.pkg.imagePrompt}</p>
                 </div>
                 {entry.pkg.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -727,12 +831,38 @@ function CreativeEntryCard({
                   </video>
                 ) : null}
                 {entry.pkg.videoPrompt && (
-                  <div className="rounded-lg p-3" style={{ background: '#111827' }}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Video size={11} style={{ color: '#4b5563' }} />
-                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#4b5563' }}>Script</span>
+                  <div className="rounded-lg p-3" style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <Video size={11} style={{ color: '#6b7280' }} />
+                        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7280' }}>Script</span>
+                      </div>
+                      {entry.creativePackageId && (
+                        <>
+                          <button
+                            onClick={handleRegenVideo}
+                            disabled={videoRegenState !== 'idle'}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
+                            style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
+                          >
+                            {videoRegenState === 'idle' ? (
+                              <><Video size={10} /> Re-roll</>
+                            ) : (
+                              <><Loader2 size={10} className="animate-spin" /> {videoRegenState === 'loading' ? 'Starting...' : 'Generating...'}</>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleRewriteVideoPrompt}
+                            disabled={videoRegenState !== 'idle'}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
+                            style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4f46e5' }}
+                          >
+                            <Sparkles size={10} /> Rewrite
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>{entry.pkg.videoPrompt}</p>
+                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#6b7280' }}>{entry.pkg.videoPrompt}</p>
                   </div>
                 )}
               </AccordionSection>
@@ -1613,6 +1743,7 @@ export default function RunDetailPage({ params }: PageProps) {
               pkg: creativePackage,
               variants: copyVariants,
               selectedIdx: selectedCopyIndex,
+              creativePackageId: campaign?.creativePackageId,
             })
           }
 
@@ -1629,6 +1760,7 @@ export default function RunDetailPage({ params }: PageProps) {
               variants: pkg?.copyVariants ?? [],
               selectedIdx: pkg?.selectedCopyIndex,
               campaignId: pkg ? undefined : sibCamp._id,
+              creativePackageId: sibCamp.creativePackageId,
             })
           }
 
@@ -1652,6 +1784,7 @@ export default function RunDetailPage({ params }: PageProps) {
                       entry={entry}
                       tenantId={tenantId}
                       defaultOpen={entry.isWinner}
+                      onRefresh={fetchFull}
                     />
                   ))}
                 </div>

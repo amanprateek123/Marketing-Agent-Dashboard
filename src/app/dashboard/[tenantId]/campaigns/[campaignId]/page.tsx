@@ -29,6 +29,7 @@ import {
   Clock,
   Activity,
   FlameKindling,
+  Sparkles,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
@@ -400,7 +401,9 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [creativeLoading, setCreativeLoading] = useState(false)
   const [videoExpanded, setVideoExpanded] = useState(false)
   const [imageRetryState, setImageRetryState] = useState<'idle' | 'loading' | 'polling'>('idle')
+  const [imageRewriteState, setImageRewriteState] = useState<'idle' | 'loading' | 'polling'>('idle')
   const [videoRetryState, setVideoRetryState] = useState<'idle' | 'loading' | 'polling'>('idle')
+  const [videoRewriteState, setVideoRewriteState] = useState<'idle' | 'loading' | 'polling'>('idle')
   const [auditSnapshots, setAuditSnapshots] = useState<AuditSnapshot[]>([])
   const [auditLoading, setAuditLoading] = useState(false)
 
@@ -444,6 +447,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
     }
   }
 
+  async function rewriteImagePrompt() {
+    const pkgId = campaign?.creativePackageId
+    if (!pkgId) return
+    setImageRewriteState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image-prompt`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setImageRewriteState('polling')
+      pollCreativePackage(pkgId, 'imageUrl', () => setImageRewriteState('idle'))
+    } catch {
+      setImageRewriteState('idle')
+      showToast('Failed to start image rewrite', 'error')
+    }
+  }
+
   async function retryVideo() {
     const pkgId = campaign?.creativePackageId
     if (!pkgId) return
@@ -456,6 +474,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
     } catch {
       setVideoRetryState('idle')
       showToast('Failed to start video regeneration', 'error')
+    }
+  }
+
+  async function rewriteVideoPrompt() {
+    const pkgId = campaign?.creativePackageId
+    if (!pkgId) return
+    setVideoRewriteState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-video-prompt`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+      setVideoRewriteState('polling')
+      pollCreativePackage(pkgId, 'videoUrl', () => setVideoRewriteState('idle'))
+    } catch {
+      setVideoRewriteState('idle')
+      showToast('Failed to start video rewrite', 'error')
     }
   }
 
@@ -964,15 +997,26 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#71717a' }}>Image</p>
-                <button
-                  onClick={retryImage}
-                  disabled={imageRetryState !== 'idle'}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                  style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
-                >
-                  <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
-                  {imageRetryState === 'idle' ? 'Retry' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={retryImage}
+                    disabled={imageRetryState !== 'idle' || imageRewriteState !== 'idle'}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                    style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
+                  >
+                    <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
+                    {imageRetryState === 'idle' ? 'Re-roll' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
+                  </button>
+                  <button
+                    onClick={rewriteImagePrompt}
+                    disabled={imageRewriteState !== 'idle' || imageRetryState !== 'idle'}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                    style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
+                  >
+                    <Sparkles size={11} className={imageRewriteState !== 'idle' ? 'animate-spin' : ''} />
+                    {imageRewriteState === 'idle' ? 'Rewrite' : imageRewriteState === 'loading' ? 'Starting…' : 'Rewriting…'}
+                  </button>
+                </div>
               </div>
               {creativeLoading ? (
                 <div className="flex items-center gap-2 text-xs" style={{ color: '#a1a1aa' }}><Loader2 size={12} className="animate-spin" /> Loading…</div>
@@ -996,15 +1040,26 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#71717a' }}>Video</p>
-                  <button
-                    onClick={retryVideo}
-                    disabled={videoRetryState !== 'idle'}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                    style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
-                  >
-                    <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
-                    {videoRetryState === 'idle' ? 'Retry' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={retryVideo}
+                      disabled={videoRetryState !== 'idle' || videoRewriteState !== 'idle'}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                      style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
+                    >
+                      <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
+                      {videoRetryState === 'idle' ? 'Re-roll' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
+                    </button>
+                    <button
+                      onClick={rewriteVideoPrompt}
+                      disabled={videoRewriteState !== 'idle' || videoRetryState !== 'idle'}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                      style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
+                    >
+                      <Sparkles size={11} className={videoRewriteState !== 'idle' ? 'animate-spin' : ''} />
+                      {videoRewriteState === 'idle' ? 'Rewrite' : videoRewriteState === 'loading' ? 'Starting…' : 'Rewriting…'}
+                    </button>
+                  </div>
                 </div>
                 {creativePackage?.videoUrl ? (
                   <video controls className="rounded-xl w-full" style={{ maxHeight: 300, border: '1px solid #e5e7eb' }}>
@@ -1096,15 +1151,26 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   <span className="inline-flex items-center gap-1.5"><ImageIcon size={12} /> Creative Image</span>
                 </h3>
                 {campaign?.creativePackageId && (
-                  <button
-                    onClick={retryImage}
-                    disabled={imageRetryState !== 'idle'}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                    style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
-                  >
-                    <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
-                    {imageRetryState === 'idle' ? 'Retry' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={retryImage}
+                      disabled={imageRetryState !== 'idle' || imageRewriteState !== 'idle'}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                      style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
+                    >
+                      <RefreshCw size={11} className={imageRetryState !== 'idle' ? 'animate-spin' : ''} />
+                      {imageRetryState === 'idle' ? 'Re-roll' : imageRetryState === 'loading' ? 'Starting…' : 'Generating…'}
+                    </button>
+                    <button
+                      onClick={rewriteImagePrompt}
+                      disabled={imageRewriteState !== 'idle' || imageRetryState !== 'idle'}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                      style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
+                    >
+                      <Sparkles size={11} className={imageRewriteState !== 'idle' ? 'animate-spin' : ''} />
+                      {imageRewriteState === 'idle' ? 'Rewrite' : imageRewriteState === 'loading' ? 'Starting…' : 'Rewriting…'}
+                    </button>
+                  </div>
                 )}
               </div>
               {creativePackage?.imageUrl ? (
@@ -1142,15 +1208,26 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     <Video size={12} /> Video
                   </h3>
                   {campaign?.creativePackageId && (
-                    <button
-                      onClick={retryVideo}
-                      disabled={videoRetryState !== 'idle'}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
-                      style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
-                    >
-                      <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
-                      {videoRetryState === 'idle' ? 'Retry' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={retryVideo}
+                        disabled={videoRetryState !== 'idle' || videoRewriteState !== 'idle'}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                        style={{ background: '#f3f4f6', color: '#52525b', border: '1px solid #e5e7eb' }}
+                      >
+                        <RefreshCw size={11} className={videoRetryState !== 'idle' ? 'animate-spin' : ''} />
+                        {videoRetryState === 'idle' ? 'Re-roll' : videoRetryState === 'loading' ? 'Starting…' : 'Generating…'}
+                      </button>
+                      <button
+                        onClick={rewriteVideoPrompt}
+                        disabled={videoRewriteState !== 'idle' || videoRetryState !== 'idle'}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                        style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
+                      >
+                        <Sparkles size={11} className={videoRewriteState !== 'idle' ? 'animate-spin' : ''} />
+                        {videoRewriteState === 'idle' ? 'Rewrite' : videoRewriteState === 'loading' ? 'Starting…' : 'Rewriting…'}
+                      </button>
+                    </div>
                   )}
                 </div>
                 {creativePackage.videoUrl ? (
