@@ -210,14 +210,14 @@ export function IdeaDetailPanel({
                     )
                   })}
 
-                  {creativePackage.imageUrl && (
+                  {creativePackage.images?.[selectedCopyIndex ?? 0]?.imageUrl && (
                     <div>
                       <p className="text-xs font-medium text-gray-500 mb-2">Generated Image</p>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={creativePackage.imageUrl} alt="Creative" className="rounded-lg w-full border border-gray-200" />
+                      <img src={creativePackage.images[selectedCopyIndex ?? 0]!.imageUrl} alt="Creative" className="rounded-lg w-full border border-gray-200" />
                     </div>
                   )}
-                  {creativePackage.imagePrompt && !creativePackage.imageUrl && (
+                  {creativePackage.imagePrompt && !creativePackage.images?.[selectedCopyIndex ?? 0]?.imageUrl && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-medium text-gray-500"><ImageIcon size={11} className="inline mr-1" />Image Prompt</p>
@@ -226,10 +226,10 @@ export function IdeaDetailPanel({
                       <div className="rounded-lg p-3 bg-gray-900"><p className="text-xs font-mono leading-relaxed text-gray-400">{creativePackage.imagePrompt}</p></div>
                     </div>
                   )}
-                  {creativePackage.videoUrl && (
+                  {creativePackage.video?.videoUrl && (
                     <div>
                       <p className="text-xs font-medium text-gray-500 mb-2"><Video size={11} className="inline mr-1" />Video</p>
-                      <video controls className="rounded-lg w-full border border-gray-200" style={{ maxHeight: 260 }}><source src={creativePackage.videoUrl} type="video/mp4" /></video>
+                      <video controls className="rounded-lg w-full border border-gray-200" style={{ maxHeight: 260 }}><source src={creativePackage.video.videoUrl} type="video/mp4" /></video>
                     </div>
                   )}
                   {creativePackage.complianceNotes && (

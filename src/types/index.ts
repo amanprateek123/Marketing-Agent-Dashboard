@@ -192,15 +192,28 @@ export interface CopyVariant {
   hookStyle?: string
 }
 
+export interface CreativeImage {
+  variantIndex?: number
+  imagePrompt?: string
+  imageUrl?: string
+}
+
+export interface CreativeVideo {
+  videoUrl?: string
+  videoThumbnailUrl?: string
+  variantIndex?: number
+  videoPrompt?: string
+}
+
 export interface CreativePackage {
   status?: string
   copyVariants?: CopyVariant[]
   selectedCopyIndex?: number
   copySelectionReason?: string
   imagePrompt?: string
-  imageUrl?: string
+  images?: CreativeImage[]
+  video?: CreativeVideo
   videoPrompt?: string
-  videoUrl?: string
   complianceNotes?: string
   debateRounds?: number
   debateLog?: Array<{ round: number; from: string; summary: string }>
@@ -218,6 +231,13 @@ export interface AdSetConfig {
   ads?: number[]
 }
 
+export interface ReplacementHistoryEntry {
+  oldHook: string
+  newHook: string
+  replacedAt: string
+  reason: string
+}
+
 export interface CampaignAd {
   id?: string
   name?: string
@@ -230,6 +250,7 @@ export interface CampaignAd {
   ctr?: number
   cpc?: number
   ctrBaseline?: number
+  replacementHistory?: ReplacementHistoryEntry[]
   metrics?: {
     spend?: number
     ctr?: number
@@ -254,6 +275,7 @@ export interface CampaignAdSet {
   cpa?: number
   frequency?: number
   ads?: CampaignAd[]
+  addedByAudit?: boolean
   metrics?: {
     spend?: number
     ctr?: number
@@ -264,18 +286,27 @@ export interface CampaignAdSet {
   }
 }
 
-export interface PendingAction {
+export interface CampaignAction {
   actionId: string
-  type: 'pause_ad' | 'pause_adset' | 'scale_adset' | string
+  type: 'pause_ad' | 'pause_adset' | 'scale_adset' | 'replace_creative' | 'add_creative' | 'add_adset' | string
   targetId: string
   targetName: string
   reason: string | Record<string, unknown>
   priority?: string | number
-  metrics: Record<string, number>
+  metrics: Record<string, unknown> & {
+    fatiguedHook?: string
+    replacementHook?: string
+    newHook?: string
+    audienceType?: string
+  }
   recommendedAt?: string
   executeAt?: string
   status: 'pending' | 'executed' | 'overridden'
+  replacementStatus?: 'queued' | 'producing' | 'complete' | 'failed'
+  addedByAudit?: boolean
 }
+
+export type PendingAction = CampaignAction
 
 export interface AuditSnapshot {
   auditedAt: string
@@ -295,6 +326,17 @@ export interface AuditSnapshot {
       conversions?: number
       frequency?: number
       cpa?: number
+    }
+  }>
+  ads?: Array<{
+    id?: string
+    name?: string
+    hookStyle?: string
+    metrics?: {
+      spend?: number
+      impressions?: number
+      ctr?: number
+      conversions?: number
     }
   }>
   verdict: {

@@ -283,22 +283,27 @@ function CreativeInlinePanel({
         </div>
       )}
 
-      {creativePackage.imagePrompt && (
+      {(creativePackage.images?.length ?? 0) > 0 && (
         <div>
-          <p className="text-xs font-medium mb-2" style={{ color: '#4b5563' }}>Image Prompt</p>
-          <div className="rounded-lg p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
-            <p className="text-xs font-mono leading-relaxed" style={{ color: '#9ca3af' }}>
-              {creativePackage.imagePrompt}
-            </p>
-          </div>
-          {creativePackage.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={creativePackage.imageUrl}
-              alt="Generated creative"
-              className="mt-3 rounded-lg max-w-full"
-              style={{ border: '1px solid #e5e7eb' }}
-            />
+          {(creativePackage.images?.length ?? 0) > 0 ? (
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              {creativePackage.images!.map((img, i) => {
+                const isSel = i === (selectedCopyIndex ?? 0)
+                return (
+                  <div key={i} className="relative">
+                    {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: '#15803d', color: '#fff' }}>Selected</span>}
+                    {img.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img.imageUrl} alt={`Variant ${i + 1}`} className="rounded-lg w-full" style={{ border: isSel ? '2px solid #15803d' : '1px solid #e5e7eb', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
+                    ) : (
+                      <div className="rounded-lg flex items-center justify-center" style={{ height: 200, background: '#f3f4f6', border: '1px dashed #d4d4d8' }}>
+                        <p className="text-[10px]" style={{ color: '#d1d5db' }}>V{i + 1}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           ) : (
             <div
               className="mt-2 h-20 rounded-lg flex items-center justify-center"
@@ -573,51 +578,81 @@ function CreativeEntryCard({
   onRefresh?: () => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
-  const [imageRegenState, setImageRegenState] = useState<'idle' | 'loading' | 'polling'>('idle')
+  const [imageCardState, setImageCardState] = useState<Record<number, 'idle' | 'loading' | 'polling'>>({})
   const [videoRegenState, setVideoRegenState] = useState<'idle' | 'loading' | 'polling'>('idle')
 
-  async function pollUntilReady(field: 'imageUrl' | 'videoUrl', pkgId: string, setStateBack: () => void) {
+  function setCardState(i: number, state: 'idle' | 'loading' | 'polling') {
+    setImageCardState(prev => ({ ...prev, [i]: state }))
+  }
+  function getCardState(i: number): 'idle' | 'loading' | 'polling' {
+    return imageCardState[i] ?? 'idle'
+  }
+
+  async function pollImageVariant(variantIndex: number, pkgId: string, onDone: () => void) {
     const poll = setInterval(async () => {
       try {
         const r = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}`, { cache: 'no-store' })
         if (!r.ok) return
         const pkg = await r.json()
-        if (pkg[field]) {
+        if (pkg.images?.[variantIndex]?.imageUrl) {
           clearInterval(poll)
-          setStateBack()
+          onDone()
           onRefresh?.()
         }
       } catch { /* keep polling */ }
-    }, 4000)
-    // Stop after 3 minutes
-    setTimeout(() => { clearInterval(poll); setStateBack() }, 180000)
+    }, 10000)
+    setTimeout(() => { clearInterval(poll); onDone() }, 180000)
   }
 
-  async function handleRegenImage() {
+  async function pollVideoReady(pkgId: string, onDone: () => void) {
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const pkg = await r.json()
+        if (pkg.video?.videoUrl) {
+          clearInterval(poll)
+          onDone()
+          onRefresh?.()
+        }
+      } catch { /* keep polling */ }
+    }, 10000)
+    setTimeout(() => { clearInterval(poll); onDone() }, 180000)
+  }
+
+  async function handleRegenImage(variantIndex: number) {
     const pkgId = entry.creativePackageId
     if (!pkgId) return
-    setImageRegenState('loading')
+    setCardState(variantIndex, 'loading')
     try {
-      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image`, { method: 'POST' })
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantIndex }),
+      })
       if (!res.ok) throw new Error()
-      setImageRegenState('polling')
-      pollUntilReady('imageUrl', pkgId, () => setImageRegenState('idle'))
+      setCardState(variantIndex, 'polling')
+      pollImageVariant(variantIndex, pkgId, () => setCardState(variantIndex, 'idle'))
     } catch {
-      setImageRegenState('idle')
+      setCardState(variantIndex, 'idle')
     }
   }
 
-  async function handleRewriteImagePrompt() {
+  async function handleRewriteImagePrompt(variantIndex: number) {
     const pkgId = entry.creativePackageId
     if (!pkgId) return
-    setImageRegenState('loading')
+    setCardState(variantIndex, 'loading')
     try {
-      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image-prompt`, { method: 'POST' })
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-image-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantIndex }),
+      })
       if (!res.ok) throw new Error()
-      setImageRegenState('polling')
-      pollUntilReady('imageUrl', pkgId, () => setImageRegenState('idle'))
+      setCardState(variantIndex, 'polling')
+      pollImageVariant(variantIndex, pkgId, () => setCardState(variantIndex, 'idle'))
     } catch {
-      setImageRegenState('idle')
+      setCardState(variantIndex, 'idle')
     }
   }
 
@@ -629,7 +664,7 @@ function CreativeEntryCard({
       const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-video`, { method: 'POST' })
       if (!res.ok) throw new Error()
       setVideoRegenState('polling')
-      pollUntilReady('videoUrl', pkgId, () => setVideoRegenState('idle'))
+      pollVideoReady(pkgId, () => setVideoRegenState('idle'))
     } catch {
       setVideoRegenState('idle')
     }
@@ -643,7 +678,7 @@ function CreativeEntryCard({
       const res = await fetch(`${API_BASE}/creative/${tenantId}/packages/${pkgId}/regenerate-video-prompt`, { method: 'POST' })
       if (!res.ok) throw new Error()
       setVideoRegenState('polling')
-      pollUntilReady('videoUrl', pkgId, () => setVideoRegenState('idle'))
+      pollVideoReady(pkgId, () => setVideoRegenState('idle'))
     } catch {
       setVideoRegenState('idle')
     }
@@ -652,8 +687,8 @@ function CreativeEntryCard({
   // Summary chips shown in collapsed header
   const chips: string[] = []
   if (entry.variants.length > 0) chips.push(`${entry.variants.length} variant${entry.variants.length !== 1 ? 's' : ''}`)
-  if (entry.pkg?.imageUrl) chips.push('image')
-  if (entry.pkg?.videoPrompt) chips.push('video')
+  if (entry.pkg?.images?.some(img => !!img.imageUrl)) chips.push('image')
+  if (entry.pkg?.video?.videoUrl || entry.pkg?.video?.videoPrompt) chips.push('video')
   if (entry.pkg?.complianceNotes) chips.push('compliance')
 
   return (
@@ -763,57 +798,69 @@ function CreativeEntryCard({
             )}
 
             {/* Image */}
-            {entry.pkg && entry.pkg.imagePrompt && (
+            {entry.pkg && (entry.pkg.imagePrompt || (entry.pkg.images?.length ?? 0) > 0) && (
               <AccordionSection
                 title="Image"
-                defaultOpen={!!entry.pkg.imageUrl}
-                badge={entry.pkg.imageUrl
+                defaultOpen={entry.pkg.images?.some(img => !!img.imageUrl) ?? false}
+                badge={entry.pkg.images?.some(img => !!img.imageUrl)
                   ? <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#ecfdf5', color: '#059669' }}>Generated</span>
                   : undefined
                 }
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-xs" style={{ color: '#9ca3af' }}>Prompt</p>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => navigator.clipboard.writeText(entry.pkg!.imagePrompt || '')}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs"
-                      style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
-                    >
-                      <Copy size={10} /> Copy
-                    </button>
-                    {entry.creativePackageId && (
-                      <>
-                        <button
-                          onClick={handleRegenImage}
-                          disabled={imageRegenState !== 'idle'}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
-                          style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
-                        >
-                          {imageRegenState === 'idle' ? (
-                            <><ImageIcon size={10} /> Re-roll</>
-                          ) : (
-                            <><Loader2 size={10} className="animate-spin" /> {imageRegenState === 'loading' ? 'Starting...' : 'Generating...'}</>
+                {(entry.pkg.images?.length ?? 0) > 0 ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {entry.pkg.images!.map((img, i) => {
+                      const isSel = i === (entry.selectedIdx ?? 0)
+                      const cardState = getCardState(i)
+                      return (
+                        <div key={i} className="flex flex-col gap-1.5">
+                          <div className="relative">
+                            {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: '#15803d', color: '#fff' }}>Selected</span>}
+                            {cardState === 'polling' && (
+                              <div className="absolute inset-0 z-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.7)' }}>
+                                <Loader2 size={16} className="animate-spin" style={{ color: '#4f46e5' }} />
+                              </div>
+                            )}
+                            {img.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={img.imageUrl} alt={`Variant ${i + 1}`} className="rounded-lg w-full" style={{ border: isSel ? '2px solid #15803d' : '1px solid #e5e7eb', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
+                            ) : (
+                              <div className="rounded-lg flex items-center justify-center" style={{ height: 200, background: '#f3f4f6', border: '1px dashed #d4d4d8' }}>
+                                <p className="text-[10px]" style={{ color: '#d1d5db' }}>{cardState === 'polling' ? '' : `V${i + 1}`}</p>
+                              </div>
+                            )}
+                          </div>
+                          {img.imagePrompt && (
+                            <details>
+                              <summary className="text-[9px] cursor-pointer" style={{ color: '#9ca3af' }}>Prompt</summary>
+                              <p className="text-[9px] mt-1 font-mono leading-relaxed p-1.5 rounded" style={{ background: '#f9fafb', color: '#6b7280', border: '1px solid #e5e7eb' }}>{img.imagePrompt}</p>
+                            </details>
                           )}
-                        </button>
-                        <button
-                          onClick={handleRewriteImagePrompt}
-                          disabled={imageRegenState !== 'idle'}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all disabled:opacity-50"
-                          style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4f46e5' }}
-                        >
-                          <Sparkles size={10} /> Rewrite
-                        </button>
-                      </>
-                    )}
+                          {entry.creativePackageId && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleRegenImage(i)}
+                                disabled={cardState !== 'idle'}
+                                className="flex-1 flex items-center justify-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium transition-all disabled:opacity-50"
+                                style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
+                              >
+                                {cardState !== 'idle' ? <Loader2 size={8} className="animate-spin" /> : <ImageIcon size={8} />}
+                                {cardState === 'idle' ? 'Re-roll' : 'Working…'}
+                              </button>
+                              <button
+                                onClick={() => handleRewriteImagePrompt(i)}
+                                disabled={cardState !== 'idle'}
+                                className="flex-1 flex items-center justify-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium transition-all disabled:opacity-50"
+                                style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4f46e5' }}
+                              >
+                                <Sparkles size={8} /> New prompt
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
-                <div className="rounded-lg p-3 mb-2" style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
-                  <p className="text-xs font-mono leading-relaxed" style={{ color: '#6b7280' }}>{entry.pkg.imagePrompt}</p>
-                </div>
-                {entry.pkg.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.pkg.imageUrl} alt="Generated creative" className="rounded-lg max-w-full" style={{ border: '1px solid #e5e7eb' }} />
                 ) : (
                   <div className="h-14 rounded-lg flex items-center justify-center" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}>
                     <p className="text-xs" style={{ color: '#d1d5db' }}>Not yet generated</p>
@@ -823,14 +870,14 @@ function CreativeEntryCard({
             )}
 
             {/* Video */}
-            {entry.pkg && (entry.pkg.videoUrl || entry.pkg.videoPrompt) && (
-              <AccordionSection title="Video" defaultOpen={!!entry.pkg.videoUrl}>
-                {entry.pkg.videoUrl ? (
+            {entry.pkg && (entry.pkg.video?.videoUrl || entry.pkg.video?.videoPrompt) && (
+              <AccordionSection title="Video" defaultOpen={!!entry.pkg.video?.videoUrl}>
+                {entry.pkg.video?.videoUrl ? (
                   <video controls className="rounded-lg w-full mb-2" style={{ maxHeight: 300, border: '1px solid #e5e7eb' }}>
-                    <source src={entry.pkg.videoUrl} type="video/mp4" />
+                    <source src={entry.pkg.video.videoUrl} type="video/mp4" />
                   </video>
                 ) : null}
-                {entry.pkg.videoPrompt && (
+                {entry.pkg.video?.videoPrompt && (
                   <div className="rounded-lg p-3" style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2">
@@ -862,7 +909,7 @@ function CreativeEntryCard({
                         </>
                       )}
                     </div>
-                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#6b7280' }}>{entry.pkg.videoPrompt}</p>
+                    <p className="text-xs font-mono leading-relaxed" style={{ color: '#6b7280' }}>{entry.pkg.video.videoPrompt}</p>
                   </div>
                 )}
               </AccordionSection>
@@ -1500,7 +1547,7 @@ export default function RunDetailPage({ params }: PageProps) {
                                 </span>
                               </td>
                               <td
-                                className="px-4 py-3 text-xs max-w-[200px] truncate"
+                                className="px-4 py-3 text-xs max-w-50 truncate"
                                 style={{ color: '#4b5563' }}
                               >
                                 {sig.rationale}
@@ -1541,7 +1588,7 @@ export default function RunDetailPage({ params }: PageProps) {
                   <div key={idx} className="rounded-xl overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
                     {/* Header */}
                     <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#f3f4f6', borderBottom: '1px solid #f3f4f6' }}>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider capitalize" style={{ color: '#4b5563' }}>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#4b5563' }}>
                         {r.type === 'competitor' ? '🏆 Competitor' : '📊 Market'} Research
                       </h4>
                       {insights.length > 0 && (

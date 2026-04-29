@@ -36,3 +36,24 @@ export function formatDateTime(dateStr: string | undefined | null): string {
     return dateStr
   }
 }
+
+export function formatRelativeTime(dateStr: string | undefined | null): string {
+  if (!dateStr) return '—'
+  try {
+    const now = Date.now()
+    const then = new Date(dateStr).getTime()
+    const diffMs = now - then
+    const absDiff = Math.abs(diffMs)
+    const isFuture = diffMs < 0
+
+    const minutes = Math.round(absDiff / 60000)
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return isFuture ? `in ${minutes}m` : `${minutes}m ago`
+    const hours = Math.round(minutes / 60)
+    if (hours < 24) return isFuture ? `in ${hours}h` : `${hours}h ago`
+    const days = Math.round(hours / 24)
+    return isFuture ? `in ${days}d` : `${days}d ago`
+  } catch {
+    return dateStr
+  }
+}

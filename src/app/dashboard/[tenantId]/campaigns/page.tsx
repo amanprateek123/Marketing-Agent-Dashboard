@@ -280,22 +280,41 @@ function CampaignRow({
 
         {/* Action */}
         <td className="px-4 py-3.5 text-right whitespace-nowrap">
-          {isPending ? (
-            <Link
-              href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors whitespace-nowrap"
-              style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
-              onClick={e => e.stopPropagation()}
-            >
-              Review <ChevronRight size={10} />
-            </Link>
-          ) : (
-            <ChevronRight
-              size={14}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ color: '#4f46e5' }}
-            />
-          )}
+          <div className="flex items-center justify-end gap-2">
+            {!isPending && (() => {
+              const GROWTH_TYPES = ['scale_adset', 'replace_creative', 'add_creative', 'add_adset']
+              const approvalNeeded = (campaign.pendingActions || []).filter(
+                a => a.status === 'pending' && GROWTH_TYPES.includes(a.type)
+              ).length
+              if (approvalNeeded > 0) return (
+                <Link
+                  href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
+                  onClick={e => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
+                  style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+                >
+                  <AlertCircle size={10} /> {approvalNeeded} awaiting approval
+                </Link>
+              )
+              return null
+            })()}
+            {isPending ? (
+              <Link
+                href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors whitespace-nowrap"
+                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+                onClick={e => e.stopPropagation()}
+              >
+                Review <ChevronRight size={10} />
+              </Link>
+            ) : (
+              <ChevronRight
+                size={14}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: '#4f46e5' }}
+              />
+            )}
+          </div>
         </td>
       </tr>
 
@@ -387,6 +406,8 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
+  const [auditState, setAuditState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [auditResult, setAuditResult] = useState<string | null>(null)
 
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter] = useState(initFilter ?? 'all')
@@ -407,6 +428,28 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   }
 
   useEffect(() => { fetchCampaigns() }, [tenantId]) // eslint-disable-line
+
+  async function handleRunAudit() {
+    setAuditState('loading')
+    setAuditResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/campaigns/${tenantId}/audit`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setAuditState('success')
+      const parts: string[] = []
+      if (data.campaignsAudited != null) parts.push(`${data.campaignsAudited} audited`)
+      if (data.paused != null) parts.push(`${data.paused} paused`)
+      if (data.actionsCreated != null) parts.push(`${data.actionsCreated} actions created`)
+      setAuditResult(parts.length > 0 ? parts.join(', ') : 'Audit complete')
+      fetchCampaigns()
+      setTimeout(() => { setAuditState('idle'); setAuditResult(null) }, 6000)
+    } catch (err) {
+      setAuditState('error')
+      setAuditResult(err instanceof Error ? err.message : 'Audit failed')
+      setTimeout(() => { setAuditState('idle'); setAuditResult(null) }, 5000)
+    }
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -482,14 +525,45 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
             <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>{tenantId}</p>
           </div>
         </div>
-        <button
-          onClick={fetchCampaigns}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:border-sky-300 hover:text-sky-600"
-          style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563' }}
-        >
-          <RefreshCw size={12} /> Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleRunAudit}
+            disabled={auditState === 'loading'}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
+            style={
+              auditState === 'success'
+                ? { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
+                : auditState === 'error'
+                ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
+                : { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' }
+            }
+          >
+            {auditState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
+            {auditState === 'loading' ? 'Auditing…' : auditState === 'success' ? 'Done!' : auditState === 'error' ? 'Failed' : 'Run Audit Now'}
+          </button>
+          <button
+            onClick={fetchCampaigns}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:border-sky-300 hover:text-sky-600"
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563' }}
+          >
+            <RefreshCw size={12} /> Refresh
+          </button>
+        </div>
       </div>
+
+      {/* Audit result banner */}
+      {auditResult && auditState !== 'idle' && (
+        <div
+          className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
+          style={auditState === 'error'
+            ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
+            : { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
+          }
+        >
+          {auditState === 'error' ? <AlertCircle size={14} /> : <Activity size={14} />}
+          {auditResult}
+        </div>
+      )}
 
       {/* ── Pending approval alert ───────────────────────────────── */}
       {pendingCampaigns > 0 && statusFilter !== 'pending_approval' && (

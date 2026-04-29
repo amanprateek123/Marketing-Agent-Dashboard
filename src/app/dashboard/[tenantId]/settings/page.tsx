@@ -5,7 +5,7 @@ import {
   Settings, Wifi, WifiOff, Package, Users, Bell, Building2, Target, Loader2,
   CheckCircle2, RefreshCw, DollarSign, TrendingUp, TrendingDown, Zap, Plus,
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
-  ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles,
+  ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X,
 } from 'lucide-react'
 import type { Company, Product } from '@/types'
 
@@ -87,7 +87,51 @@ function NumericInput({ value, onChange, prefix, suffix, placeholder = '—', st
 }
 
 function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
-  return <TextInput value={value.join(', ')} onChange={v => onChange(v.split(',').map(s => s.trim()).filter(Boolean))} placeholder={placeholder} />
+  const [input, setInput] = useState('')
+
+  function addTag() {
+    const tag = input.trim()
+    if (tag && !value.includes(tag)) {
+      onChange([...value, tag])
+    }
+    setInput('')
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {value.map((tag, i) => (
+          <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-700">
+            {tag}
+            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="hover:text-red-500 transition-colors">
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); addTag() }
+            if (e.key === ',' ) { e.preventDefault(); addTag() }
+          }}
+          placeholder={value.length === 0 ? placeholder : 'Add more…'}
+          className="flex-1 rounded-lg px-3 py-2 text-sm outline-none border border-gray-200 bg-gray-50 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all"
+          style={{ color: '#111827' }}
+        />
+        <button
+          onClick={addTag}
+          disabled={!input.trim()}
+          className="px-3 py-2 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 transition-all"
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function RuleGroup({ icon: Icon, iconColor, iconBg, title, children }: { icon: React.ElementType; iconColor: string; iconBg: string; title: string; children: React.ReactNode }) {
@@ -232,6 +276,8 @@ export default function SettingsPage({ params }: PageProps) {
   const [metaState, setMetaState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [competitorsState, setCompetitorsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [regenState, setRegenState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [fixCaptionState, setFixCaptionState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [fixCaptionResult, setFixCaptionResult] = useState<string | null>(null)
 
   // Local editable copies
   const [info, setInfo] = useState({ name: '', industry: '', geography: '', language: '' })
@@ -239,7 +285,7 @@ export default function SettingsPage({ params }: PageProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [budgetFields, setBudgetFields] = useState<Record<string, string>>({})
   const [marketing, setMarketing] = useState({ platforms: [] as string[], preferredFormats: [] as string[], forbiddenTopics: [] as string[], campaignsPerRun: '', runFrequency: '' })
-  const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false })
+  const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false, teamMode: '' as string })
   const [delivery, setDelivery] = useState({ slackWebhook: '', whatsappNumber: '', email: '', notionDatabaseId: '' })
   const [meta, setMeta] = useState({ pixelId: '', accountIdsRaw: '' })
   const [competitors, setCompetitors] = useState({ competitors: [] as string[], competitorNotes: '', calendarContext: '' })
@@ -248,24 +294,53 @@ export default function SettingsPage({ params }: PageProps) {
 
   async function fetchSettings() {
     try {
-      const res = await fetch(`${API_BASE}/companies/${tenantId}/settings`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: SettingsData = await res.json()
+      // Try new /settings endpoint first, fall back to /companies/:tenantId
+      let data: SettingsData
+      const settingsRes = await fetch(`${API_BASE}/companies/${tenantId}/settings`)
+      if (settingsRes.ok) {
+        data = await settingsRes.json()
+      } else {
+        // Fallback: load from old company endpoint and reshape
+        const companyRes = await fetch(`${API_BASE}/companies/${tenantId}`)
+        if (!companyRes.ok) throw new Error(`HTTP ${companyRes.status}`)
+        const c = await companyRes.json() as Company & Record<string, unknown>
+        const bs = c.budgetSettings ?? {}
+        function bv(key: string): number | undefined { const v = (bs as Record<string, unknown>)[key] ?? (c as Record<string, unknown>)[key]; return v != null ? Number(v) : undefined }
+        data = {
+          info: { tenantId: c.tenantId, name: c.name, industry: c.industry, geography: (c as Record<string, unknown>).geography as string | undefined, language: (c as Record<string, unknown>).language as string | undefined },
+          brand: { targetAudience: c.targetAudience, tone: c.tone, audiencePersonas: (c as Record<string, unknown>).audiencePersonas as string[] | undefined, customerLanguage: (c as Record<string, unknown>).customerLanguage as string[] | undefined, avoid: (c as Record<string, unknown>).avoid as string[] | undefined, uniqueValue: (c as Record<string, unknown>).uniqueValue as string | undefined, brandGuidelines: (c as Record<string, unknown>).brandGuidelines as string | undefined },
+          products: c.products || [],
+          services: (c as Record<string, unknown>).services as SettingsData['services'] || [],
+          activePromotions: (c as Record<string, unknown>).activePromotions as SettingsData['activePromotions'] || [],
+          competitors: { competitors: Array.isArray(c.competitors) ? c.competitors : [], competitorNotes: (c as Record<string, unknown>).competitorNotes as string || '', calendarContext: (c as Record<string, unknown>).calendarContext as string || '' },
+          delivery: c.delivery || {},
+          meta: c.meta || {},
+          budget: { weeklyBudgetCap: bv('weeklyBudgetCap'), maxBudgetPerCampaign: bv('maxBudgetPerCampaign'), maxBudgetScalePercent: bv('maxBudgetScalePercent'), targetROAS: bv('targetROAS'), targetCPA: bv('targetCPA'), pauseIfROASBelow: bv('pauseIfROASBelow'), pauseIfCTRBelow: bv('pauseIfCTRBelow'), pauseIfFrequencyAbove: bv('pauseIfFrequencyAbove'), scaleIfROASAbove: bv('scaleIfROASAbove') },
+          marketing: { platforms: (c as Record<string, unknown>).platforms as string[] || [], preferredFormats: (c as Record<string, unknown>).preferredFormats as string[] || [], forbiddenTopics: (c as Record<string, unknown>).forbiddenTopics as string[] || [] },
+          pipeline: { mode: c.pipelineConfig?.campaignStrategy ? undefined : undefined, campaignStrategy: c.pipelineConfig?.campaignStrategy, pauseGracePeriodHours: c.pipelineConfig?.pauseGracePeriodHours, scaleRequiresApproval: c.pipelineConfig?.scaleRequiresApproval, autoSwitch: (c.pipelineConfig as Record<string, unknown> | undefined)?.autoSwitch as boolean | undefined, ideasPerRun: (c.pipelineConfig as Record<string, unknown> | undefined)?.ideasPerRun as number | undefined },
+        }
+      }
       setSettings(data)
 
       // Populate local state
-      setInfo({ name: data.info.name || '', industry: data.info.industry || '', geography: data.info.geography || '', language: data.info.language || '' })
-      setBrand({ targetAudience: data.brand.targetAudience || '', audiencePersonas: data.brand.audiencePersonas || [], customerLanguage: data.brand.customerLanguage || [], tone: data.brand.tone || '', avoid: data.brand.avoid || [], uniqueValue: data.brand.uniqueValue || '', brandGuidelines: data.brand.brandGuidelines || '' })
+      setInfo({ name: data.info?.name || '', industry: data.info?.industry || '', geography: data.info?.geography || '', language: data.info?.language || '' })
+      setBrand({ targetAudience: data.brand?.targetAudience || '', audiencePersonas: data.brand?.audiencePersonas || [], customerLanguage: data.brand?.customerLanguage || [], tone: data.brand?.tone || '', avoid: data.brand?.avoid || [], uniqueValue: data.brand?.uniqueValue || '', brandGuidelines: data.brand?.brandGuidelines || '' })
       setProducts(data.products || [])
       const b = data.budget || {} as Record<string, unknown>
       const bf: Record<string, string> = {}
       for (const [k, v] of Object.entries(b)) { bf[k] = v != null ? String(v) : '' }
       setBudgetFields(bf)
       setMarketing({ platforms: data.marketing?.platforms || [], preferredFormats: data.marketing?.preferredFormats || [], forbiddenTopics: data.marketing?.forbiddenTopics || [], campaignsPerRun: data.marketing?.campaignsPerRun != null ? String(data.marketing.campaignsPerRun) : '', runFrequency: data.marketing?.runFrequency || '' })
-      setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false })
+      setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
       setDelivery({ slackWebhook: data.delivery?.slackWebhook || '', whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
       setMeta({ pixelId: data.meta?.pixelId || '', accountIdsRaw: (data.meta?.accountIds || []).join(', ') })
-      setCompetitors({ competitors: data.competitors?.competitors || [], competitorNotes: data.competitors?.competitorNotes || '', calendarContext: data.competitors?.calendarContext || '' })
+      // Handle competitors as either string[] (old) or object (new)
+      const comp = data.competitors
+      if (Array.isArray(comp)) {
+        setCompetitors({ competitors: comp, competitorNotes: '', calendarContext: '' })
+      } else {
+        setCompetitors({ competitors: comp?.competitors || [], competitorNotes: comp?.competitorNotes || '', calendarContext: comp?.calendarContext || '' })
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings')
@@ -296,6 +371,25 @@ export default function SettingsPage({ params }: PageProps) {
       setRegenState('success')
     } catch { setRegenState('error') }
     finally { setTimeout(() => setRegenState('idle'), 4000) }
+  }
+
+  async function handleFixCaptionVideos() {
+    setFixCaptionState('loading')
+    setFixCaptionResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/creative/${tenantId}/fix-caption-videos`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setFixCaptionState('success')
+      const fixed = data.fixed ?? data.fixedCount ?? 0
+      const total = data.total ?? data.totalCount ?? 0
+      setFixCaptionResult(`${fixed} of ${total} videos re-fetched`)
+    } catch (err) {
+      setFixCaptionState('error')
+      setFixCaptionResult(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setTimeout(() => { setFixCaptionState('idle'); setFixCaptionResult(null) }, 6000)
+    }
   }
 
   if (loading) return (
@@ -440,7 +534,7 @@ export default function SettingsPage({ params }: PageProps) {
               <div><FieldLabel>Cold Start Days</FieldLabel><NumericInput value={pipeline.coldStartDays} onChange={v => setPipeline(p => ({ ...p, coldStartDays: v }))} placeholder="7" /></div>
               <div><FieldLabel>Grace Period (hrs)</FieldLabel><NumericInput value={pipeline.pauseGracePeriodHours} onChange={v => setPipeline(p => ({ ...p, pauseGracePeriodHours: v }))} placeholder="48" /></div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <button onClick={() => setPipeline(p => ({ ...p, autoSwitch: !p.autoSwitch }))} className="flex items-center gap-2 text-sm">
                 {pipeline.autoSwitch ? <ToggleRight size={22} className="text-indigo-600" /> : <ToggleLeft size={22} className="text-gray-300" />}
                 <span className="font-medium" style={{ color: pipeline.autoSwitch ? '#4f46e5' : '#9ca3af' }}>Auto-switch mode</span>
@@ -450,8 +544,18 @@ export default function SettingsPage({ params }: PageProps) {
                 <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? '#4f46e5' : '#9ca3af' }}>Scale requires approval</span>
               </button>
             </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <FieldLabel>Agent Team Mode</FieldLabel>
+              {(['sequential', 'cli'] as const).map(m => (
+                <button key={m} onClick={() => setPipeline(p => ({ ...p, teamMode: m }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  style={(pipeline as Record<string, unknown>).teamMode === m ? { background: '#4f46e5', color: '#fff' } : { background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }}>
+                  {m === 'sequential' ? 'Sequential (default)' : 'CLI Debate'}
+                </button>
+              ))}
+              <p className="text-xs w-full" style={{ color: '#9ca3af' }}>Sequential: reliable, fast. CLI Debate: higher quality, uses tmux.</p>
+            </div>
           </div>
-          <div className="mt-4"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval } }, setPipelineState)} label="Save Pipeline Config" /></div>
+          <div className="mt-4"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save Pipeline Config" /></div>
         </SectionCard>
 
         {/* ── Competitors ── */}
@@ -510,6 +614,33 @@ export default function SettingsPage({ params }: PageProps) {
               {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Now'}
             </button>
             <p className="text-xs text-gray-400">Takes ~10–30 seconds. Safe to run at any time.</p>
+          </div>
+        </SectionCard>
+
+        {/* ── Fix Caption Videos ── */}
+        <SectionCard>
+          <SectionHeader icon={Sparkles} iconBg="#fef3c7" iconColor="#d97706" title="Fix Caption Videos" subtitle="Re-fetch video creatives that are missing captions" />
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handleFixCaptionVideos}
+              disabled={fixCaptionState === 'loading'}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
+              style={
+                fixCaptionState === 'success'
+                  ? { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
+                  : fixCaptionState === 'error'
+                  ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
+                  : { background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }
+              }
+            >
+              {fixCaptionState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {fixCaptionState === 'loading' ? 'Processing…' : fixCaptionState === 'success' ? 'Done!' : fixCaptionState === 'error' ? 'Failed' : 'Re-fetch Videos Without Captions'}
+            </button>
+            {fixCaptionResult && (
+              <p className="text-xs font-medium" style={{ color: fixCaptionState === 'error' ? '#b91c1c' : '#15803d' }}>
+                {fixCaptionResult}
+              </p>
+            )}
           </div>
         </SectionCard>
 
