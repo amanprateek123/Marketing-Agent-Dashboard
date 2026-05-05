@@ -7,7 +7,9 @@ import {
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
   ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X,
 } from 'lucide-react'
-import type { Company, Product } from '@/types'
+import type { Company, Product, PromptsHistoryEntry } from '@/types'
+import { getCompany, rollbackPrompts } from '@/lib/api'
+import { formatDateTime } from '@/lib/utils'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 interface PageProps { params: Promise<{ tenantId: string }> }
@@ -277,6 +279,8 @@ export default function SettingsPage({ params }: PageProps) {
   const [competitorsState, setCompetitorsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [regenState, setRegenState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [fixCaptionState, setFixCaptionState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [promptsHistory, setPromptsHistory] = useState<PromptsHistoryEntry[]>([])
+  const [rollbackState, setRollbackState] = useState<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({})
   const [fixCaptionResult, setFixCaptionResult] = useState<string | null>(null)
 
   // Local editable copies
@@ -348,6 +352,32 @@ export default function SettingsPage({ params }: PageProps) {
   }
 
   useEffect(() => { fetchSettings() }, [tenantId]) // eslint-disable-line
+
+  async function fetchPromptsHistory() {
+    try {
+      const c = await getCompany(tenantId)
+      setPromptsHistory(c.promptsHistory ?? [])
+    } catch {
+      setPromptsHistory([])
+    }
+  }
+
+  useEffect(() => { fetchPromptsHistory() }, [tenantId]) // eslint-disable-line
+
+  async function handleRollback(version: number) {
+    setRollbackState((s) => ({ ...s, [version]: 'loading' }))
+    try {
+      await rollbackPrompts(tenantId, version)
+      setRollbackState((s) => ({ ...s, [version]: 'success' }))
+      showToast(`Rolled back to prompts v${version}`, 'success')
+      fetchPromptsHistory()
+      setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 2500)
+    } catch (err) {
+      setRollbackState((s) => ({ ...s, [version]: 'error' }))
+      showToast(err instanceof Error ? err.message : 'Rollback failed', 'error')
+      setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 3000)
+    }
+  }
 
   async function saveSection(body: Record<string, unknown>, setState: (s: 'idle' | 'loading' | 'success' | 'error') => void) {
     setState('loading')
@@ -614,6 +644,74 @@ export default function SettingsPage({ params }: PageProps) {
               {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Now'}
             </button>
             <p className="text-xs text-gray-400">Takes ~10–30 seconds. Safe to run at any time.</p>
+          </div>
+
+          {/* Prompts version history */}
+          <div className="mt-5 pt-5" style={{ borderTop: '1px solid #f3f4f6' }}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7280' }}>Version history</h3>
+                <p className="text-[11px] mt-0.5" style={{ color: '#9ca3af' }}>Rollback to a previous prompt set if a regeneration regresses agent behavior.</p>
+              </div>
+            </div>
+
+            {promptsHistory.length === 0 ? (
+              <p className="text-xs italic" style={{ color: '#9ca3af' }}>No prior versions yet.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid #f3f4f6' }}>
+                <table className="w-full">
+                  <thead>
+                    <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Version</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Generated</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Learning version</th>
+                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...promptsHistory]
+                      .sort((a, b) => b.version - a.version)
+                      .map((entry, i, arr) => {
+                        const isCurrent = i === 0
+                        const rs = rollbackState[entry.version] ?? 'idle'
+                        return (
+                          <tr key={entry.version} style={{ borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-mono font-semibold" style={{ color: '#111827' }}>v{entry.version}</span>
+                                {isCurrent && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>Current</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs tabular-nums" style={{ color: '#4b5563' }}>{formatDateTime(entry.generatedAt)}</td>
+                            <td className="px-3 py-2.5 text-xs font-mono" style={{ color: '#6b7280' }}>{entry.learningVersion != null ? `L${entry.learningVersion}` : '—'}</td>
+                            <td className="px-3 py-2.5 text-right">
+                              {isCurrent ? (
+                                <span className="text-[11px]" style={{ color: '#9ca3af' }}>—</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleRollback(entry.version)}
+                                  disabled={rs === 'loading'}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors disabled:opacity-60"
+                                  style={
+                                    rs === 'success' ? { background: '#dcfce7', color: '#166534' }
+                                    : rs === 'error' ? { background: '#fee2e2', color: '#b91c1c' }
+                                    : { background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }
+                                  }
+                                >
+                                  {rs === 'loading' ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                                  {rs === 'loading' ? 'Rolling back…' : rs === 'success' ? 'Done' : rs === 'error' ? 'Failed' : 'Rollback'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </SectionCard>
 

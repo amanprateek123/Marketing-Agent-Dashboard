@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Activity,
@@ -19,10 +20,13 @@ import {
   ArrowRight,
   Megaphone,
   ChevronDown,
+  Play,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { StrategyTab } from '@/components/pipeline/StrategyTab'
+import { PromptsVersionBadge } from '@/components/badges'
+import { triggerPipeline } from '@/lib/api'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import type { FullRunData, CopyVariant, CreativePackage, Campaign } from '@/types'
 
@@ -48,18 +52,24 @@ function getDuration(start?: string, end?: string): string {
 const PHASES = [
   { key: 'scouts', label: 'Scouts' },
   { key: 'intelligence', label: 'Intelligence' },
+  { key: 'research', label: 'Research' },
   { key: 'ideas', label: 'Ideas' },
+  { key: 'digest', label: 'Digest' },
   { key: 'creative', label: 'Creative' },
   { key: 'campaign', label: 'Campaign' },
 ]
+const FINAL_PHASE_IDX = PHASES.length // 7 — sentinel for "completed"
 
 function getPhaseIndex(status: string): number {
   const s = (status || '').toLowerCase()
   if (s === 'scouts_running') return 0
-  if (s === 'intelligence_running' || s === 'idea_pool_running') return 1
-  if (s === 'creative_running') return 3
-  if (s === 'campaign_launching') return 4
-  if (s === 'completed') return 5
+  if (s === 'intelligence_running') return 1
+  if (s === 'research_running') return 2
+  if (s === 'idea_pool_running') return 3
+  if (s === 'digest_running') return 4
+  if (s === 'creative_running') return 5
+  if (s === 'campaign_launching') return 6
+  if (s === 'completed') return FINAL_PHASE_IDX
   return -1
 }
 
@@ -77,7 +87,7 @@ function PhaseProgress({ status }: { status: string }) {
           className="absolute top-1/2 -translate-y-1/2 h-px transition-all duration-1000 ease-out"
           style={{
             background: isFailed ? '#dc2626' : '#059669',
-            width: currentPhaseIdx === 5
+            width: currentPhaseIdx === FINAL_PHASE_IDX
               ? '100%'
               : currentPhaseIdx < 0
               ? '0%'
@@ -86,7 +96,7 @@ function PhaseProgress({ status }: { status: string }) {
         />
         <div className="relative flex justify-between w-full">
           {PHASES.map((phase, idx) => {
-            const done = currentPhaseIdx > idx || currentPhaseIdx === 5
+            const done = currentPhaseIdx > idx || currentPhaseIdx === FINAL_PHASE_IDX
             const active = currentPhaseIdx === idx && !isFailed
             return (
               <div key={phase.key} className="flex flex-col items-center">
@@ -119,7 +129,7 @@ function PhaseProgress({ status }: { status: string }) {
       </div>
       <div className="flex justify-between">
         {PHASES.map((phase, idx) => {
-          const done = currentPhaseIdx > idx || currentPhaseIdx === 5
+          const done = currentPhaseIdx > idx || currentPhaseIdx === FINAL_PHASE_IDX
           const active = currentPhaseIdx === idx && !isFailed
           return (
             <span
@@ -131,6 +141,87 @@ function PhaseProgress({ status }: { status: string }) {
             </span>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ── Failure banner ────────────────────────────────────────────────────────
+const STUCK_RUN_PREFIX = 'Auto-marked failed by stuck-run sweeper'
+
+function FailureBanner({ tenantId, error }: { tenantId: string; error?: string }) {
+  const [resuming, setResuming] = useState(false)
+  const [resumeError, setResumeError] = useState<string | null>(null)
+  const router = useRouter()
+
+  if (!error) {
+    return (
+      <div
+        className="rounded-xl px-4 py-3 mt-4 flex items-start gap-3"
+        style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+      >
+        <span className="shrink-0 text-base">❌</span>
+        <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>
+          Run failed without an error message.
+        </p>
+      </div>
+    )
+  }
+
+  const isAutoRecovery = error.startsWith(STUCK_RUN_PREFIX)
+
+  async function handleResume() {
+    setResuming(true)
+    setResumeError(null)
+    try {
+      const data = await triggerPipeline(tenantId)
+      if (data.runId) router.push(`/dashboard/${tenantId}/runs/${data.runId}`)
+    } catch (e) {
+      setResumeError(e instanceof Error ? e.message : 'Resume failed')
+      setResuming(false)
+    }
+  }
+
+  if (isAutoRecovery) {
+    return (
+      <div
+        className="rounded-xl px-4 py-3 mt-4 flex items-start gap-3 flex-wrap"
+        style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
+      >
+        <span className="shrink-0 text-base">⏰</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+            Auto-recovered after timeout
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+            {error}
+          </p>
+          {resumeError && (
+            <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{resumeError}</p>
+          )}
+        </div>
+        <button
+          onClick={handleResume}
+          disabled={resuming}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-60 shrink-0"
+          style={{ background: '#d97706', color: '#ffffff' }}
+        >
+          {resuming ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} fill="currentColor" />}
+          {resuming ? 'Triggering…' : 'Resume'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="rounded-xl px-4 py-3 mt-4 flex items-start gap-3"
+      style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+    >
+      <span className="shrink-0 text-base">❌</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Failed</p>
+        <p className="text-xs mt-0.5 break-words" style={{ color: '#dc2626' }}>{error}</p>
       </div>
     </div>
   )
@@ -1253,7 +1344,7 @@ export default function RunDetailPage({ params }: PageProps) {
           <div className="p-7">
             <div className="flex items-start justify-between gap-5 flex-wrap mb-5">
               <div>
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <h1 className="text-xl font-bold" style={{ color: '#111827' }}>Pipeline Run</h1>
                   {run && <StatusBadge status={run.status} />}
                   {isActive && (
@@ -1266,6 +1357,7 @@ export default function RunDetailPage({ params }: PageProps) {
                       Live
                     </span>
                   )}
+                  <PromptsVersionBadge version={run?.promptsVersion} />
                 </div>
                 <div className="flex items-center gap-4 text-xs" style={{ color: '#9ca3af' }}>
                   <code className="font-mono">{runId}</code>
@@ -1308,6 +1400,10 @@ export default function RunDetailPage({ params }: PageProps) {
             />
           </div>
         </div>
+
+        {run?.status === 'failed' && (
+          <FailureBanner tenantId={tenantId} error={run.error} />
+        )}
       </div>
 
       {/* ===== CONTENT ===== */}

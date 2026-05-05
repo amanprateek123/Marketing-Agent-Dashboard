@@ -9,9 +9,13 @@ import {
   AlertCircle,
   ChevronDown,
   Search,
+  Trophy,
+  LayoutGrid,
+  GitBranch,
 } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
-import type { Company, CaseStudy } from '@/types'
+import { HookStyleChip } from '@/components/badges'
+import { cn, formatCurrency, formatRelativeTime } from '@/lib/utils'
+import type { Company, CaseStudy, WinningExemplar, CausalInsight } from '@/types'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -198,6 +202,304 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Winning Exemplars table ──────────────────────────────────────────────────
+function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) {
+  const [segmentFilter, setSegmentFilter] = useState<string>('all')
+
+  const segments = Array.from(new Set(exemplars.map((e) => e.audienceSegment))).sort()
+  const filtered = segmentFilter === 'all'
+    ? exemplars
+    : exemplars.filter((e) => e.audienceSegment === segmentFilter)
+  const sorted = [...filtered].sort((a, b) => b.ctr - a.ctr)
+
+  return (
+    <div>
+      {segments.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap mb-3">
+          <button
+            onClick={() => setSegmentFilter('all')}
+            className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
+            style={
+              segmentFilter === 'all'
+                ? { background: '#4338ca', color: '#fff' }
+                : { background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }
+            }
+          >
+            All ({exemplars.length})
+          </button>
+          {segments.map((s) => {
+            const count = exemplars.filter((e) => e.audienceSegment === s).length
+            const active = segmentFilter === s
+            return (
+              <button
+                key={s}
+                onClick={() => setSegmentFilter(s)}
+                className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
+                style={
+                  active
+                    ? { background: '#4338ca', color: '#fff' }
+                    : { background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }
+                }
+              >
+                {s.replace(/_/g, ' ')} ({count})
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <div
+        className="rounded-lg overflow-x-auto"
+        style={{ background: '#ffffff', border: '1px solid #f3f4f6' }}
+      >
+        <table className="w-full">
+          <thead>
+            <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Hook</th>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Style</th>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Audience</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>CTR</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>n</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Captured</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((e, i) => (
+              <tr key={`${e.hookLine}-${i}`} style={{ borderBottom: i < sorted.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                <td className="px-3 py-2.5 max-w-md">
+                  <p className="text-xs italic leading-snug truncate" style={{ color: '#374151' }} title={e.hookLine}>
+                    &ldquo;{e.hookLine}&rdquo;
+                  </p>
+                </td>
+                <td className="px-3 py-2.5">
+                  <HookStyleChip style={e.hookStyle} />
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="text-[11px] capitalize" style={{ color: '#6b7280' }}>
+                    {e.audienceSegment.replace(/_/g, ' ')}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-right text-xs tabular-nums font-bold" style={{ color: '#15803d' }}>
+                  {e.ctr.toFixed(2)}%
+                </td>
+                <td className="px-3 py-2.5 text-right text-xs tabular-nums" style={{ color: '#6b7280' }}>
+                  {e.sampleSize.toLocaleString()}
+                </td>
+                <td className="px-3 py-2.5 text-right text-[11px] tabular-nums" style={{ color: '#9ca3af' }}>
+                  {formatRelativeTime(e.extractedAt)}
+                </td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-xs italic" style={{ color: '#9ca3af' }}>
+                  No exemplars match the current filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Hook Saturation Heatmap ──────────────────────────────────────────────────
+type HookSaturationMap = Record<string, Record<string, { pct: number; updatedAt: string }>>
+
+function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
+  const audiences = Object.keys(data)
+  const hookStylesSet = new Set<string>()
+  for (const a of audiences) for (const k of Object.keys(data[a] ?? {})) hookStylesSet.add(k)
+  const hookStyles = Array.from(hookStylesSet).sort()
+
+  // Pinned to first render — recency comparison stays stable.
+  const [now] = useState(() => Date.now())
+
+  function cellColor(pct: number) {
+    if (pct >= 80) return { bg: '#fee2e2', fg: '#b91c1c', label: 'high' }
+    if (pct >= 60) return { bg: '#fef3c7', fg: '#b45309', label: 'medium' }
+    return { bg: '#dcfce7', fg: '#166534', label: 'low' }
+  }
+
+  function recencyOpacity(updatedAt?: string) {
+    if (!updatedAt) return 0.4
+    const ageDays = (now - new Date(updatedAt).getTime()) / 86400000
+    if (ageDays < 3) return 1
+    if (ageDays < 7) return 0.85
+    if (ageDays < 14) return 0.65
+    if (ageDays < 30) return 0.45
+    return 0.3
+  }
+
+  if (audiences.length === 0 || hookStyles.length === 0) {
+    return (
+      <p className="text-xs italic px-3 py-6 text-center" style={{ color: '#9ca3af' }}>
+        No saturation data yet.
+      </p>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 4 }}>
+        <thead>
+          <tr>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
+              Audience ↓ / Hook →
+            </th>
+            {hookStyles.map((h) => (
+              <th
+                key={h}
+                className="px-2 py-1.5 text-center text-[10px] font-medium capitalize"
+                style={{ color: '#6b7280', minWidth: 80 }}
+              >
+                {h.replace(/_/g, ' ')}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {audiences.map((a) => (
+            <tr key={a}>
+              <td
+                className="px-2 py-1.5 text-xs font-semibold capitalize whitespace-nowrap"
+                style={{ color: '#374151' }}
+              >
+                {a.replace(/_/g, ' ')}
+              </td>
+              {hookStyles.map((h) => {
+                const cell = data[a]?.[h]
+                if (!cell) {
+                  return (
+                    <td
+                      key={h}
+                      className="text-center text-[10px] tabular-nums"
+                      style={{
+                        background: '#f9fafb',
+                        color: '#d1d5db',
+                        borderRadius: 4,
+                        padding: 8,
+                      }}
+                    >
+                      —
+                    </td>
+                  )
+                }
+                const c = cellColor(cell.pct)
+                const op = recencyOpacity(cell.updatedAt)
+                return (
+                  <td
+                    key={h}
+                    className="text-center text-[11px] tabular-nums font-bold"
+                    title={`${a}/${h}: ${cell.pct.toFixed(0)}% saturation, updated ${formatRelativeTime(cell.updatedAt)}`}
+                    style={{
+                      background: c.bg,
+                      color: c.fg,
+                      opacity: op,
+                      borderRadius: 4,
+                      padding: 8,
+                    }}
+                  >
+                    {cell.pct.toFixed(0)}%
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-3 mt-3 text-[11px]" style={{ color: '#6b7280' }}>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded" style={{ background: '#dcfce7', border: '1px solid #bbf7d0' }} />
+          &lt;60% fresh
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded" style={{ background: '#fef3c7', border: '1px solid #fde68a' }} />
+          60–80% saturating
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded" style={{ background: '#fee2e2', border: '1px solid #fecaca' }} />
+          &gt;80% burned out
+        </div>
+        <span className="ml-auto" style={{ color: '#9ca3af' }}>
+          Faded cells = stale data
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Causal Insights timeline ─────────────────────────────────────────────────
+function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
+  return (
+    <div className="space-y-3">
+      {insights.map((insight, i) => {
+        const conf = insight.confidence
+        const confColor =
+          conf >= 0.8 ? { bg: '#dcfce7', fg: '#166534', border: '#bbf7d0' }
+          : conf >= 0.6 ? { bg: '#fef3c7', fg: '#b45309', border: '#fde68a' }
+          : { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' }
+        return (
+          <div
+            key={i}
+            className="rounded-lg p-4"
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <p className="text-sm font-semibold leading-snug" style={{ color: '#111827' }}>
+                {insight.finding}
+              </p>
+              <span
+                className="text-[11px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap shrink-0"
+                style={{ background: confColor.bg, color: confColor.fg, border: `1px solid ${confColor.border}` }}
+                title={`${(conf * 100).toFixed(0)}% confidence based on ${insight.dataPoints} data points`}
+              >
+                {(conf * 100).toFixed(0)}% conf · n={insight.dataPoints}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                  Isolated variable
+                </p>
+                <p className="text-xs font-medium" style={{ color: '#4338ca' }}>{insight.isolatedVariable}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                  Controlled for
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {insight.controlledFor.length === 0 ? (
+                    <span className="text-[11px] italic" style={{ color: '#9ca3af' }}>none</span>
+                  ) : (
+                    insight.controlledFor.map((c) => (
+                      <span
+                        key={c}
+                        className="text-[10px] px-1.5 py-0.5 rounded"
+                        style={{ background: '#f3f4f6', color: '#4b5563' }}
+                      >
+                        {c.replace(/_/g, ' ')}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                  Root cause
+                </p>
+                <p className="text-xs" style={{ color: '#374151' }}>{insight.rootCause}</p>
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -572,6 +874,61 @@ export default function LearningsPage({ params }: PageProps) {
           </div>
         )}
       </div>
+
+      {/* ===== SECTION A2: WINNING EXEMPLARS ===== */}
+      {creative?.winningExemplars && creative.winningExemplars.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy size={15} style={{ color: '#15803d' }} />
+            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+              Winning Exemplars
+            </h2>
+            <span
+              className="text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+              style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
+            >
+              {creative.winningExemplars.length}
+            </span>
+          </div>
+          <div className="rounded-xl p-5" style={cardStyle}>
+            <WinningExemplarsTable exemplars={creative.winningExemplars} />
+          </div>
+        </div>
+      )}
+
+      {/* ===== SECTION A3: HOOK SATURATION HEATMAP ===== */}
+      {creative?.audienceHookSaturation && Object.keys(creative.audienceHookSaturation).length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <LayoutGrid size={15} style={{ color: '#b45309' }} />
+            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+              Hook Saturation
+            </h2>
+          </div>
+          <div className="rounded-xl p-5" style={cardStyle}>
+            <HookSaturationHeatmap data={creative.audienceHookSaturation} />
+          </div>
+        </div>
+      )}
+
+      {/* ===== SECTION A4: CAUSAL INSIGHTS ===== */}
+      {company?.learnings?.causalInsights && company.learnings.causalInsights.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <GitBranch size={15} style={{ color: '#4338ca' }} />
+            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+              Causal Insights
+            </h2>
+            <span
+              className="text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+              style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
+            >
+              {company.learnings.causalInsights.length}
+            </span>
+          </div>
+          <CausalInsightsTimeline insights={company.learnings.causalInsights} />
+        </div>
+      )}
 
       {/* ===== SECTION B: CASE STUDIES ===== */}
       <div>

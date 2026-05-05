@@ -7,6 +7,12 @@ import {
   Image as ImageIcon, Video, Copy, Users, DollarSign, Target, Package, ExternalLink,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import {
+  AudienceStageBadge,
+  ExplorationBadge,
+  FormatBadge,
+  HookStyleChip,
+} from '@/components/badges'
 import { formatCurrency } from '@/lib/utils'
 import type { IntelligenceBrief, CreativePackage, CopyVariant, Campaign } from '@/types'
 
@@ -131,6 +137,8 @@ export function IdeaDetailPanel({
 
             {/* Tags */}
             <div className="flex items-center gap-2 flex-wrap">
+              <AudienceStageBadge stage={brief.audienceStage} />
+              {brief.explorationArm && <ExplorationBadge />}
               {brief.platform && <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 border border-gray-200">{brief.platform}</span>}
               {brief.format && <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 border border-purple-200">{brief.format}</span>}
               {brief.urgencyScore != null && brief.urgencyScore >= 8 && (
@@ -185,6 +193,62 @@ export function IdeaDetailPanel({
                 </div>
               </div>
             </section>
+
+            {/* Per-Ad-Set Performance \u2014 populated after Day 7/14/30 captures */}
+            {brief.adSetPerformance && brief.adSetPerformance.length > 0 && (
+              <section>
+                <SectionLabel label="Ad-Set Performance" />
+                <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
+                        <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400">Ad Set</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400">Day</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400">Spend</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400">Conv.</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400">CTR</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400">CPA</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400">ROAS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {brief.adSetPerformance.map((p, i, arr) => {
+                        const roasColor = p.roas >= 2 ? '#16a34a' : p.roas >= 1 ? '#d97706' : '#dc2626'
+                        return (
+                          <tr key={`${p.adSetId}-${p.capturedAtDay}-${i}`} style={{ borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                            <td className="px-3 py-2.5">
+                              <p className="text-xs font-semibold text-gray-900 truncate" title={p.name}>{p.name}</p>
+                              <div className="flex items-center gap-1 flex-wrap mt-1">
+                                {p.audienceType && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 capitalize">
+                                    {p.audienceType.replace(/_/g, ' ')}
+                                  </span>
+                                )}
+                                {p.formats?.map((f) => <FormatBadge key={f} format={f} />)}
+                                {p.hookStyles?.slice(0, 2).map((h) => <HookStyleChip key={h} style={h} />)}
+                                {p.hookStyles && p.hookStyles.length > 2 && (
+                                  <span className="text-[10px] text-gray-400">+{p.hookStyles.length - 2}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">D{p.capturedAtDay}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-700">{formatCurrency(p.spend)}</td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums font-medium text-gray-900">{p.conversions}</td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-700">{p.ctr.toFixed(2)}%</td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-700">{formatCurrency(p.cpa)}</td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums font-bold" style={{ color: roasColor }}>
+                              {p.roas.toFixed(2)}x
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             {/* Creative Output */}
             {creativePackage && copyVariants && copyVariants.length > 0 && (

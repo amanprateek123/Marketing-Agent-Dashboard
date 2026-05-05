@@ -25,6 +25,11 @@ function getStatusConfig(status: string): {
   if (s === 'paused_for_replacement') return { label: 'Replacing Creative', bg: '#fff7ed', color: '#ea580c', dot: '#ea580c', pulse: true }
   if (s === 'pending_creative_swap') return { label: 'Swap Pending', bg: '#fffbeb', color: '#d97706', dot: '#d97706' }
 
+  if (s === 'research_running')
+    return { label: 'Researching market & competitors', bg: '#eff6ff', color: '#1d4ed8', dot: '#1d4ed8', pulse: true }
+  if (s === 'digest_running')
+    return { label: 'Writing digest & sending Slack',     bg: '#faf5ff', color: '#7e22ce', dot: '#7e22ce', pulse: true }
+
   if (s.includes('running') || s === 'campaign_launching') {
     return {
       label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),

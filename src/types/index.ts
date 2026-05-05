@@ -41,6 +41,91 @@ export interface PipelineConfig {
   campaignStrategy?: 'conservative' | 'balanced' | 'experimental'
   pauseGracePeriodHours?: number
   scaleRequiresApproval?: boolean
+  teamMode?: 'cli' | 'sequential'
+}
+
+// ── Canonical hook styles (shared BE/FE contract) ────────────────────────────
+export const HOOK_STYLES = [
+  'pain_point', 'bold_claim', 'price_shock', 'social_proof',
+  'curiosity_gap', 'before_after', 'urgency',
+  'meme_relatable', 'meme_punchline', 'meme_self_aware',
+] as const
+export type HookStyle = typeof HOOK_STYLES[number]
+
+export type AudienceStage = 'cold' | 'warm' | 'hot'
+export type CreativeFormat = 'mixed' | 'video' | 'image'
+
+export interface PromptsHistoryEntry {
+  version: number
+  generatedAt: string
+  learningVersion?: number
+}
+
+export interface WinningExemplar {
+  hookLine: string
+  hookStyle: HookStyle | string
+  audienceSegment: string
+  ctr: number
+  sampleSize: number
+  extractedAt: string
+}
+
+export interface HookSaturationCell {
+  pct: number
+  updatedAt: string
+}
+
+export interface CausalInsight {
+  finding: string
+  isolatedVariable: string
+  controlledFor: string[]
+  rootCause: string
+  confidence: number
+  dataPoints: number
+}
+
+export interface AdSetPerformance {
+  adSetId: string
+  name: string
+  audienceType: string
+  hookStyles: string[]
+  formats: string[]
+  spend: number
+  conversions: number
+  ctr: number
+  cpa: number
+  roas: number
+  capturedAtDay: number
+}
+
+export interface ShadowAction {
+  proposedAction: string | { type?: string; targetName?: string; reason?: string; [k: string]: unknown }
+  blockedReason: string | { reason?: string; [k: string]: unknown }
+  regretLabel: 'correct_block' | 'missed_signal' | 'inconclusive'
+  age?: string
+  proposedAt?: string
+  evaluatedAt?: string
+}
+
+export type CampaignActionType =
+  | 'pause_ad'
+  | 'pause_adset'
+  | 'replace_creative'
+  | 'add_creative'
+  | 'add_adset'
+  | 'scale_adset'
+  | 'shift_budget_between_adsets'
+  | 'reduce_total_budget'
+  | 'narrow_placement'
+  | 'dayparting'
+  | 'refresh_audience'
+
+export interface UsageResponse {
+  totalUSD: number
+  callCount: number
+  byDay: Array<{ date: string; costUSD: number; agentBreakdown: Record<string, number> }>
+  byAgent: Array<{ agentType: string; callCount: number; totalUSD: number; avgUSD: number }>
+  byRun: Array<{ runId: string; startedAt: string; totalUSD: number; callCount: number }>
 }
 
 export interface Company {
@@ -66,6 +151,7 @@ export interface Company {
   pauseIfFrequencyAbove?: number
   scaleIfROASAbove?: number
   delivery?: { slackWebhook?: string }
+  promptsHistory?: PromptsHistoryEntry[]
   learnings?: {
     updatedAt?: string
     creative?: {
@@ -73,19 +159,22 @@ export interface Company {
       losingHooks?: string[]
       winningFormats?: string[]
       losingFormats?: string[]
+      winningExemplars?: WinningExemplar[]
+      audienceHookSaturation?: Record<string, Record<string, HookSaturationCell>>
     }
     campaign?: {
       audienceScores?: Record<string, number>
       budgetInsights?: string[]
       timingInsights?: string[]
     }
+    causalInsights?: CausalInsight[]
   }
 }
 
 export interface PipelineRun {
   runId: string
   tenantId: string
-  status: 'pending' | 'scouts_running' | 'intelligence_running' | 'idea_pool_running' | 'creative_running' | 'campaign_launching' | 'completed' | 'failed'
+  status: 'pending' | 'scouts_running' | 'intelligence_running' | 'research_running' | 'idea_pool_running' | 'digest_running' | 'creative_running' | 'campaign_launching' | 'completed' | 'failed'
   phase?: string
   startedAt?: string
   completedAt?: string
@@ -94,6 +183,7 @@ export interface PipelineRun {
   campaignId?: string
   metaCampaignId?: string
   error?: string
+  promptsVersion?: number
 }
 
 export interface ScoutOutput {
@@ -165,6 +255,9 @@ export interface IntelligenceBrief {
   sourcePlatforms?: string[]
   ideaSource?: 'scout_signal' | 'viral_trend' | 'competitor_gap' | 'market_insight' | 'meta_ads_gap'
   day7Performance?: null | Record<string, unknown>
+  audienceStage?: AudienceStage
+  explorationArm?: boolean
+  adSetPerformance?: AdSetPerformance[]
 }
 
 export interface CreativeBrief {
@@ -288,16 +381,30 @@ export interface CampaignAdSet {
 
 export interface CampaignAction {
   actionId: string
-  type: 'pause_ad' | 'pause_adset' | 'scale_adset' | 'replace_creative' | 'add_creative' | 'add_adset' | string
+  type: CampaignActionType | string
   targetId: string
   targetName: string
   reason: string | Record<string, unknown>
   priority?: string | number
+  urgency?: 'high' | 'medium' | 'low'
+  source?: 'auto' | 'human'
   metrics: Record<string, unknown> & {
     fatiguedHook?: string
     replacementHook?: string
     newHook?: string
     audienceType?: string
+    forcedHookStyles?: string[]
+    avoidHookStyles?: string[]
+    donorAdSetId?: string
+    recipientAdSetId?: string
+    shiftPercent?: number
+    oldDailyBudget?: number
+    newDailyBudget?: number
+    droppedPlacements?: string[]
+    activeHours?: number[]
+    newAudience?: Record<string, unknown>
+    oldBudgetPercent?: number
+    newBudgetPercent?: number
   }
   recommendedAt?: string
   executeAt?: string
@@ -327,6 +434,7 @@ export interface AuditSnapshot {
       frequency?: number
       cpa?: number
     }
+    thompsonAllocation?: number
   }>
   ads?: Array<{
     id?: string
@@ -338,12 +446,28 @@ export interface AuditSnapshot {
       ctr?: number
       conversions?: number
     }
+    didFatigue?: Array<{
+      day: number
+      observed: number
+      counterfactual: number
+    }>
   }>
   verdict: {
     verdict: 'no_action' | 'watch' | 'act'
     urgency?: 'immediate' | '48h' | '7d' | null
     contextInsight?: string
     recommendedActions?: Array<string | { type: string; targetId?: string; targetName?: string; reason?: string; priority?: string }>
+  }
+  bayesian?: {
+    shrunkenROAS?: number
+    lowerROAS?: number
+    breakeven?: number
+    confidenceLevel?: number
+  }
+  powerCalc?: {
+    reachedFloor: boolean
+    minDays?: number
+    daysObserved?: number
   }
 }
 
@@ -390,6 +514,10 @@ export interface Campaign {
   ctr?: number
   cpc?: number
   topic?: string
+  promptsVersion?: number
+  creativeFormat?: CreativeFormat
+  weeklyBudgetConsumed?: number
+  creativePackage?: CreativePackage
 }
 
 export interface FullRunData {

@@ -1,6 +1,7 @@
 'use client'
 
-import { Star, CheckCircle2, Zap, ArrowUpRight } from 'lucide-react'
+import { Star, CheckCircle2, ArrowUpRight } from 'lucide-react'
+import { AudienceStageBadge, ExplorationBadge } from '@/components/badges'
 import type { IntelligenceBrief } from '@/types'
 
 const SOURCE_META: Record<string, { label: string; icon: string; bg: string; color: string; border: string }> = {
@@ -99,6 +100,8 @@ export function IdeaCard({ brief, isWinner, isProduced, isSelected, onClick, ind
               {src.icon} {src.label}
             </span>
           )}
+          <AudienceStageBadge stage={brief.audienceStage} />
+          {brief.explorationArm && <ExplorationBadge />}
           {brief.platform && (
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-50 text-gray-500">{brief.platform}</span>
           )}

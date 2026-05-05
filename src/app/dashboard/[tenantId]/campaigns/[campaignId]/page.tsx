@@ -5,15 +5,17 @@ import Link from 'next/link'
 import * as Tabs from '@radix-ui/react-tabs'
 import {
   ArrowLeft, Loader2, ThumbsUp, Pause, Play, CheckCircle, XCircle,
-  ChevronRight, AlertCircle, Megaphone, Bot, User, MousePointerClick,
-  Eye, TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
-  Image as ImageIcon, Video, Shield, Clock, Activity, FlameKindling,
+  ChevronRight, AlertCircle, Bot, User, Users,
+  TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
+  Image as ImageIcon, Shield, Clock, Activity, FlameKindling,
   Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
+import { FormatBadge, PromptsVersionBadge, RegretLabel } from '@/components/badges'
+import { getShadowActions } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
-import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot } from '@/types'
+import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction } from '@/types'
 
 /* ─── Local types ─── */
 interface CreativePackage {
@@ -73,7 +75,7 @@ function AdRow({ ad }: { ad: CampaignAd }) {
           <p className="text-[13px] font-medium" style={{ color: C.text }}>{ad.name || '—'}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {ad.hookStyle && <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.borderLight}` }}>{ad.hookStyle}</span>}
-            {ad.format && <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium" style={{ background: C.accentLight, color: C.accent }}>{ad.format}</span>}
+            {ad.format && <FormatBadge format={ad.format} />}
             {fatigued && <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.redBg, color: C.red }}><FlameKindling size={9} />Fatigue</span>}
             {hist.length > 0 && <button onClick={e => { e.stopPropagation(); setHistOpen(h => !h) }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors hover:bg-sky-100" style={{ color: C.accent }}><History size={9} className="inline mr-0.5" />{hist.length} swap{hist.length !== 1 ? 's' : ''}</button>}
           </div>
@@ -107,7 +109,17 @@ function AdRow({ ad }: { ad: CampaignAd }) {
 /* ═════════════════════════════════════════════════════════════════
    AD SET ROW
    ═════════════════════════════════════════════════════════════════ */
-function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
+function AdSetRow({
+  adSet,
+  formatTag,
+  siblingFormat,
+  groupHead,
+}: {
+  adSet: CampaignAdSet
+  formatTag?: 'video' | 'image'
+  siblingFormat?: 'video' | 'image'
+  groupHead?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend, ctr = adSet.metrics?.ctr ?? adSet.ctr
@@ -118,10 +130,29 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
       <tr className="group transition-colors hover:bg-sky-50/30 cursor-pointer" style={{ borderBottom: `1px solid ${C.borderLight}` }} onClick={() => setOpen(!open)}>
         <td className="px-5 py-4">
           <div className="flex items-center gap-2.5">
+            {siblingFormat && (
+              <span
+                className="inline-flex items-center justify-center w-4"
+                style={{ color: C.textFaint }}
+                title={`Linked to its ${siblingFormat} sibling`}
+              >
+                {groupHead ? '┐' : '┘'}
+              </span>
+            )}
             <ChevronRight size={14} className={cn('transition-transform text-sky-400', open && 'rotate-90')} style={{ color: ads.length ? C.accent : C.textFaint }} />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold" style={{ color: C.text }}>{adSet.name || '—'}</p>
+                {formatTag && <FormatBadge format={formatTag} />}
+                {siblingFormat && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                    style={{ background: C.surfaceMuted, color: C.textMuted, border: `1px solid ${C.borderLight}` }}
+                    title={`Paired with sibling ${siblingFormat} ad set`}
+                  >
+                    <ArrowRightLeft size={9} /> linked · {siblingFormat}
+                  </span>
+                )}
                 {adSet.addedByAudit && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}` }}>Audit</span>}
               </div>
               {adSet.audienceType && <p className="text-xs mt-0.5 capitalize" style={{ color: C.textMuted }}>{adSet.audienceType.replace(/_/g, ' ')}</p>}
@@ -152,18 +183,87 @@ function AdSetRow({ adSet }: { adSet: CampaignAdSet }) {
    ACTION TYPE BADGE
    ═════════════════════════════════════════════════════════════════ */
 const ACTION_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
-  pause_ad:         { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad' },
-  pause_adset:      { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad Set' },
-  scale_adset:      { bg: C.greenBg, color: C.green, border: C.greenBorder, label: 'Scale Ad Set' },
-  replace_creative: { bg: C.orangeBg, color: C.orange, border: C.orangeBorder, label: 'Replace Creative' },
-  add_creative:     { bg: C.blueBg, color: C.blue, border: C.blueBorder, label: 'Add Creative' },
-  add_adset:        { bg: C.purpleBg, color: C.purple, border: C.purpleBorder, label: 'Add Ad Set' },
+  pause_ad:                    { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad' },
+  pause_adset:                 { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad Set' },
+  scale_adset:                 { bg: C.greenBg, color: C.green, border: C.greenBorder, label: 'Scale Ad Set' },
+  replace_creative:            { bg: C.orangeBg, color: C.orange, border: C.orangeBorder, label: 'Replace Creative' },
+  add_creative:                { bg: C.blueBg, color: C.blue, border: C.blueBorder, label: 'Add Creative' },
+  add_adset:                   { bg: C.purpleBg, color: C.purple, border: C.purpleBorder, label: 'Add Ad Set' },
+  shift_budget_between_adsets: { bg: C.indigoBg, color: C.indigo, border: C.indigoBorder, label: 'Shift Budget' },
+  reduce_total_budget:         { bg: C.amberBg, color: C.amber, border: C.amberBorder, label: 'Reduce Budget' },
+  narrow_placement:            { bg: C.surfaceMuted, color: C.textSecondary, border: C.border, label: 'Narrow Placement' },
+  dayparting:                  { bg: C.surfaceMuted, color: C.textSecondary, border: C.border, label: 'Dayparting' },
+  refresh_audience:            { bg: C.blueBg, color: C.blue, border: C.blueBorder, label: 'Refresh Audience' },
 }
 
 function TypeBadge({ type }: { type: string }) {
   const s = ACTION_STYLES[type] || { bg: '#f4f4f5', color: '#6b7280', border: '#e5e7eb', label: type.replace(/_/g, ' ') }
-  const icons: Record<string, React.ReactNode> = { pause_ad: <Pause size={11} />, pause_adset: <Pause size={11} />, scale_adset: <TrendingUp size={11} />, replace_creative: <ArrowRightLeft size={11} />, add_creative: <Sparkles size={11} />, add_adset: <Target size={11} /> }
+  const icons: Record<string, React.ReactNode> = {
+    pause_ad: <Pause size={11} />,
+    pause_adset: <Pause size={11} />,
+    scale_adset: <TrendingUp size={11} />,
+    replace_creative: <ArrowRightLeft size={11} />,
+    add_creative: <Sparkles size={11} />,
+    add_adset: <Target size={11} />,
+    shift_budget_between_adsets: <ArrowRightLeft size={11} />,
+    reduce_total_budget: <DollarSign size={11} />,
+    narrow_placement: <Layers size={11} />,
+    dayparting: <Clock size={11} />,
+    refresh_audience: <Users size={11} />,
+  }
   return <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg" style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{icons[type] || <Zap size={11} />}{s.label}</span>
+}
+
+// ── Auto-vs-human chip ──
+function SourceChip({ source }: { source?: 'auto' | 'human' }) {
+  if (!source) return null
+  return source === 'auto' ? (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}>
+      <Bot size={10} /> Auto
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+      <User size={10} /> Human
+    </span>
+  )
+}
+
+// ── Urgency dot ──
+function UrgencyDotChip({ urgency }: { urgency?: 'high' | 'medium' | 'low' }) {
+  if (!urgency) return null
+  const color = urgency === 'high' ? C.red : urgency === 'medium' ? C.amber : C.textMuted
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] capitalize" style={{ color: C.textSecondary }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      {urgency}
+    </span>
+  )
+}
+
+// ── Dayparting 24h grid ──
+function DaypartingGrid({ activeHours }: { activeHours: number[] }) {
+  const set = new Set(activeHours)
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Active hours (UTC)</p>
+      <div className="grid grid-cols-24 gap-0.5" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <div
+            key={h}
+            title={`${h.toString().padStart(2, '0')}:00 — ${set.has(h) ? 'active' : 'paused'}`}
+            className="h-5 rounded-sm flex items-center justify-center text-[8px] font-mono"
+            style={{
+              background: set.has(h) ? C.accent : C.surfaceMuted,
+              color: set.has(h) ? '#fff' : C.textFaint,
+              border: `1px solid ${set.has(h) ? C.accent : C.borderLight}`,
+            }}
+          >
+            {h % 6 === 0 ? h : ''}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function ReplaceBadge({ status }: { status?: string }) {
@@ -176,7 +276,11 @@ function ReplaceBadge({ status }: { status?: string }) {
 /* ═════════════════════════════════════════════════════════════════
    ACTIONS SECTION
    ═════════════════════════════════════════════════════════════════ */
-const GROWTH = ['scale_adset', 'replace_creative', 'add_creative', 'add_adset']
+const GROWTH = [
+  'scale_adset', 'replace_creative', 'add_creative', 'add_adset',
+  'shift_budget_between_adsets', 'reduce_total_budget',
+  'narrow_placement', 'dayparting', 'refresh_audience',
+]
 const FILTERS = ['all', 'pending', 'executed', 'overridden'] as const
 
 function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: string }) {
@@ -258,6 +362,8 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                     <div className="flex items-center gap-3 flex-wrap">
                       <TypeBadge type={action.type} />
                       <span className="text-sm font-semibold" style={{ color: C.text }}>{typeof action.targetName === 'string' ? action.targetName : JSON.stringify(action.targetName)}</span>
+                      <SourceChip source={action.source} />
+                      <UrgencyDotChip urgency={action.urgency} />
                     </div>
                     <StatusBadge status={action.status} />
                   </div>
@@ -274,16 +380,75 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                         <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: C.greenBg, color: C.green }}>{String(action.metrics.replacementHook)}</code>
                       </span>
                     )}
+                    {action.type === 'replace_creative' && Array.isArray(action.metrics?.forcedHookStyles) && action.metrics.forcedHookStyles.length > 0 && (
+                      <span className="text-[11px] px-2 py-1 rounded-lg" style={{ background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` }}>
+                        Force: {(action.metrics.forcedHookStyles as string[]).join(', ').replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    {action.type === 'replace_creative' && Array.isArray(action.metrics?.avoidHookStyles) && action.metrics.avoidHookStyles.length > 0 && (
+                      <span className="text-[11px] px-2 py-1 rounded-lg" style={{ background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` }}>
+                        Avoid: {(action.metrics.avoidHookStyles as string[]).join(', ').replace(/_/g, ' ')}
+                      </span>
+                    )}
                     {action.type === 'add_creative' && action.metrics?.newHook && (
                       <span className="text-xs px-2.5 py-1.5 rounded-lg" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>Hook: <code className="font-bold" style={{ color: C.blue }}>{String(action.metrics.newHook)}</code></span>
                     )}
                     {action.type === 'add_adset' && action.metrics?.audienceType && (
                       <span className="text-xs px-2.5 py-1.5 rounded-lg capitalize" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>Audience: <strong>{String(action.metrics.audienceType).replace(/_/g, ' ')}</strong></span>
                     )}
+                    {action.type === 'scale_adset' && (action.metrics?.oldBudgetPercent != null || action.metrics?.newBudgetPercent != null) && (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>
+                        <strong style={{ color: C.textMuted }}>{Number(action.metrics.oldBudgetPercent ?? 0)}%</strong>
+                        <span>&rarr;</span>
+                        <strong style={{ color: C.green }}>{Number(action.metrics.newBudgetPercent ?? 0)}%</strong>
+                      </span>
+                    )}
+                    {action.type === 'shift_budget_between_adsets' && (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>
+                        <strong style={{ color: C.red }}>{String(action.metrics?.donorAdSetId ?? '?')}</strong>
+                        <span>&rarr;</span>
+                        <strong style={{ color: C.green }}>{String(action.metrics?.recipientAdSetId ?? '?')}</strong>
+                        {action.metrics?.shiftPercent != null && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded text-[11px]" style={{ background: C.indigoBg, color: C.indigo }}>
+                            {Number(action.metrics.shiftPercent)}%
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {action.type === 'reduce_total_budget' && (action.metrics?.oldDailyBudget != null || action.metrics?.newDailyBudget != null) && (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>
+                        <strong style={{ color: C.textMuted }}>{action.metrics?.oldDailyBudget != null ? formatCurrency(Number(action.metrics.oldDailyBudget)) : '—'}</strong>
+                        <span>&rarr;</span>
+                        <strong style={{ color: C.amber }}>{action.metrics?.newDailyBudget != null ? formatCurrency(Number(action.metrics.newDailyBudget)) : '—'}</strong>
+                        <span className="text-[10px]" style={{ color: C.textMuted }}>/day</span>
+                      </span>
+                    )}
+                    {action.type === 'narrow_placement' && Array.isArray(action.metrics?.droppedPlacements) && action.metrics.droppedPlacements.length > 0 && (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}`, color: C.textSecondary }}>
+                        Drop: {(action.metrics.droppedPlacements as string[]).map((p) => (
+                          <code key={p} className="px-1 py-0.5 rounded text-[11px] ml-1" style={{ background: C.redBg, color: C.red }}>{p}</code>
+                        ))}
+                      </span>
+                    )}
+                    {action.type === 'refresh_audience' && action.metrics?.newAudience && (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg max-w-full" style={{ background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }}>
+                        <Users size={11} />
+                        <code className="text-[11px] truncate" style={{ maxWidth: 320 }} title={JSON.stringify(action.metrics.newAudience)}>
+                          {JSON.stringify(action.metrics.newAudience)}
+                        </code>
+                      </span>
+                    )}
                     {hasRepl && action.replacementStatus && <ReplaceBadge status={action.replacementStatus} />}
                     {action.recommendedAt && <span className="text-[11px] tabular-nums flex items-center gap-1" style={{ color: C.textMuted }}><Clock size={10} />{formatRelativeTime(action.recommendedAt)}</span>}
-                    {pending && action.executeAt && <span className="text-[11px] tabular-nums flex items-center gap-1" style={{ color: C.amber }}><Clock size={10} />{formatRelativeTime(action.executeAt)}</span>}
+                    {pending && action.executeAt && <span className="text-[11px] tabular-nums flex items-center gap-1 font-semibold" style={{ color: C.amber }}><Clock size={10} />exec {formatRelativeTime(action.executeAt)}</span>}
                   </div>
+
+                  {/* Dayparting visual */}
+                  {action.type === 'dayparting' && Array.isArray(action.metrics?.activeHours) && (
+                    <div className="mt-4">
+                      <DaypartingGrid activeHours={action.metrics.activeHours as number[]} />
+                    </div>
+                  )}
 
                   {/* Buttons — every pending action gets buttons */}
                   {pending && (
@@ -314,6 +479,261 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
       )}
     </div>
   )
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   AUDIT — Bayesian / Power-calc / Thompson / DiD helpers
+   ═════════════════════════════════════════════════════════════════ */
+function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']> }) {
+  const breakeven = b.breakeven ?? 1.0
+  const passed = b.lowerROAS != null && b.lowerROAS > breakeven
+  const conf = b.confidenceLevel ?? 0.95
+  return (
+    <div
+      className="rounded-lg p-3 grid grid-cols-2 gap-3"
+      style={{ background: passed ? C.greenBg : C.surfaceMuted, border: `1px solid ${passed ? C.greenBorder : C.border}` }}
+    >
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Shrunken ROAS</p>
+        <p className="text-base font-bold tabular-nums" style={{ color: C.text }}>
+          {b.shrunkenROAS != null ? `${b.shrunkenROAS.toFixed(2)}x` : '—'}
+        </p>
+      </div>
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>
+          Lower ROAS · {Math.round(conf * 100)}%
+        </p>
+        <p className="text-base font-bold tabular-nums" style={{ color: passed ? C.green : C.text }}>
+          {b.lowerROAS != null ? `${b.lowerROAS.toFixed(2)}x` : '—'}
+        </p>
+      </div>
+      {passed && (
+        <div className="col-span-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-md" style={{ background: '#fff', color: C.green, border: `1px solid ${C.greenBorder}` }}>
+            <CheckCircle size={10} /> Above breakeven ({breakeven.toFixed(2)}x) at {Math.round(conf * 100)}% confidence
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PowerCalcBadge({ p }: { p: NonNullable<AuditSnapshot['powerCalc']> }) {
+  const tone = p.reachedFloor
+    ? { bg: C.greenBg, fg: C.green, border: C.greenBorder, label: 'Power floor reached' }
+    : { bg: C.amberBg, fg: C.amber, border: C.amberBorder, label: 'Below power floor' }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md whitespace-nowrap"
+      style={{ background: tone.bg, color: tone.fg, border: `1px solid ${tone.border}` }}
+      title={p.minDays != null ? `Min ${p.minDays}d required${p.daysObserved != null ? `, ${p.daysObserved}d observed` : ''}` : undefined}
+    >
+      <BarChart3 size={10} /> {tone.label}
+      {p.daysObserved != null && p.minDays != null && (
+        <span className="font-mono">{p.daysObserved}/{p.minDays}d</span>
+      )}
+    </span>
+  )
+}
+
+function ThompsonAllocationBar({ adSets }: { adSets: NonNullable<AuditSnapshot['adSets']> }) {
+  const allocs = adSets
+    .filter((a) => typeof a.thompsonAllocation === 'number')
+    .map((a) => ({ name: a.name || a.id || '?', alloc: a.thompsonAllocation as number }))
+  if (allocs.length === 0) return null
+  const total = allocs.reduce((s, a) => s + a.alloc, 0) || 1
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: C.textMuted }}>Thompson allocation</p>
+      <div className="rounded-md overflow-hidden flex h-2" style={{ border: `1px solid ${C.borderLight}` }}>
+        {allocs.map((a, i) => {
+          const pct = (a.alloc / total) * 100
+          const palette = [C.accent, C.green, C.purple, C.amber, C.red, C.indigo, C.blue]
+          return <div key={i} title={`${a.name}: ${pct.toFixed(0)}%`} style={{ width: `${pct}%`, background: palette[i % palette.length] }} />
+        })}
+      </div>
+      <div className="flex flex-wrap gap-2 mt-2">
+        {allocs.map((a, i) => {
+          const pct = (a.alloc / total) * 100
+          const palette = [C.accent, C.green, C.purple, C.amber, C.red, C.indigo, C.blue]
+          return (
+            <div key={i} className="flex items-center gap-1 text-[11px]" style={{ color: C.textSecondary }}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: palette[i % palette.length] }} />
+              <span className="truncate max-w-[160px]">{a.name}</span>
+              <span className="font-mono tabular-nums" style={{ color: C.textMuted }}>{pct.toFixed(0)}%</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+type DiDPoint = { day: number; observed: number; counterfactual: number }
+function MiniDiDChart({ data }: { data: DiDPoint[] }) {
+  if (!data || data.length === 0) return null
+  const w = 180, h = 44, pad = 2
+  const maxY = Math.max(...data.map((d) => Math.max(d.observed, d.counterfactual)), 1)
+  const minDay = Math.min(...data.map((d) => d.day))
+  const maxDay = Math.max(...data.map((d) => d.day))
+  const dx = maxDay === minDay ? 1 : maxDay - minDay
+  const xAt = (d: number) => pad + ((d - minDay) / dx) * (w - 2 * pad)
+  const yAt = (v: number) => h - pad - (v / maxY) * (h - 2 * pad)
+  const obsPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xAt(d.day)},${yAt(d.observed)}`).join(' ')
+  const cfPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xAt(d.day)},${yAt(d.counterfactual)}`).join(' ')
+  const last = data[data.length - 1]
+  const fatigueRatio = last.counterfactual > 0 ? last.observed / last.counterfactual : 1
+  const isFatigued = fatigueRatio < 0.85
+  return (
+    <div className="inline-flex items-center gap-2">
+      <svg width={w} height={h} aria-label="DiD creative fatigue">
+        <path d={cfPath} fill="none" stroke={C.textFaint} strokeWidth={1.25} strokeDasharray="3 2" />
+        <path d={obsPath} fill="none" stroke={isFatigued ? C.red : C.green} strokeWidth={1.5} />
+        {data.map((d, i) => (
+          <circle key={i} cx={xAt(d.day)} cy={yAt(d.observed)} r={1.5} fill={isFatigued ? C.red : C.green} />
+        ))}
+      </svg>
+      <div className="text-[10px] leading-tight" style={{ color: C.textMuted }}>
+        <div>obs vs <span style={{ color: C.textFaint }}>cf</span></div>
+        <div className="font-mono tabular-nums" style={{ color: isFatigued ? C.red : C.green }}>
+          {(fatigueRatio * 100).toFixed(0)}%
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function shadowFieldText(v: unknown): string {
+  if (v == null) return '—'
+  if (typeof v === 'string') return v.replace(/_/g, ' ')
+  if (typeof v === 'object') {
+    const obj = v as Record<string, unknown>
+    const t = typeof obj.type === 'string' ? obj.type : undefined
+    const tn = typeof obj.targetName === 'string' ? obj.targetName : undefined
+    const r = typeof obj.reason === 'string' ? obj.reason : undefined
+    if (t || tn) return [t?.replace(/_/g, ' '), tn].filter(Boolean).join(' · ')
+    if (r) return r
+    try { return JSON.stringify(v) } catch { return String(v) }
+  }
+  return String(v)
+}
+
+function ShadowActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: string }) {
+  const [actions, setActions] = useState<ShadowAction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const d = await getShadowActions(tenantId, campaignId)
+        if (!cancelled) {
+          setActions(d)
+          setError(null)
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    setLoading(true)
+    load()
+    return () => { cancelled = true }
+  }, [tenantId, campaignId])
+
+  if (loading) return <div className="py-6 text-center" style={{ color: C.textMuted }}><Loader2 size={14} className="animate-spin mx-auto" /></div>
+  if (error) return <p className="text-xs px-3 py-3 rounded-md" style={{ background: C.redBg, color: C.red }}>Shadow actions: {error}</p>
+  if (actions.length === 0) return <p className="text-xs italic px-3 py-6 text-center" style={{ color: C.textMuted }}>No shadow actions captured.</p>
+
+  return (
+    <div className="rounded-lg overflow-x-auto" style={{ border: `1px solid ${C.borderLight}` }}>
+      <table className="w-full">
+        <thead>
+          <tr style={{ background: C.surfaceMuted, borderBottom: `1px solid ${C.borderLight}` }}>
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Proposed</th>
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Blocked because</th>
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Regret</th>
+            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {actions.map((a, i) => (
+            <tr key={i} style={{ borderBottom: i < actions.length - 1 ? `1px solid ${C.borderLight}` : 'none' }}>
+              <td className="px-3 py-2.5 text-xs font-semibold capitalize" style={{ color: C.text }}>
+                {shadowFieldText(a.proposedAction)}
+              </td>
+              <td className="px-3 py-2.5 text-xs" style={{ color: C.textSecondary }}>
+                {shadowFieldText(a.blockedReason)}
+              </td>
+              <td className="px-3 py-2.5">
+                <RegretLabel label={a.regretLabel} />
+              </td>
+              <td className="px-3 py-2.5 text-right text-[11px] tabular-nums" style={{ color: C.textMuted }}>
+                {a.age || (a.proposedAt ? formatRelativeTime(a.proposedAt) : '—')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   SIBLING GROUPING — pair *_VIDEO ↔ *_IMAGE ad sets
+   ═════════════════════════════════════════════════════════════════ */
+type SiblingFormat = 'video' | 'image'
+
+interface AdSetGroupRow {
+  adSet: CampaignAdSet
+  formatTag?: SiblingFormat
+  siblingFormat?: SiblingFormat
+  groupHead?: boolean
+}
+
+function detectFormatTag(name?: string): SiblingFormat | undefined {
+  if (!name) return undefined
+  if (/_VIDEO\b/i.test(name)) return 'video'
+  if (/_IMAGE\b/i.test(name)) return 'image'
+  return undefined
+}
+
+function siblingBaseName(name?: string) {
+  return name?.replace(/_(VIDEO|IMAGE)\b/i, '') ?? ''
+}
+
+function groupSiblings(adSets: CampaignAdSet[]): AdSetGroupRow[] {
+  const byBase = new Map<string, CampaignAdSet[]>()
+  for (const a of adSets) {
+    const base = siblingBaseName(a.name)
+    if (!base) continue
+    if (!byBase.has(base)) byBase.set(base, [])
+    byBase.get(base)!.push(a)
+  }
+
+  const out: AdSetGroupRow[] = []
+  const seen = new Set<CampaignAdSet>()
+
+  for (const a of adSets) {
+    if (seen.has(a)) continue
+    const base = siblingBaseName(a.name)
+    const fmt = detectFormatTag(a.name)
+    const peers = (byBase.get(base) ?? []).filter((p) => p !== a && detectFormatTag(p.name) && detectFormatTag(p.name) !== fmt)
+    const sibling = peers[0]
+    if (sibling && fmt) {
+      const sibFmt = detectFormatTag(sibling.name)!
+      out.push({ adSet: a, formatTag: fmt, siblingFormat: sibFmt, groupHead: true })
+      out.push({ adSet: sibling, formatTag: sibFmt, siblingFormat: fmt, groupHead: false })
+      seen.add(a)
+      seen.add(sibling)
+    } else {
+      out.push({ adSet: a, formatTag: fmt })
+      seen.add(a)
+    }
+  }
+  return out
 }
 
 /* ═════════════════════════════════════════════════════════════════
@@ -421,6 +841,8 @@ export default function CampaignDetailPage({ params }: PageProps) {
               {campaign.source === 'agent' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}><Bot size={11} />Agent</span>}
               {campaign.source === 'manual' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><User size={11} />Manual</span>}
               {campaign.objective && <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{campaign.objective}</span>}
+              <FormatBadge format={campaign.creativeFormat} />
+              <PromptsVersionBadge version={campaign.promptsVersion} />
               {campaign.metaCampaignId && <code className="font-mono text-[11px]" style={{ color: C.textMuted }}>{campaign.metaCampaignId}</code>}
               {campaign.launchedAt && <span><Clock size={10} className="inline mr-1" />{formatDate(campaign.launchedAt)}</span>}
               {campaign.lastAuditedAt && <span><Shield size={10} className="inline mr-1" />{formatDateTime(campaign.lastAuditedAt)}</span>}
@@ -563,7 +985,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <div className="overflow-x-auto"><table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={`px-5 py-3 text-[10px] font-bold uppercase tracking-widest ${i === 0 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}><td className="px-5 py-4"><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="px-5 py-4 text-right text-sm font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="px-5 py-4 text-right text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => <th key={h} className={`px-5 py-3 text-[10px] font-bold uppercase tracking-widest ${i < 2 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead><tbody>{live.map((a, i) => <AdSetRow key={a.metaAdSetId || i} adSet={a} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => <th key={h} className={`px-5 py-3 text-[10px] font-bold uppercase tracking-widest ${i < 2 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>
@@ -591,6 +1013,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     })}</div>
                   })()}
                   <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.textMuted }}>Shadow Actions</p>
+                      <span className="text-[10px]" style={{ color: C.textFaint }}>What the agent considered but blocked.</span>
+                    </div>
+                    <ShadowActionsPanel tenantId={tenantId} campaignId={campaignId} />
+                  </div>
+
+                  <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: C.textMuted }}>Timeline</p>
                     {snaps.slice(0, 15).map((snap, i) => {
                       const v = snap.verdict, vc = v.verdict === 'act' ? C.red : v.verdict === 'watch' ? C.amber : C.green
@@ -606,11 +1036,46 @@ export default function CampaignDetailPage({ params }: PageProps) {
                             <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snap.auditedAt)}</span>
                             {snap.metrics.roas != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>ROAS {snap.metrics.roas.toFixed(2)}x</span>}
                             {snap.metrics.spend != null && <span className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>· {formatCurrency(snap.metrics.spend)}</span>}
+                            {snap.powerCalc && <PowerCalcBadge p={snap.powerCalc} />}
                           </div>
+                          {snap.bayesian && <div className="mt-2"><BayesianVerdictPanel b={snap.bayesian} /></div>}
+                          {snap.adSets && snap.adSets.length > 0 && <div className="mt-2"><ThompsonAllocationBar adSets={snap.adSets} /></div>}
                           {sk ? <div className="flex gap-3 mt-0.5">{[snap.metrics.spend != null && `${formatCurrency(snap.metrics.spend)} spent`, snap.metrics.conversions != null && `${snap.metrics.conversions} conv.`, snap.metrics.ctr != null && `CTR ${snap.metrics.ctr.toFixed(2)}%`].filter(Boolean).map((t, k) => <span key={k} className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>{t}</span>)}</div> : v.contextInsight ? <p className="text-[13px] leading-relaxed" style={{ color: C.textSecondary }}>{v.contextInsight}</p> : null}
                           {v.recommendedActions?.length ? <div className="flex flex-wrap gap-1 mt-1.5">{v.recommendedActions.map((a, j) => <span key={j} className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{typeof a === 'string' ? a : (a.reason ?? a.targetName ?? a.type ?? '')}</span>)}</div> : null}
                           {snap.adSets?.length && !sk ? (() => { const w = snap.adSets!.filter(a => a.metrics?.roas != null && a.metrics.roas >= 1.5); const rr = snap.adSets!.some(a => (a.metrics?.conversions ?? 0) >= 20); const fw = snap.ads?.filter(a => a.metrics?.ctr != null && a.metrics.ctr < 0.5) || []; if (!w.length && !rr && !fw.length) return null; return <div className="flex flex-wrap gap-1.5 mt-2">{w.map((a, k) => <span key={k} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}><TrendingUp size={9} />{a.name}: {a.metrics!.roas!.toFixed(1)}x</span>)}{rr && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.blueBg, color: C.blue }}><Target size={9} />Retarget ready</span>}{fw.length > 0 && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.amberBg, color: C.amber }}><FlameKindling size={9} />{fw.length} fatigue</span>}</div> })() : null}
-                          {snap.ads?.length ? <details className="mt-2"><summary className="text-[11px] cursor-pointer font-semibold" style={{ color: C.textMuted }}>{snap.ads.length} ad{snap.ads.length !== 1 ? 's' : ''}</summary><div className="mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderLight}` }}><table className="w-full"><thead><tr style={{ background: C.surfaceMuted }}>{['Ad', 'Hook', 'Impr.', 'Spend', 'CTR', 'Conv.'].map(h => <th key={h} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-left" style={{ color: C.textMuted }}>{h}</th>)}</tr></thead><tbody>{snap.ads.map((a, j) => <tr key={a.id || j} style={{ borderBottom: `1px solid ${C.borderLight}` }}><td className="px-3 py-1.5 text-xs font-medium" style={{ color: C.text }}>{a.name || '—'}</td><td className="px-3 py-1.5">{a.hookStyle ? <span className="text-[11px] px-1.5 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{a.hookStyle}</span> : '—'}</td><td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.impressions?.toLocaleString() ?? '—'}</td><td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.spend ? formatCurrency(a.metrics.spend) : '—'}</td><td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.ctr != null ? `${a.metrics.ctr.toFixed(2)}%` : '—'}</td><td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.conversions ?? '—'}</td></tr>)}</tbody></table></div></details> : null}
+                          {snap.ads?.length ? (
+                            <details className="mt-2">
+                              <summary className="text-[11px] cursor-pointer font-semibold" style={{ color: C.textMuted }}>{snap.ads.length} ad{snap.ads.length !== 1 ? 's' : ''}</summary>
+                              <div className="mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderLight}` }}>
+                                <table className="w-full">
+                                  <thead>
+                                    <tr style={{ background: C.surfaceMuted }}>
+                                      {['Ad', 'Hook', 'Impr.', 'Spend', 'CTR', 'Conv.', 'Fatigue (DiD)'].map(h => (
+                                        <th key={h} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-left" style={{ color: C.textMuted }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {snap.ads.map((a, j) => (
+                                      <tr key={a.id || j} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+                                        <td className="px-3 py-1.5 text-xs font-medium" style={{ color: C.text }}>{a.name || '—'}</td>
+                                        <td className="px-3 py-1.5">{a.hookStyle ? <span className="text-[11px] px-1.5 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{a.hookStyle}</span> : '—'}</td>
+                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.impressions?.toLocaleString() ?? '—'}</td>
+                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.spend ? formatCurrency(a.metrics.spend) : '—'}</td>
+                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.ctr != null ? `${a.metrics.ctr.toFixed(2)}%` : '—'}</td>
+                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.conversions ?? '—'}</td>
+                                        <td className="px-3 py-1.5">
+                                          {a.didFatigue && a.didFatigue.length > 0
+                                            ? <MiniDiDChart data={a.didFatigue} />
+                                            : <span className="text-[11px]" style={{ color: C.textFaint }}>—</span>}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </details>
+                          ) : null}
                         </div>
                       </div>
                     })}

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -9,15 +10,25 @@ import {
   BookOpen,
   Settings,
   Zap,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getCampaigns } from '@/lib/api'
 
 interface SidebarProps {
   tenantId: string
 }
 
-const navItems = (tenantId: string) => [
-  { href: `/dashboard/${tenantId}`,          label: 'Overview',       icon: LayoutDashboard },
+interface NavItem {
+  href: string
+  label: string
+  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; strokeWidth?: number }>
+  badge?: number
+}
+
+const navItems = (tenantId: string, pendingCount: number): NavItem[] => [
+  { href: `/dashboard/${tenantId}`,           label: 'Overview',       icon: LayoutDashboard },
+  { href: `/dashboard/${tenantId}/approvals`, label: 'Approvals',      icon: Inbox,           badge: pendingCount },
   { href: `/dashboard/${tenantId}/runs`,      label: 'Pipeline Runs',  icon: Activity        },
   { href: `/dashboard/${tenantId}/campaigns`, label: 'Campaigns',      icon: Megaphone       },
   { href: `/dashboard/${tenantId}/learnings`, label: 'Learnings',      icon: BookOpen        },
@@ -26,7 +37,29 @@ const navItems = (tenantId: string) => [
 
 export function Sidebar({ tenantId }: SidebarProps) {
   const pathname = usePathname()
-  const items = navItems(tenantId)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    async function tick() {
+      try {
+        const list = await getCampaigns(tenantId)
+        if (!cancelled) {
+          setPendingCount(list.filter((c) => c.status === 'pending_approval').length)
+        }
+      } catch {
+        /* silent — sidebar shouldn't break on a fetch failure */
+      }
+    }
+    tick()
+    const id = window.setInterval(tick, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [tenantId])
+
+  const items = navItems(tenantId, pendingCount)
 
   return (
     <aside
@@ -70,7 +103,15 @@ export function Sidebar({ tenantId }: SidebarProps) {
               style={isActive ? { background: '#eef2ff', color: '#4338ca' } : { color: '#6b7280' }}
             >
               <Icon size={16} style={{ color: isActive ? '#4f46e5' : '#9ca3af' }} strokeWidth={isActive ? 2 : 1.5} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge != null && item.badge > 0 && (
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none tabular-nums"
+                  style={{ background: '#f59e0b', color: '#ffffff' }}
+                >
+                  {item.badge}
+                </span>
+              )}
             </Link>
           )
         })}
