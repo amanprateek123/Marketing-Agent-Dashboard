@@ -22,6 +22,10 @@ export interface Product {
   customConversionId?: string    // Custom conversion from Meta Events Manager (takes priority)
   pixelId?: string               // Per-product pixel override (blank = use company default)
   conversionValue?: number
+  // Decimal 0-1 (e.g. 0.97 = 97% margin after COGS/fulfilment/fees). Drives
+  // breakeven ROAS = 1 / contributionMargin in the auditor's loss detection.
+  // Falls back to vertical typical when unset.
+  contributionMargin?: number
   category?: string
 }
 
@@ -119,6 +123,19 @@ export type CampaignActionType =
   | 'narrow_placement'
   | 'dayparting'
   | 'refresh_audience'
+
+// Primary leak class the audit agent diagnoses for each campaign. Mirrors
+// LeakDiagnosis in the backend (audit-agent.service.ts). Drives the
+// LeakDiagnosisBadge color + tooltip.
+export type LeakDiagnosis =
+  | 'creative_leak'
+  | 'audience_lp_leak'
+  | 'creative_diversity_leak'
+  | 'auction_leak'
+  | 'chronic_unprofitable'
+  | 'data_gap'
+  | 'fragmentation'
+  | 'none'
 
 export interface UsageResponse {
   totalUSD: number
@@ -456,8 +473,25 @@ export interface AuditSnapshot {
     verdict: 'no_action' | 'watch' | 'act'
     urgency?: 'immediate' | '48h' | '7d' | null
     contextInsight?: string
+    // Primary leak the agent diagnosed (see LEAK DIAGNOSIS FRAMEWORK in the
+    // auditor prompt). Synthetic skips (cooldown / parser failure) leave it null;
+    // all-green skips set it to 'none'.
+    leakDiagnosis?: LeakDiagnosis | null
     recommendedActions?: Array<string | { type: string; targetId?: string; targetName?: string; reason?: string; priority?: string }>
   }
+  // Margin-aware breakeven ROAS resolved on this audit pass. Source tells you
+  // whether the value came from the active product, the vertical default, or the
+  // 0.50 fallback — useful for confirming the tenant has configured the right
+  // contributionMargin.
+  breakeven?: {
+    margin: number
+    breakevenROAS: number
+    source: 'product' | 'vertical' | 'default'
+  }
+  // Full AuditSignalPacket — persisted post 2026-05-19 so all-green and cooldown
+  // skips are forensically diagnosable. Loose-typed because the packet shape is
+  // owned by the backend; UI consumes specific sub-paths defensively.
+  signals?: Record<string, unknown>
   bayesian?: {
     shrunkenROAS?: number
     lowerROAS?: number

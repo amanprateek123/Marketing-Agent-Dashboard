@@ -228,6 +228,33 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
             </div></div>
             <div><FieldLabel>Conversion Value</FieldLabel><NumericInput value={product.conversionValue != null ? String(product.conversionValue) : ''} onChange={v => set('conversionValue', v ? Number(v) : undefined)} placeholder="999" /></div>
           </div>
+          {/* Contribution margin — the cents-on-the-rupee you keep after COGS,
+              fulfilment, fees, and refunds. Drives breakeven ROAS = 1 / margin
+              in the auditor. Leave blank to fall back to the vertical default;
+              set it here when the per-product economics differ from typical. */}
+          <div>
+            <FieldLabel>Contribution Margin</FieldLabel>
+            <div className="flex items-center gap-2">
+              <div className="w-32">
+                <NumericInput
+                  value={product.contributionMargin != null ? String(Math.round(product.contributionMargin * 100)) : ''}
+                  onChange={v => {
+                    const n = v ? Number(v) : NaN
+                    if (!Number.isFinite(n)) { set('contributionMargin', undefined); return }
+                    const clamped = Math.max(0, Math.min(100, n))
+                    set('contributionMargin', clamped / 100)
+                  }}
+                  suffix="%"
+                  placeholder="97"
+                />
+              </div>
+              <p className="text-[11px]" style={{ color: '#6b7280' }}>
+                {product.contributionMargin != null && product.contributionMargin > 0
+                  ? <>→ breakeven ROAS <span className="font-mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
+                  : 'Vertical default applies when blank'}
+              </p>
+            </div>
+          </div>
           <ConversionTracking product={product} onChange={onChange} />
           <div><FieldLabel>Landing URL</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
           <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>

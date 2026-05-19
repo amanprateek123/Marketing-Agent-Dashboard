@@ -9,11 +9,20 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  AlertTriangle,
+  Users,
+  Sparkles,
+  TrendingDown,
+  Activity,
+  Database,
+  Scissors,
+  Target,
 } from 'lucide-react'
 import type {
   AudienceStage,
   CreativeFormat,
   HookStyle,
+  LeakDiagnosis,
 } from '@/types'
 
 // ── AudienceStageBadge ────────────────────────────────────────────────────
@@ -139,6 +148,110 @@ export function UrgencyDot({ urgency }: { urgency?: 'high' | 'medium' | 'low' | 
     >
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: color }} />
       {urgency}
+    </span>
+  )
+}
+
+// ── LeakDiagnosisBadge ────────────────────────────────────────────────────
+// Maps the audit agent's diagnosed primary leak to a badge with:
+//   - color (severity tier: red=urgent stop, orange=fix this cycle, yellow=schedule, gray=healthy)
+//   - icon (visual category cue)
+//   - tooltip explaining what the leak means + what action follows
+// 'none' renders a green "Healthy" pill; null renders nothing (synthetic skip).
+const LEAK_DIAGNOSIS_CONFIG: Record<
+  LeakDiagnosis,
+  { label: string; bg: string; fg: string; border: string; icon: React.ElementType; tooltip: string }
+> = {
+  chronic_unprofitable: {
+    label: 'Unprofitable',
+    bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: TrendingDown,
+    tooltip: 'Shrunken + upper-95% ROAS both below breakeven with ≥3 conversions. Action: pause worst-ROAS ad set.',
+  },
+  data_gap: {
+    label: 'Data Gap',
+    bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: Database,
+    tooltip: 'conversionValue missing on the active product — ROAS uncomputable. Fix the product config before any pause/scale.',
+  },
+  auction_leak: {
+    label: 'Auction Leak',
+    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: Activity,
+    tooltip: 'Account-wide CPMs spiking while your campaign is stable. Action: reduce_total_budget / dayparting — not creative.',
+  },
+  creative_leak: {
+    label: 'Creative Leak',
+    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: AlertTriangle,
+    tooltip: 'CTR below benchmark or fatigued. Action: replace_creative on the worst ads.',
+  },
+  audience_lp_leak: {
+    label: 'Audience / LP',
+    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: Users,
+    tooltip: 'CTR healthy but CVR collapsed — audience or landing page leaks. Action: refresh_audience, investigate LP funnel. Do NOT replace_creative.',
+  },
+  creative_diversity_leak: {
+    label: 'Hook Saturation',
+    bg: '#fefce8', fg: '#a16207', border: '#fde68a', icon: Sparkles,
+    tooltip: 'One hookStyle monopolises this audience (≥70% impressions). Action: add_creative with a different hookStyle.',
+  },
+  fragmentation: {
+    label: 'Fragmented',
+    bg: '#fefce8', fg: '#a16207', border: '#fde68a', icon: Scissors,
+    tooltip: 'Too many overlapping ad sets, none past learning phase. Action: consolidate via shift_budget_between_adsets.',
+  },
+  none: {
+    label: 'Healthy',
+    bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', icon: CheckCircle2,
+    tooltip: 'No leak identified by the auditor. Check INSUFFICIENT EVIDENCE in contextInsight if this is a young campaign.',
+  },
+}
+
+export function LeakDiagnosisBadge({ leak }: { leak?: LeakDiagnosis | null }) {
+  if (!leak) return null
+  const c = LEAK_DIAGNOSIS_CONFIG[leak]
+  if (!c) return null
+  const Icon = c.icon
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{ background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}
+      title={c.tooltip}
+    >
+      <Icon size={11} /> {c.label}
+    </span>
+  )
+}
+
+// ── BreakevenBadge ────────────────────────────────────────────────────────
+// Renders ROAS in context of its margin-aware breakeven. The numbers in
+// isolation are misleading — ROAS 1.2x looks fine until you know the
+// product needs 5x to break even. Color flips red below breakeven, amber
+// below 1.5×, green at/above 1.5×. Tooltip surfaces the resolution source
+// (product / vertical / default) so you can tell if margin is configured.
+export function BreakevenBadge({
+  roas,
+  breakeven,
+  source,
+}: {
+  roas?: number | null
+  breakeven?: number | null
+  source?: 'product' | 'vertical' | 'default' | null
+}) {
+  if (roas == null || breakeven == null || breakeven <= 0) return null
+  const ratio = roas / breakeven
+  const palette = ratio < 1
+    ? { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' }
+    : ratio < 1.5
+      ? { bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' }
+      : { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0' }
+  const sourceLabel = source
+    ? source === 'product' ? 'product-set margin' : source === 'vertical' ? 'vertical default' : 'fallback margin (0.50)'
+    : null
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap font-mono"
+      style={{ background: palette.bg, color: palette.fg, border: `1px solid ${palette.border}` }}
+      title={`Breakeven ROAS ${breakeven.toFixed(2)}x${sourceLabel ? ` (${sourceLabel})` : ''}. ROAS below breakeven = losing money after COGS/fees.`}
+    >
+      <Target size={10} /> Breakeven {breakeven.toFixed(2)}x
     </span>
   )
 }

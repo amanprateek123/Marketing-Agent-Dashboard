@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
-import { FormatBadge, PromptsVersionBadge, RegretLabel } from '@/components/badges'
+import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
 import { getShadowActions } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction } from '@/types'
@@ -862,7 +862,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <MetricCell label="Clicks" value={campaign.clicks?.toLocaleString() ?? '—'} />
             <MetricCell label="CTR" value={campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : '—'} color={C.amber} />
             <MetricCell label="CPC" value={campaign.cpc ? formatCurrency(campaign.cpc) : '—'} />
-            <MetricCell label="ROAS" value={campaign.roas != null ? `${campaign.roas.toFixed(2)}x` : '—'} color={rc} />
+            <div>
+              <MetricCell label="ROAS" value={campaign.roas != null ? `${campaign.roas.toFixed(2)}x` : '—'} color={rc} />
+              {/* Breakeven context — sourced from the latest audit signals.breakeven.
+                  Without this, ROAS in isolation is misleading (1.2x looks fine
+                  until you know breakeven is 5x for low-margin products). */}
+              {snaps[0]?.breakeven?.breakevenROAS != null && (
+                <div className="mt-1.5">
+                  <BreakevenBadge
+                    roas={campaign.roas}
+                    breakeven={snaps[0].breakeven.breakevenROAS}
+                    source={snaps[0].breakeven.source}
+                  />
+                </div>
+              )}
+            </div>
             <MetricCell label="Conversions" value={campaign.conversions ?? '—'} color={C.green} />
           </div>
           {campaign.budget != null && campaign.budget > 0 && (
@@ -880,7 +894,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <div className="mt-4 rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: s.bg, border: `1px solid ${s.b}` }}>
                 <Shield size={14} className="mt-0.5 shrink-0" style={{ color: s.c }} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap"><span className="text-xs font-bold" style={{ color: s.c }}>{s.l}</span>{v.urgency && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: s.b, color: s.c }}>{v.urgency === 'immediate' ? 'Immediate' : v.urgency}</span>}<span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snaps[0].auditedAt)}</span></div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold" style={{ color: s.c }}>{s.l}</span>
+                    {v.urgency && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: s.b, color: s.c }}>{v.urgency === 'immediate' ? 'Immediate' : v.urgency}</span>}
+                    <LeakDiagnosisBadge leak={v.leakDiagnosis} />
+                    <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snaps[0].auditedAt)}</span>
+                  </div>
                   {v.contextInsight && <p className="text-sm mt-1 leading-relaxed" style={{ color: s.c }}>{v.contextInsight}</p>}
                 </div>
               </div>
@@ -1026,13 +1045,20 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       const v = snap.verdict, vc = v.verdict === 'act' ? C.red : v.verdict === 'watch' ? C.amber : C.green
                       const vb = v.verdict === 'act' ? C.redBg : v.verdict === 'watch' ? C.amberBg : C.greenBg
                       const vl = v.verdict === 'act' ? 'Act' : v.verdict === 'watch' ? 'Watch' : 'OK'
-                      const sk = v.contextInsight?.includes('agent skipped')
+                      // Synthetic verdicts (skipped Claude call): cooldown, all-green legacy
+                      // ('agent skipped'), all-green healthy, all-green insufficient evidence.
+                      // Match all four phrasings so condensed-row treatment fires regardless of
+                      // when the snapshot was written.
+                      const ci = v.contextInsight ?? ''
+                      const sk = /agent skipped|campaign healthy|INSUFFICIENT EVIDENCE|Cooldown —/.test(ci)
+                      const insufficient = /INSUFFICIENT EVIDENCE/.test(ci)
                       return <div key={i} className="flex gap-3 py-3" style={{ borderBottom: i < Math.min(snaps.length, 15) - 1 ? `1px solid ${C.borderLight}` : 'none' }}>
                         <div className="flex flex-col items-center shrink-0 mt-1"><div className="w-2.5 h-2.5 rounded-full" style={{ background: vc }} />{i < Math.min(snaps.length, 15) - 1 && <div className="w-px flex-1 mt-1" style={{ background: C.border, minHeight: 16 }} />}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: vb, color: vc }}>{vl}{v.urgency === 'immediate' ? ' • Now' : v.urgency === '48h' ? ' • 48h' : v.urgency === '7d' ? ' • 7d' : ''}</span>
-                            {sk && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>All clear</span>}
+                            {sk && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: insufficient ? C.amberBg : C.surfaceMuted, color: insufficient ? C.amber : C.textMuted }}>{insufficient ? 'No evidence yet' : 'All clear'}</span>}
+                            <LeakDiagnosisBadge leak={v.leakDiagnosis} />
                             <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snap.auditedAt)}</span>
                             {snap.metrics.roas != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>ROAS {snap.metrics.roas.toFixed(2)}x</span>}
                             {snap.metrics.spend != null && <span className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>· {formatCurrency(snap.metrics.spend)}</span>}
