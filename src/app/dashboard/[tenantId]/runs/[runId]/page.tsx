@@ -113,11 +113,11 @@ function PhaseProgress({ status }: { status: string }) {
                   }
                 >
                   {done ? (
-                    <CheckCircle2 size={12} style={{ color: 'var(--surface)' }} />
+                    <CheckCircle2 size={12} style={{ color: '#0c0a09' }} />
                   ) : active ? (
                     <Loader2 size={11} className="animate-spin" style={{ color: 'var(--accent)' }} />
                   ) : isFailed && idx <= currentPhaseIdx ? (
-                    <Circle size={8} style={{ color: 'var(--surface)' }} />
+                    <Circle size={8} style={{ color: '#0c0a09' }} />
                   ) : (
                     <span className="text-[8px] font-bold" style={{ color: 'var(--ink-4)' }}>{idx + 1}</span>
                   )}
@@ -204,7 +204,7 @@ function FailureBanner({ tenantId, error }: { tenantId: string; error?: string }
           onClick={handleResume}
           disabled={resuming}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-60 shrink-0"
-          style={{ background: 'var(--warn)', color: 'var(--surface)' }}
+          style={{ background: 'var(--warn)', color: '#0c0a09' }}
         >
           {resuming ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} fill="currentColor" />}
           {resuming ? 'Triggering…' : 'Resume'}
@@ -382,7 +382,7 @@ function CreativeInlinePanel({
                 const isSel = i === (selectedCopyIndex ?? 0)
                 return (
                   <div key={i} className="relative">
-                    {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: 'var(--surface)' }}>Selected</span>}
+                    {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#0c0a09' }}>Selected</span>}
                     {img.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={img.imageUrl} alt={`Variant ${i + 1}`} className="rounded-lg w-full" style={{ border: isSel ? '2px solid var(--good)' : '1px solid var(--hairline)', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
@@ -906,9 +906,9 @@ function CreativeEntryCard({
                       return (
                         <div key={i} className="flex flex-col gap-1.5">
                           <div className="relative">
-                            {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: 'var(--surface)' }}>Selected</span>}
+                            {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#0c0a09' }}>Selected</span>}
                             {cardState === 'polling' && (
-                              <div className="absolute inset-0 z-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.7)' }}>
+                              <div className="absolute inset-0 z-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(12,10,9,0.7)' }}>
                                 <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
                               </div>
                             )}

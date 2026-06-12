@@ -281,7 +281,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
             style={
               segmentFilter === 'all'
-                ? { background: 'var(--accent)', color: '#fff' }
+                ? { background: 'var(--accent)', color: '#0c0a09' }
                 : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
             }
           >
@@ -297,7 +297,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                 className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
                 style={
                   active
-                    ? { background: 'var(--accent)', color: '#fff' }
+                    ? { background: 'var(--accent)', color: '#0c0a09' }
                     : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
                 }
               >

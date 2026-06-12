@@ -23,7 +23,7 @@ function getRoleConfig(from: string): {
       bubbleStyle: { background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', color: 'var(--ink)' },
       align: 'left',
       avatarBg: 'var(--accent)',
-      avatarColor: '#ffffff',
+      avatarColor: '#0c0a09',
     }
   }
   if (r === 'contrarian') {
@@ -32,7 +32,7 @@ function getRoleConfig(from: string): {
       bubbleStyle: { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--ink)' },
       align: 'right',
       avatarBg: 'var(--bad)',
-      avatarColor: '#ffffff',
+      avatarColor: '#0c0a09',
     }
   }
   if (r === 'reviewer') {
@@ -41,7 +41,7 @@ function getRoleConfig(from: string): {
       bubbleStyle: { background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--ink)' },
       align: 'center',
       avatarBg: 'var(--warn)',
-      avatarColor: '#ffffff',
+      avatarColor: '#0c0a09',
     }
   }
   return {
@@ -49,7 +49,7 @@ function getRoleConfig(from: string): {
     bubbleStyle: { background: 'var(--muted)', border: '1px solid var(--hairline)', color: 'var(--ink)' },
     align: 'center',
     avatarBg: 'var(--ink-2)',
-    avatarColor: '#ffffff',
+    avatarColor: '#0c0a09',
   }
 }
 

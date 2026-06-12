@@ -177,7 +177,7 @@ function ConversionTracking({ product, onChange }: { product: Product; onChange:
       <div className="flex gap-2 flex-wrap">
         {([{ value: 'standard', label: 'Standard Event' }, { value: 'custom_event', label: 'Custom Event' }, { value: 'custom_conversion', label: 'Custom Conversion' }] as const).map(opt => (
           <button key={opt.value} onClick={() => setMode(opt.value)} className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={mode === opt.value ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
+            style={mode === opt.value ? { background: 'var(--accent)', color: '#0c0a09' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -617,7 +617,7 @@ export default function SettingsPage({ params }: PageProps) {
               <FieldLabel>Strategy</FieldLabel>
               {(['conservative', 'balanced', 'experimental'] as const).map(s => (
                 <button key={s} onClick={() => setPipeline(p => ({ ...p, campaignStrategy: s }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize"
-                  style={pipeline.campaignStrategy === s ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{s}</button>
+                  style={pipeline.campaignStrategy === s ? { background: 'var(--accent)', color: '#0c0a09' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{s}</button>
               ))}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -647,7 +647,7 @@ export default function SettingsPage({ params }: PageProps) {
               <FieldLabel>Agent Team Mode</FieldLabel>
               {(['sequential', 'cli'] as const).map(m => (
                 <button key={m} onClick={() => setPipeline(p => ({ ...p, teamMode: m }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                  style={(pipeline as Record<string, unknown>).teamMode === m ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>
+                  style={(pipeline as Record<string, unknown>).teamMode === m ? { background: 'var(--accent)', color: '#0c0a09' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>
                   {m === 'sequential' ? 'Sequential (default)' : 'CLI Debate'}
                 </button>
               ))}

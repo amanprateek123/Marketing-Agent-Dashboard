@@ -37,13 +37,16 @@ export function TriggerPipelineButton({ tenantId }: TriggerPipelineButtonProps) 
       <button
         onClick={handleTrigger}
         disabled={state === 'loading'}
-        className={cn(
-          'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200',
-          state === 'loading' && 'bg-indigo-500/50 text-white/60 cursor-not-allowed',
-          state === 'success' && 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-          state === 'error' && 'bg-rose-500/20 text-rose-400 border border-rose-500/30',
-          state === 'idle' && 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30'
-        )}
+        className={cn('btn', state === 'idle' && 'btn-accent')}
+        style={
+          state === 'loading'
+            ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)', border: '1px solid var(--accent-border)', cursor: 'not-allowed' }
+            : state === 'success'
+            ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }
+            : state === 'error'
+            ? { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }
+            : undefined
+        }
       >
         {state === 'loading' ? (
           <Loader2 size={15} className="animate-spin" />
@@ -55,7 +58,7 @@ export function TriggerPipelineButton({ tenantId }: TriggerPipelineButtonProps) 
         {state === 'loading' ? 'Triggering...' : state === 'success' ? 'Triggered!' : state === 'error' ? 'Retry' : 'Trigger Pipeline'}
       </button>
       {message && (
-        <span className={cn('text-xs', state === 'success' ? 'text-emerald-400' : 'text-rose-400')}>
+        <span className="text-xs" style={{ color: state === 'success' ? 'var(--good)' : 'var(--bad)' }}>
           {message}
         </span>
       )}

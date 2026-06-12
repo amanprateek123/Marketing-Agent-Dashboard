@@ -59,7 +59,7 @@ function FilterPill({ label, active, onClick }: { label: string; active: boolean
       className="text-[11px] font-medium px-3 py-1.5 rounded-full transition-all duration-200 capitalize"
       style={
         active
-          ? { background: 'var(--accent)', color: '#ffffff' }
+          ? { background: 'var(--accent)', color: '#0c0a09' }
           : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
       }
     >

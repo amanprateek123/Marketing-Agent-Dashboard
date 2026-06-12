@@ -22,23 +22,25 @@ interface SidebarProps {
 interface NavItem {
   href: string
   label: string
+  code: string
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; strokeWidth?: number }>
   badge?: number
 }
 
 const navItems = (tenantId: string, pendingCount: number): NavItem[] => [
-  { href: `/dashboard/${tenantId}`,              label: 'Overview',      icon: LayoutDashboard },
-  { href: `/dashboard/${tenantId}/approvals`,    label: 'Approvals',     icon: Inbox, badge: pendingCount },
-  { href: `/dashboard/${tenantId}/runs`,         label: 'Pipeline Runs', icon: Activity },
-  { href: `/dashboard/${tenantId}/campaigns`,    label: 'Campaigns',     icon: Megaphone },
-  { href: `/dashboard/${tenantId}/learnings`,    label: 'Learnings',     icon: BookOpen },
-  { href: `/dashboard/${tenantId}/intelligence`, label: 'Intelligence',  icon: Brain },
-  { href: `/dashboard/${tenantId}/settings`,     label: 'Settings',      icon: Settings },
+  { href: `/dashboard/${tenantId}`,              label: 'Overview',     code: '01', icon: LayoutDashboard },
+  { href: `/dashboard/${tenantId}/approvals`,    label: 'Approvals',    code: '02', icon: Inbox, badge: pendingCount },
+  { href: `/dashboard/${tenantId}/runs`,         label: 'Pipeline',     code: '03', icon: Activity },
+  { href: `/dashboard/${tenantId}/campaigns`,    label: 'Campaigns',    code: '04', icon: Megaphone },
+  { href: `/dashboard/${tenantId}/learnings`,    label: 'Learnings',    code: '05', icon: BookOpen },
+  { href: `/dashboard/${tenantId}/intelligence`, label: 'Intelligence', code: '06', icon: Brain },
+  { href: `/dashboard/${tenantId}/settings`,     label: 'Config',       code: '07', icon: Settings },
 ]
 
 export function Sidebar({ tenantId }: SidebarProps) {
   const pathname = usePathname()
   const [pendingCount, setPendingCount] = useState(0)
+  const [reachable, setReachable] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -47,9 +49,10 @@ export function Sidebar({ tenantId }: SidebarProps) {
         const list = await getCampaigns(tenantId)
         if (!cancelled) {
           setPendingCount(list.filter((c) => c.status === 'pending_approval').length)
+          setReachable(true)
         }
       } catch {
-        /* silent — sidebar shouldn't break on a fetch failure */
+        if (!cancelled) setReachable(false)
       }
     }
     tick()
@@ -64,28 +67,33 @@ export function Sidebar({ tenantId }: SidebarProps) {
 
   return (
     <aside
-      className="w-[236px] shrink-0 flex flex-col h-screen sticky top-0"
-      style={{ background: 'var(--surface-warm)', borderRight: '1px solid var(--hairline)' }}
+      className="w-[218px] shrink-0 flex flex-col h-screen sticky top-0"
+      style={{ background: 'var(--surface)', borderRight: '1px solid var(--hairline)' }}
     >
-      {/* Wordmark — the serif IS the brand */}
-      <div className="px-6 pt-7 pb-5">
-        <Link href={`/dashboard/${tenantId}`} className="block group">
-          <p
-            className="font-display text-[26px] leading-none tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
+      {/* Wordmark — the serif italic is the one human voice in the console */}
+      <div className="px-5 pt-6 pb-4">
+        <Link href={`/dashboard/${tenantId}`} className="block">
+          <p className="font-display italic text-[24px] leading-none" style={{ color: 'var(--ink)' }}>
             Brief<span style={{ color: 'var(--accent)' }}>OS</span>
-            <span className="font-display italic" style={{ color: 'var(--ink-4)' }}>.</span>
           </p>
-          <p className="micro-label mt-2">Marketing Intelligence</p>
         </Link>
+        {/* System status line */}
+        <div
+          className="mt-3.5 flex items-center gap-2 rounded-md px-2.5 py-2"
+          style={{ background: 'var(--paper)', border: '1px solid var(--hairline)' }}
+        >
+          <span className={cn('beacon', reachable === false && 'beacon-bad')} />
+          <span className="mono text-[10px] tracking-wider" style={{ color: reachable === false ? 'var(--bad)' : 'var(--good)' }}>
+            {reachable === false ? 'API OFFLINE' : 'OPERATIONAL'}
+          </span>
+          <span className="mono text-[10px] ml-auto truncate" style={{ color: 'var(--ink-4)' }}>
+            {tenantId.slice(0, 10)}
+          </span>
+        </div>
       </div>
 
-      <hr className="rule mx-6" />
-
       {/* Nav */}
-      <nav className="flex-1 px-3 py-5 flex flex-col gap-px overflow-y-auto">
-        <p className="micro-label px-3 pb-2">Workspace</p>
+      <nav className="flex-1 px-3 py-2 flex flex-col gap-px overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon
           const isActive = item.href === `/dashboard/${tenantId}`
@@ -96,32 +104,26 @@ export function Sidebar({ tenantId }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                'relative flex items-center gap-2.5 px-3 py-[9px] rounded-lg text-[13px] transition-all duration-150',
-              )}
+              className="relative flex items-center gap-2.5 px-3 py-[8px] rounded-lg text-[12.5px] transition-all duration-120"
               style={
                 isActive
-                  ? { background: 'var(--surface)', color: 'var(--ink)', fontWeight: 650, boxShadow: 'var(--shadow-soft)', border: '1px solid var(--hairline)' }
+                  ? { background: 'var(--accent-bg)', color: 'var(--ink)', fontWeight: 650, border: '1px solid var(--accent-border)' }
                   : { color: 'var(--ink-2)', fontWeight: 500, border: '1px solid transparent' }
               }
             >
-              {/* Active indicator — hairline accent bar */}
-              {isActive && (
-                <span
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-[16px] rounded-full"
-                  style={{ background: 'var(--accent)' }}
-                />
-              )}
+              <span className="mono text-[9px] w-4 shrink-0" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
+                {item.code}
+              </span>
               <Icon
-                size={15}
+                size={14}
                 strokeWidth={isActive ? 2.1 : 1.6}
-                style={{ color: isActive ? 'var(--accent)' : 'var(--ink-3)' }}
+                style={{ color: isActive ? 'var(--accent-strong)' : 'var(--ink-3)' }}
               />
               <span className="flex-1">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
                 <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none tabular-nums"
-                  style={{ background: 'var(--warn)', color: '#fff' }}
+                  className="mono text-[10px] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums"
+                  style={{ background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}
                 >
                   {item.badge}
                 </span>
@@ -131,18 +133,10 @@ export function Sidebar({ tenantId }: SidebarProps) {
         })}
       </nav>
 
-      {/* Tenant footer */}
-      <div className="px-6 py-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
-        <div className="flex items-center gap-2">
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: 'var(--good)', boxShadow: '0 0 0 3px var(--good-bg)' }}
-          />
-          <span className="mono text-[11px] truncate" style={{ color: 'var(--ink-3)' }}>
-            {tenantId}
-          </span>
-        </div>
-        <p className="text-[10px] mt-1.5" style={{ color: 'var(--ink-4)' }}>v0.2 · editorial console</p>
+      <div className="px-5 py-3.5" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+        <p className="mono text-[9px] tracking-widest" style={{ color: 'var(--ink-4)' }}>
+          BRIEFOS v0.3 · MISSION CONTROL
+        </p>
       </div>
     </aside>
   )

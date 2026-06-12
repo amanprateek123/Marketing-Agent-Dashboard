@@ -115,7 +115,7 @@ export function ConfirmModal({
               onClick={onConfirm}
               disabled={loading}
               className={isDanger ? 'btn' : 'btn btn-accent'}
-              style={isDanger ? { background: 'var(--bad)', color: '#ffffff' } : undefined}
+              style={isDanger ? { background: 'var(--bad)', color: '#0c0a09' } : undefined}
             >
               {loading ? (
                 <span className="flex items-center gap-2">
