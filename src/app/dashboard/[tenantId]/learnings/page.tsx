@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { HookStyleChip } from '@/components/badges'
 import { cn, formatCurrency, formatRelativeTime } from '@/lib/utils'
-import type { Company, CaseStudy, WinningExemplar, CausalInsight } from '@/types'
+import type { Company, CaseStudy, WinningExemplar, CausalInsight, AudienceScoreEntry } from '@/types'
 
 const API_BASE = 'http://localhost:8082/api/v1'
 
@@ -44,6 +44,65 @@ function TagList({
         <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={styles[color]}>
           {item}
         </span>
+      ))}
+    </div>
+  )
+}
+
+// Backend audienceScores entries migrated from flat numbers to { roas, n,
+// updatedAt }. Rendering `score.toFixed(1)` on the object shape crashed this
+// page (the "Learning tab error"). Normalize both shapes to one row model.
+function normalizeAudienceScores(
+  scores: Record<string, number | AudienceScoreEntry> | undefined,
+): Array<{ audience: string; roas: number; n: number | null }> {
+  if (!scores) return []
+  return Object.entries(scores)
+    .map(([audience, v]) => {
+      if (typeof v === 'number') return { audience, roas: v, n: null }
+      const roas = Number((v as AudienceScoreEntry)?.roas)
+      const n = Number((v as AudienceScoreEntry)?.n)
+      return { audience, roas: Number.isFinite(roas) ? roas : 0, n: Number.isFinite(n) ? n : null }
+    })
+    .sort((a, b) => b.roas - a.roas)
+}
+
+function AudienceScoreRows({ scores }: { scores: Array<{ audience: string; roas: number; n: number | null }> }) {
+  const maxRoas = Math.max(1.5, ...scores.map((s) => s.roas))
+  return (
+    <div className="flex flex-col gap-2">
+      {scores.map(({ audience, roas, n }) => (
+        <div key={audience} className="flex items-center justify-between gap-3">
+          <span className="text-sm capitalize truncate" style={{ color: '#52525b' }}>
+            {audience.replace(/_/g, ' ')}
+          </span>
+          <div className="flex items-center gap-2 flex-1 max-w-[200px]">
+            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.min((roas / maxRoas) * 100, 100)}%`,
+                  background: roas >= 1.5 ? '#15803d' : roas >= 1 ? '#b45309' : '#b91c1c',
+                }}
+              />
+            </div>
+            <span className="text-xs font-semibold w-14 text-right tabular-nums" style={{ color: '#18181b' }}>
+              {roas.toFixed(2)}x
+            </span>
+            {n !== null && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0"
+                title={`${n} campaigns/ad sets behind this score`}
+                style={
+                  n >= 5
+                    ? { background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }
+                    : { background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }
+                }
+              >
+                n={n}
+              </span>
+            )}
+          </div>
+        </div>
       ))}
     </div>
   )
@@ -210,11 +269,15 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) {
   const [segmentFilter, setSegmentFilter] = useState<string>('all')
 
-  const segments = Array.from(new Set(exemplars.map((e) => e.audienceSegment))).sort()
+  // audienceSegment is optional on backend entries — undefined crashed the
+  // chip .replace() calls. Bucket missing values under 'unknown'.
+  const segmentOf = (e: WinningExemplar) => e.audienceSegment || 'unknown'
+  const segments = Array.from(new Set(exemplars.map(segmentOf))).sort()
   const filtered = segmentFilter === 'all'
     ? exemplars
-    : exemplars.filter((e) => e.audienceSegment === segmentFilter)
+    : exemplars.filter((e) => segmentOf(e) === segmentFilter)
   const sorted = [...filtered].sort((a, b) => b.ctr - a.ctr)
+  const hasProduct = exemplars.some((e) => e.product)
 
   return (
     <div>
@@ -232,7 +295,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             All ({exemplars.length})
           </button>
           {segments.map((s) => {
-            const count = exemplars.filter((e) => e.audienceSegment === s).length
+            const count = exemplars.filter((e) => segmentOf(e) === s).length
             const active = segmentFilter === s
             return (
               <button
@@ -262,6 +325,9 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Hook</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Style</th>
               <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Audience</th>
+              {hasProduct && (
+                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Product</th>
+              )}
               <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>CTR</th>
               <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>n</th>
               <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Captured</th>
@@ -280,9 +346,16 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                 </td>
                 <td className="px-3 py-2.5">
                   <span className="text-[11px] capitalize" style={{ color: '#6b7280' }}>
-                    {e.audienceSegment.replace(/_/g, ' ')}
+                    {segmentOf(e).replace(/_/g, ' ')}
                   </span>
                 </td>
+                {hasProduct && (
+                  <td className="px-3 py-2.5">
+                    <span className="text-[11px]" style={{ color: '#6b7280' }}>
+                      {e.product ?? '—'}
+                    </span>
+                  </td>
+                )}
                 <td className="px-3 py-2.5 text-right text-xs tabular-nums font-bold" style={{ color: '#15803d' }}>
                   {e.ctr.toFixed(2)}%
                 </td>
@@ -296,7 +369,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-xs italic" style={{ color: '#9ca3af' }}>
+                <td colSpan={hasProduct ? 7 : 6} className="px-3 py-8 text-center text-xs italic" style={{ color: '#9ca3af' }}>
                   No exemplars match the current filter.
                 </td>
               </tr>
@@ -451,9 +524,19 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
             style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
           >
             <div className="flex items-start justify-between gap-3 mb-3">
-              <p className="text-sm font-semibold leading-snug" style={{ color: '#111827' }}>
-                {insight.finding}
-              </p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug" style={{ color: '#111827' }}>
+                  {insight.finding}
+                </p>
+                {insight.productName && (
+                  <span
+                    className="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded font-medium"
+                    style={{ background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }}
+                  >
+                    {insight.productName}
+                  </span>
+                )}
+              </div>
               <span
                 className="text-[11px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap shrink-0"
                 style={{ background: confColor.bg, color: confColor.fg, border: `1px solid ${confColor.border}` }}
@@ -475,10 +558,10 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
                   Controlled for
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {insight.controlledFor.length === 0 ? (
+                  {(insight.controlledFor ?? []).length === 0 ? (
                     <span className="text-[11px] italic" style={{ color: '#9ca3af' }}>none</span>
                   ) : (
-                    insight.controlledFor.map((c) => (
+                    (insight.controlledFor ?? []).map((c) => (
                       <span
                         key={c}
                         className="text-[10px] px-1.5 py-0.5 rounded"
@@ -808,38 +891,16 @@ export default function LearningsPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Audience scores */}
+            {/* Audience scores (tenant-aggregate ROAS) */}
             {campaign?.audienceScores && Object.keys(campaign.audienceScores).length > 0 && (
               <div className="rounded-xl p-5" style={cardStyle}>
                 <h3
                   className="text-xs font-semibold uppercase tracking-wider mb-3"
                   style={{ color: '#4338ca' }}
                 >
-                  Audience Scores
+                  Audience ROAS · all products
                 </h3>
-                <div className="flex flex-col gap-2">
-                  {Object.entries(campaign.audienceScores)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, score]) => (
-                      <div key={type} className="flex items-center justify-between gap-3">
-                        <span className="text-sm capitalize" style={{ color: '#52525b' }}>{type}</span>
-                        <div className="flex items-center gap-2 flex-1 max-w-[140px]">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${Math.min((score / 5) * 100, 100)}%`,
-                                background: score >= 3 ? '#15803d' : score >= 2 ? '#b45309' : '#b91c1c',
-                              }}
-                            />
-                          </div>
-                          <span className="text-xs font-semibold w-8 text-right" style={{ color: '#18181b' }}>
-                            {score.toFixed(1)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                </div>
+                <AudienceScoreRows scores={normalizeAudienceScores(campaign.audienceScores)} />
               </div>
             )}
 
@@ -874,6 +935,35 @@ export default function LearningsPage({ params }: PageProps) {
           </div>
         )}
       </div>
+
+      {/* ===== SECTION A1b: AUDIENCE PERFORMANCE BY PRODUCT ===== */}
+      {campaign?.audienceScoresByProduct && Object.keys(campaign.audienceScoresByProduct).length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+              Audience Performance by Product
+            </h2>
+          </div>
+          <p className="text-xs mb-4" style={{ color: '#a1a1aa' }}>
+            What the audit verdicts and targeting guards actually consume — per-product scores beat the
+            all-products aggregate. Amber n = thin sample, treated as hypothesis-grade by the agents.
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {Object.entries(campaign.audienceScoresByProduct).map(([product, scores]) => {
+              const rows = normalizeAudienceScores(scores)
+              if (rows.length === 0) return null
+              return (
+                <div key={product} className="rounded-xl p-5" style={cardStyle}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#4338ca' }}>
+                    {product}
+                  </h3>
+                  <AudienceScoreRows scores={rows} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ===== SECTION A2: WINNING EXEMPLARS ===== */}
       {creative?.winningExemplars && creative.winningExemplars.length > 0 && (

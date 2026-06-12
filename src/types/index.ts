@@ -68,10 +68,23 @@ export interface PromptsHistoryEntry {
 export interface WinningExemplar {
   hookLine: string
   hookStyle: HookStyle | string
-  audienceSegment: string
+  audienceSegment?: string
+  /** Which product this exemplar won for (per-product attribution; older entries lack it) */
+  product?: string
   ctr: number
   sampleSize: number
   extractedAt: string
+}
+
+/**
+ * Audience score entry — backend migrated from flat numbers to
+ * { roas, n, updatedAt } so scores carry sample size. Old documents may
+ * still hold plain numbers; render code must handle both shapes.
+ */
+export interface AudienceScoreEntry {
+  roas: number
+  n: number
+  updatedAt?: string
 }
 
 export interface HookSaturationCell {
@@ -82,10 +95,12 @@ export interface HookSaturationCell {
 export interface CausalInsight {
   finding: string
   isolatedVariable: string
-  controlledFor: string[]
+  controlledFor?: string[]
   rootCause: string
   confidence: number
   dataPoints: number
+  /** Product the insight applies to (tenant-wide when unset) */
+  productName?: string
 }
 
 export interface AdSetPerformance {
@@ -180,7 +195,11 @@ export interface Company {
       audienceHookSaturation?: Record<string, Record<string, HookSaturationCell>>
     }
     campaign?: {
-      audienceScores?: Record<string, number>
+      audienceScores?: Record<string, number | AudienceScoreEntry>
+      /** Per-product audience ROAS — what the audit priors and targeting guards actually consume */
+      audienceScoresByProduct?: Record<string, Record<string, AudienceScoreEntry>>
+      /** Stable Meta-import baseline (merged into agent scores at Day-30) */
+      importedAudienceScoresByProduct?: Record<string, Record<string, AudienceScoreEntry>>
       budgetInsights?: string[]
       timingInsights?: string[]
     }

@@ -318,9 +318,18 @@ function ApprovalCard({
     : 0
   const overCap = weeklyCap > 0 && projectedCommitted > weeklyCap
 
-  // Historical CPA from learnings.campaign.audienceScores
+  // Learned audience ROAS from learnings.campaign.audienceScores. Entries are
+  // { roas, n } objects (legacy: flat numbers) — Number() on the object shape
+  // rendered ₹NaN here. Normalize both shapes; this was also never CPA.
   const audienceScores = company?.learnings?.campaign?.audienceScores ?? {}
-  const cpaEntries = Object.entries(audienceScores).slice(0, 4)
+  const roasEntries = Object.entries(audienceScores)
+    .map(([audience, v]) => ({
+      audience,
+      roas: typeof v === 'number' ? v : Number((v as { roas?: number })?.roas) || 0,
+      n: typeof v === 'number' ? null : Number((v as { n?: number })?.n) || null,
+    }))
+    .sort((a, b) => b.roas - a.roas)
+    .slice(0, 4)
 
   async function saveBudget() {
     const parsed = Number(budgetDraft)
@@ -464,7 +473,7 @@ function ApprovalCard({
             </a>
           )}
 
-          {audienceScores && cpaEntries.length > 0 && (
+          {roasEntries.length > 0 && (
             <div
               className="rounded-lg p-3 space-y-1.5"
               style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}
@@ -473,9 +482,9 @@ function ApprovalCard({
                 className="text-[10px] font-semibold uppercase tracking-wider"
                 style={{ color: '#9ca3af' }}
               >
-                Historical CPA
+                Learned Audience ROAS
               </p>
-              {cpaEntries.map(([audience, score]) => (
+              {roasEntries.map(({ audience, roas, n }) => (
                 <div key={audience} className="flex items-center justify-between gap-2">
                   <span
                     className="text-[11px] capitalize truncate"
@@ -485,9 +494,9 @@ function ApprovalCard({
                   </span>
                   <span
                     className="text-[11px] font-semibold tabular-nums"
-                    style={{ color: '#111827' }}
+                    style={{ color: roas >= 1.5 ? '#15803d' : roas >= 1 ? '#b45309' : '#b91c1c' }}
                   >
-                    {formatCurrency(Number(score))}
+                    {roas.toFixed(2)}x{n !== null ? ` · n=${n}` : ''}
                   </span>
                 </div>
               ))}
