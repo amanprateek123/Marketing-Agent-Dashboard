@@ -26,6 +26,13 @@ export interface Product {
   // breakeven ROAS = 1 / contributionMargin in the auditor's loss detection.
   // Falls back to vertical typical when unset.
   contributionMargin?: number
+  // Percent of conversions that refund (0-95). When set, the whole decision
+  // chain optimizes on NET revenue: effective value = value × (1 − rate/100).
+  // Leave unset when refunds don't apply.
+  refundRatePercent?: number
+  // When true, ALL ad creative for this product omits price from copy,
+  // headlines, and image overlays (premium positioning — lander handles price).
+  hidePriceInCreative?: boolean
   category?: string
 }
 
@@ -124,6 +131,76 @@ export interface ShadowAction {
   age?: string
   proposedAt?: string
   evaluatedAt?: string
+}
+
+// ── System Intelligence (feedback-loop telemetry) ───────────────────────────
+
+export interface ExecutedActionRecord {
+  _id?: string
+  campaignId: string
+  metaCampaignId: string
+  action: { type: string; targetId: string; targetName?: string; reason?: string; priority?: string }
+  trigger: 'auto_applied' | 'grace_expired' | 'human_approved'
+  context?: { ageDays?: number; productName?: string; audienceType?: string }
+  executedAt: string
+  metricsAtT?: { spend: number; conversions: number; cpa: number; roas: number }
+  metricsAtT72h?: { spend: number; conversions: number; cpa: number; roas: number } | null
+  outcomeLabel: 'improved' | 'worsened' | 'neutral' | 'inconclusive' | null
+  status: 'pending' | 'evaluated_24h' | 'final'
+}
+
+export interface ActionOutcomesResponse {
+  trackRecord: {
+    total: number
+    byActionType: Array<{
+      actionType: string
+      total: number
+      improved: number
+      worsened: number
+      neutral: number
+      inconclusive: number
+      worsenedRatePct: number
+    }>
+    recentWorsened: Array<{
+      actionType: string
+      targetName: string
+      ageDays: number | null
+      audienceType: string | null
+      cpaAtT: number
+      cpaAtT72h: number
+      executedAt: string
+    }>
+  }
+  recent: ExecutedActionRecord[]
+}
+
+export interface RegretSummary {
+  total: number
+  byActionAndReason: Array<{
+    actionType: string
+    blockedReason: string
+    total: number
+    correct: number
+    missed: number
+    inconclusive: number
+    regretRatePct: number
+  }>
+}
+
+export interface PromptVersionEval {
+  newerVersion: number
+  olderVersion: number
+  newer: { campaigns: number; totalSpend: number; totalConversions: number; weightedROAS: number; cpa: number }
+  older: { campaigns: number; totalSpend: number; totalConversions: number; weightedROAS: number; cpa: number }
+  verdict: 'improved' | 'regressed' | 'neutral' | 'inconclusive'
+  detail: string
+  createdAt?: string
+}
+
+export interface SignalAccuracy {
+  briefsWithOutcomes: number
+  bySource: Array<{ source: string; launched: number; converted: number; avgROAS: number }>
+  byPlatform: Array<{ platform: string; launched: number; converted: number; avgROAS: number }>
 }
 
 export type CampaignActionType =
@@ -290,6 +367,8 @@ export interface IntelligenceBrief {
   selected?: boolean
   sourcePlatforms?: string[]
   ideaSource?: 'scout_signal' | 'viral_trend' | 'competitor_gap' | 'market_insight' | 'meta_ads_gap'
+  /** The specific coordinator signals that inspired this brief (signal→outcome traceability) */
+  sourceSignals?: Array<{ topic: string; platforms: string[]; compositeScore: number }>
   day7Performance?: null | Record<string, unknown>
   audienceStage?: AudienceStage
   explorationArm?: boolean

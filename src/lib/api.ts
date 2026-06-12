@@ -7,6 +7,10 @@ import type {
   AuditSnapshot,
   ShadowAction,
   UsageResponse,
+  ActionOutcomesResponse,
+  RegretSummary,
+  PromptVersionEval,
+  SignalAccuracy,
 } from '@/types'
 
 export const API_BASE =
@@ -24,6 +28,19 @@ export async function apiFetch<T = unknown>(
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
   return res.json()
 }
+
+// ── System Intelligence (feedback-loop telemetry) ──────────────────────────
+export const getActionOutcomes = (tenantId: string) =>
+  apiFetch<ActionOutcomesResponse>(`/learning/${tenantId}/action-outcomes`)
+
+export const getRegretSummary = (tenantId: string) =>
+  apiFetch<RegretSummary>(`/learning/${tenantId}/regret-summary`)
+
+export const getPromptVersionEvals = (tenantId: string) =>
+  apiFetch<PromptVersionEval[]>(`/learning/${tenantId}/prompt-version-evals`)
+
+export const getSignalAccuracy = (tenantId: string) =>
+  apiFetch<SignalAccuracy>(`/pipeline/${tenantId}/signal-accuracy`)
 
 // ── Companies ──────────────────────────────────────────────────────────────
 export const getCompany = (tenantId: string) =>

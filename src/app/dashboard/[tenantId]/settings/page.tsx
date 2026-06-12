@@ -255,6 +255,49 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
               </p>
             </div>
           </div>
+          {/* Refund rate — when set, every ROAS/breakeven decision in the agent
+              runs on NET revenue: effective value = value × (1 − rate). Leave
+              blank when refunds don't apply (current behavior unchanged). */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+            <div>
+              <FieldLabel>Refund Rate</FieldLabel>
+              <div className="flex items-center gap-2">
+                <div className="w-32">
+                  <NumericInput
+                    value={product.refundRatePercent != null ? String(product.refundRatePercent) : ''}
+                    onChange={v => {
+                      const n = v ? Number(v) : NaN
+                      if (!Number.isFinite(n)) { set('refundRatePercent', undefined); return }
+                      set('refundRatePercent', Math.max(0, Math.min(95, n)))
+                    }}
+                    suffix="%"
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-[11px]" style={{ color: '#6b7280' }}>
+                  {product.refundRatePercent != null && product.refundRatePercent > 0 && product.conversionValue != null
+                    ? <>→ net value <span className="font-mono font-semibold">₹{Math.round(product.conversionValue * (1 - product.refundRatePercent / 100)).toLocaleString()}</span></>
+                    : 'Blank = no refunds (gross revenue)'}
+                </p>
+              </div>
+            </div>
+            <div>
+              <FieldLabel>Hide Price In Creative</FieldLabel>
+              <button
+                type="button"
+                onClick={() => set('hidePriceInCreative', !product.hidePriceInCreative)}
+                className="flex items-center gap-2 mt-1"
+                title="When on, ad copy/images omit price — the landing page handles pricing (premium positioning)"
+              >
+                {product.hidePriceInCreative
+                  ? <ToggleRight size={20} style={{ color: '#059669' }} />
+                  : <ToggleLeft size={20} style={{ color: '#d1d5db' }} />}
+                <span className="text-[11px]" style={{ color: '#6b7280' }}>
+                  {product.hidePriceInCreative ? 'Price suppressed in all ads' : 'Price shown in ads (default)'}
+                </span>
+              </button>
+            </div>
+          </div>
           <ConversionTracking product={product} onChange={onChange} />
           <div><FieldLabel>Landing URL</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
           <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>

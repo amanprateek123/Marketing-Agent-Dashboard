@@ -8,6 +8,7 @@ import {
   Activity,
   Megaphone,
   BookOpen,
+  Brain,
   Settings,
   Zap,
   Inbox,
@@ -32,6 +33,7 @@ const navItems = (tenantId: string, pendingCount: number): NavItem[] => [
   { href: `/dashboard/${tenantId}/runs`,      label: 'Pipeline Runs',  icon: Activity        },
   { href: `/dashboard/${tenantId}/campaigns`, label: 'Campaigns',      icon: Megaphone       },
   { href: `/dashboard/${tenantId}/learnings`, label: 'Learnings',      icon: BookOpen        },
+  { href: `/dashboard/${tenantId}/intelligence`, label: 'Intelligence', icon: Brain          },
   { href: `/dashboard/${tenantId}/settings`,  label: 'Settings',       icon: Settings        },
 ]
 

@@ -149,6 +149,30 @@ export function IdeaDetailPanel({
               ))}
             </div>
 
+            {/* Source signals — the specific coordinator signals that inspired
+                this brief (signal→outcome traceability). */}
+            {brief.sourceSignals && brief.sourceSignals.length > 0 && (
+              <section>
+                <SectionLabel label="Inspired By" />
+                <div className="flex flex-col gap-1.5">
+                  {brief.sourceSignals.map((s, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 bg-cyan-50/50 border border-cyan-100"
+                    >
+                      <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800 shrink-0">
+                        {Number(s.compositeScore).toFixed(1)}
+                      </span>
+                      <p className="text-xs leading-snug text-cyan-900 min-w-0 truncate" title={s.topic}>{s.topic}</p>
+                      <span className="ml-auto text-[10px] text-cyan-600 capitalize shrink-0">
+                        {(s.platforms ?? []).join(', ')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Strategy Brief */}
             <section>
               <SectionLabel label="Strategy Brief" />
