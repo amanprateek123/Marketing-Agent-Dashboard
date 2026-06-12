@@ -10,7 +10,6 @@ import {
   RefreshCw,
   AlertCircle,
   ShieldCheck,
-  Inbox,
   PlayCircle,
   ImageOff,
   ExternalLink,
@@ -108,37 +107,21 @@ export default function ApprovalsPage({ params }: PageProps) {
   }, [company])
 
   return (
-    <div
-      className="px-6 py-6 max-w-6xl mx-auto animate-fade-up"
-      style={{ background: '#f8f9fb', minHeight: '100vh' }}
-    >
+    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-2xl flex items-center justify-center"
-            style={{ background: '#fef3c7', border: '1px solid #fde68a' }}
-          >
-            <Inbox size={16} style={{ color: '#b45309' }} />
-          </div>
-          <div>
-            <h1
-              className="text-lg font-bold tracking-tight"
-              style={{ color: '#111827' }}
-            >
-              Approvals Inbox
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-              {pending.length} campaign{pending.length === 1 ? '' : 's'} awaiting approval
-            </p>
-          </div>
+      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <p className="micro-label mb-2">Campaign launch queue</p>
+          <h1 className="page-title">Approvals Inbox</h1>
+          <p className="page-subtitle">
+            {pending.length} campaign{pending.length === 1 ? '' : 's'} awaiting approval
+          </p>
         </div>
 
         <button
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:border-sky-300 hover:text-sky-600 disabled:opacity-60"
-          style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563' }}
+          className="btn btn-ghost"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Refresh
@@ -151,8 +134,8 @@ export default function ApprovalsPage({ params }: PageProps) {
           className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
           style={
             toast.kind === 'error'
-              ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
-              : { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
+              ? { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }
+              : { background: 'var(--good-bg)', border: '1px solid var(--good-border)', color: 'var(--good)' }
           }
         >
           {toast.kind === 'error' ? <AlertCircle size={14} /> : <Check size={14} />}
@@ -169,7 +152,7 @@ export default function ApprovalsPage({ params }: PageProps) {
       {error && (
         <div
           className="rounded-xl p-4 mb-5 flex items-center gap-3 text-sm"
-          style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
+          style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
           <AlertCircle size={14} className="shrink-0" /> {error}
         </div>
@@ -179,20 +162,13 @@ export default function ApprovalsPage({ params }: PageProps) {
       {loading ? (
         <div
           className="flex items-center justify-center py-20 gap-2.5"
-          style={{ color: '#9ca3af' }}
+          style={{ color: 'var(--ink-2)' }}
         >
-          <Loader2 size={16} className="animate-spin" />
+          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
           <span className="text-sm">Loading approvals…</span>
         </div>
       ) : pending.length === 0 ? (
-        <div
-          className="rounded-2xl"
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
-            boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
-          }}
-        >
+        <div className="card">
           <EmptyState
             icon={ShieldCheck}
             title="Inbox zero"
@@ -224,42 +200,31 @@ export default function ApprovalsPage({ params }: PageProps) {
 function WeeklyCapBar({ committed, cap }: { committed: number; cap: number }) {
   const pct = Math.min(100, Math.round((committed / cap) * 100))
   const tone =
-    pct >= 90 ? { fg: '#b91c1c', bar: '#dc2626', bg: '#fee2e2' }
-    : pct >= 70 ? { fg: '#b45309', bar: '#f59e0b', bg: '#fef3c7' }
-    : { fg: '#166534', bar: '#22c55e', bg: '#dcfce7' }
+    pct >= 90 ? { fg: 'var(--bad)', bar: 'var(--bad)', chip: 'chip-bad' }
+    : pct >= 70 ? { fg: 'var(--warn)', bar: 'var(--warn)', chip: 'chip-warn' }
+    : { fg: 'var(--good)', bar: 'var(--good)', chip: 'chip-good' }
 
   return (
-    <div
-      className="rounded-xl px-4 py-3 mb-5"
-      style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
-    >
+    <div className="card px-5 py-4 mb-5">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
-          <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: '#6b7280' }}
-          >
-            Weekly cap committed
-          </span>
+          <span className="micro-label">Weekly cap committed</span>
         </div>
         <div className="flex items-baseline gap-1.5 tabular-nums">
-          <span className="text-sm font-bold" style={{ color: tone.fg }}>
+          <span className="text-sm font-semibold mono" style={{ color: tone.fg }}>
             {formatCurrency(committed)}
           </span>
-          <span className="text-xs" style={{ color: '#9ca3af' }}>
+          <span className="text-xs mono" style={{ color: 'var(--ink-3)' }}>
             of {formatCurrency(cap)}
           </span>
-          <span
-            className="text-[11px] px-1.5 py-0.5 rounded font-semibold ml-1"
-            style={{ background: tone.bg, color: tone.fg }}
-          >
+          <span className={`chip ${tone.chip} mono ml-1`}>
             {pct}%
           </span>
         </div>
       </div>
       <div
         className="h-1.5 rounded-full overflow-hidden"
-        style={{ background: '#f3f4f6' }}
+        style={{ background: 'var(--muted)' }}
       >
         <div
           className="h-full rounded-full transition-all"
@@ -392,31 +357,24 @@ function ApprovalCard({
   }
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
-      }}
-    >
+    <div className="card overflow-hidden">
       {/* Header strip */}
       <div
         className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
-        style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}
+        style={{ borderBottom: '1px solid var(--hairline-light)', background: 'var(--surface-warm)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Megaphone size={14} style={{ color: '#9ca3af' }} />
+          <Megaphone size={14} style={{ color: 'var(--ink-3)' }} />
           <Link
             href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-            className="text-sm font-semibold truncate hover:text-sky-600 transition-colors"
-            style={{ color: '#111827' }}
+            className="text-sm font-semibold truncate transition-opacity hover:opacity-70"
+            style={{ color: 'var(--ink)' }}
             title={campaign.name || campaign.topic || 'Untitled'}
           >
             {campaign.name || campaign.topic || 'Untitled campaign'}
           </Link>
           {campaign.name && campaign.topic && (
-            <span className="text-[11px] truncate" style={{ color: '#9ca3af' }}>
+            <span className="text-[11px] truncate" style={{ color: 'var(--ink-3)' }}>
               · {campaign.topic}
             </span>
           )}
@@ -428,8 +386,7 @@ function ApprovalCard({
           {campaign.runId && (
             <Link
               href={`/dashboard/${tenantId}/runs/${campaign.runId}`}
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded hover:underline"
-              style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}
+              className="chip chip-neutral mono hover:opacity-75 transition-opacity"
             >
               run · {campaign.runId.slice(0, 8)}
             </Link>
@@ -442,7 +399,7 @@ function ApprovalCard({
         <div className="space-y-2">
           <div
             className="aspect-square w-full rounded-xl overflow-hidden flex items-center justify-center"
-            style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}
+            style={{ background: 'var(--muted)', border: '1px solid var(--hairline)' }}
           >
             {image?.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -452,7 +409,7 @@ function ApprovalCard({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="flex flex-col items-center gap-2" style={{ color: '#9ca3af' }}>
+              <div className="flex flex-col items-center gap-2" style={{ color: 'var(--ink-3)' }}>
                 <ImageOff size={20} />
                 <span className="text-xs">No image yet</span>
               </div>
@@ -464,8 +421,8 @@ function ApprovalCard({
               href={videoUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all hover:bg-sky-50"
-              style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca' }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+              style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}
             >
               <PlayCircle size={13} />
               Watch video variant
@@ -474,27 +431,21 @@ function ApprovalCard({
           )}
 
           {roasEntries.length > 0 && (
-            <div
-              className="rounded-lg p-3 space-y-1.5"
-              style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}
-            >
-              <p
-                className="text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: '#9ca3af' }}
-              >
+            <div className="card-inset p-3 space-y-1.5">
+              <p className="micro-label">
                 Learned Audience ROAS
               </p>
               {roasEntries.map(({ audience, roas, n }) => (
                 <div key={audience} className="flex items-center justify-between gap-2">
                   <span
                     className="text-[11px] capitalize truncate"
-                    style={{ color: '#4b5563' }}
+                    style={{ color: 'var(--ink-2)' }}
                   >
                     {audience.replace(/_/g, ' ')}
                   </span>
                   <span
-                    className="text-[11px] font-semibold tabular-nums"
-                    style={{ color: roas >= 1.5 ? '#15803d' : roas >= 1 ? '#b45309' : '#b91c1c' }}
+                    className="text-[11px] font-semibold mono tabular-nums"
+                    style={{ color: roas >= 1.5 ? 'var(--good)' : roas >= 1 ? 'var(--warn)' : 'var(--bad)' }}
                   >
                     {roas.toFixed(2)}x{n !== null ? ` · n=${n}` : ''}
                   </span>
@@ -510,16 +461,13 @@ function ApprovalCard({
             <div className="space-y-2">
               <p
                 className="text-base font-semibold leading-snug"
-                style={{ color: '#111827' }}
+                style={{ color: 'var(--ink)' }}
               >
                 {variant.primaryText || '—'}
               </p>
               {variant.headline && (
-                <p className="text-sm" style={{ color: '#4b5563' }}>
-                  <span
-                    className="text-[10px] font-semibold uppercase tracking-wider mr-2"
-                    style={{ color: '#9ca3af' }}
-                  >
+                <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
+                  <span className="micro-label mr-2">
                     Headline
                   </span>
                   {variant.headline}
@@ -527,73 +475,58 @@ function ApprovalCard({
               )}
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 {variant.cta && (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
-                    style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}
-                  >
+                  <span className="chip chip-good">
                     CTA · {variant.cta}
                   </span>
                 )}
                 {variant.hookStyle && (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium capitalize"
-                    style={{ background: '#e0e7ff', color: '#3730a3', border: '1px solid #c7d2fe' }}
-                  >
+                  <span className="chip chip-accent capitalize">
                     {variant.hookStyle.replace(/_/g, ' ')}
                   </span>
                 )}
                 {campaign.objective && (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium capitalize"
-                    style={{ background: '#f3f4f6', color: '#4b5563' }}
-                  >
+                  <span className="chip chip-neutral capitalize">
                     {campaign.objective.replace(/_/g, ' ')}
                   </span>
                 )}
               </div>
             </div>
           ) : (
-            <p className="text-xs italic" style={{ color: '#9ca3af' }}>
+            <p className="text-xs italic" style={{ color: 'var(--ink-3)' }}>
               No copy variant selected yet — creative may still be in progress.
             </p>
           )}
 
           {/* Audience-stage badges */}
           {variants.length > 1 && (
-            <p className="text-[11px]" style={{ color: '#9ca3af' }}>
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
               Showing variant {idx + 1} of {variants.length}
             </p>
           )}
 
           {/* Budget + cap row */}
-          <div
-            className="rounded-lg p-3"
-            style={{ background: '#f9fafb', border: '1px solid #f3f4f6' }}
-          >
+          <div className="card-inset p-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <p
-                  className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: '#9ca3af' }}
-                >
+                <p className="micro-label">
                   Daily budget
                 </p>
                 {budgetEditing ? (
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm" style={{ color: '#6b7280' }}>₹</span>
+                    <span className="text-sm" style={{ color: 'var(--ink-3)' }}>₹</span>
                     <input
                       type="number"
                       value={budgetDraft}
                       onChange={(e) => setBudgetDraft(e.target.value)}
-                      className="w-28 px-2 py-1 rounded text-sm tabular-nums"
-                      style={{ background: '#ffffff', border: '1px solid #c7d2fe', outline: 'none', color: '#111827' }}
+                      className="input mono w-28 tabular-nums"
+                      style={{ padding: '4px 8px', borderColor: 'var(--accent-border)' }}
                       autoFocus
                     />
                     <button
                       onClick={saveBudget}
                       disabled={budgetState === 'loading'}
-                      className="px-2.5 py-1 rounded text-xs font-semibold disabled:opacity-60"
-                      style={{ background: '#4f46e5', color: '#fff' }}
+                      className="btn btn-accent"
+                      style={{ padding: '5px 12px', fontSize: '12px' }}
                     >
                       {budgetState === 'loading' ? <Loader2 size={11} className="animate-spin" /> : 'Save'}
                     </button>
@@ -603,7 +536,7 @@ function ApprovalCard({
                         setBudgetDraft(String(campaign.budget ?? 0))
                       }}
                       className="text-xs"
-                      style={{ color: '#9ca3af' }}
+                      style={{ color: 'var(--ink-3)' }}
                     >
                       Cancel
                     </button>
@@ -611,15 +544,15 @@ function ApprovalCard({
                 ) : (
                   <div className="flex items-center gap-2 mt-1">
                     <span
-                      className="text-base font-bold tabular-nums"
-                      style={{ color: '#111827' }}
+                      className="text-base font-semibold mono tabular-nums"
+                      style={{ color: 'var(--ink)' }}
                     >
                       {formatCurrency(budget)}
                     </span>
                     <button
                       onClick={() => setBudgetEditing(true)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded hover:bg-slate-100"
-                      style={{ color: '#4f46e5' }}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+                      style={{ color: 'var(--accent)' }}
                     >
                       <Pencil size={10} /> Edit
                     </button>
@@ -629,26 +562,18 @@ function ApprovalCard({
 
               {weeklyCap > 0 && (
                 <div className="text-right">
-                  <p
-                    className="text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: '#9ca3af' }}
-                  >
+                  <p className="micro-label">
                     If approved
                   </p>
                   <p
-                    className="text-sm font-semibold tabular-nums mt-1"
-                    style={{ color: overCap ? '#b91c1c' : '#111827' }}
+                    className="text-sm font-semibold mono tabular-nums mt-1"
+                    style={{ color: overCap ? 'var(--bad)' : 'var(--ink)' }}
                   >
                     {formatCurrency(projectedCommitted)} / {formatCurrency(weeklyCap)}{' '}
                     <span
-                      className="text-[11px] px-1.5 py-0.5 rounded font-semibold ml-1"
-                      style={
-                        overCap
-                          ? { background: '#fee2e2', color: '#b91c1c' }
-                          : projectedPct >= 70
-                            ? { background: '#fef3c7', color: '#b45309' }
-                            : { background: '#dcfce7', color: '#166534' }
-                      }
+                      className={`chip ml-1 ${
+                        overCap ? 'chip-bad' : projectedPct >= 70 ? 'chip-warn' : 'chip-good'
+                      }`}
                     >
                       {projectedPct}%
                     </span>
@@ -657,7 +582,7 @@ function ApprovalCard({
               )}
             </div>
             {overCap && (
-              <p className="text-[11px] mt-2" style={{ color: '#b91c1c' }}>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--bad)' }}>
                 Approving this campaign will exceed your weekly cap.
               </p>
             )}
@@ -666,10 +591,7 @@ function ApprovalCard({
           {/* Account picker if multiple */}
           {accountIds.length > 1 && (
             <div className="space-y-1">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: '#9ca3af' }}
-              >
+              <p className="micro-label">
                 Launch on Meta account
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -677,12 +599,7 @@ function ApprovalCard({
                   <button
                     key={id}
                     onClick={() => setAccountId(id)}
-                    className="px-2.5 py-1 rounded-full text-xs font-mono transition-all"
-                    style={
-                      accountId === id
-                        ? { background: '#4f46e5', color: '#fff' }
-                        : { background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }
-                    }
+                    className={`chip mono transition-all ${accountId === id ? 'chip-accent' : 'chip-neutral'}`}
                   >
                     {id}
                   </button>
@@ -696,12 +613,7 @@ function ApprovalCard({
             <button
               onClick={() => setApproveOpen(true)}
               disabled={approveState === 'loading' || !accountId}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
-              style={{
-                background: '#16a34a',
-                color: '#ffffff',
-                boxShadow: '0 2px 8px rgba(22,163,74,0.18)',
-              }}
+              className="btn btn-primary"
             >
               {approveState === 'loading' ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -714,12 +626,7 @@ function ApprovalCard({
             <button
               onClick={() => setRejectOpen(true)}
               disabled={rejectState === 'loading'}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
-              style={{
-                background: '#fee2e2',
-                color: '#b91c1c',
-                border: '1px solid #fca5a5',
-              }}
+              className="btn btn-danger"
             >
               <XCircle size={14} />
               Reject
@@ -728,14 +635,14 @@ function ApprovalCard({
             <Link
               href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
               className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline"
-              style={{ color: '#4f46e5' }}
+              style={{ color: 'var(--accent)' }}
             >
               View full detail <ChevronRight size={11} />
             </Link>
           </div>
 
           {!accountId && (
-            <p className="text-[11px]" style={{ color: '#b91c1c' }}>
+            <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
               Connect a Meta account in Settings before approving.
             </p>
           )}
@@ -759,12 +666,9 @@ function ApprovalCard({
       {rejectOpen && (
         <div
           className="px-5 py-4"
-          style={{ background: '#fef2f2', borderTop: '1px solid #fecaca' }}
+          style={{ background: 'var(--bad-bg)', borderTop: '1px solid var(--bad-border)' }}
         >
-          <p
-            className="text-[10px] font-semibold uppercase tracking-wider mb-2"
-            style={{ color: '#b91c1c' }}
-          >
+          <p className="micro-label mb-2" style={{ color: 'var(--bad)' }}>
             Reason for rejection
           </p>
           <textarea
@@ -772,15 +676,15 @@ function ApprovalCard({
             onChange={(e) => setRejectReason(e.target.value)}
             rows={3}
             placeholder="What's wrong with this campaign? The agent will learn from this."
-            className="w-full rounded-lg px-3 py-2 text-sm resize-none"
-            style={{ background: '#ffffff', border: '1px solid #fca5a5', color: '#111827', outline: 'none' }}
+            className="input resize-none"
+            style={{ borderColor: 'var(--bad-border)' }}
           />
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={doReject}
               disabled={rejectState === 'loading' || !rejectReason.trim()}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
-              style={{ background: '#dc2626', color: '#ffffff' }}
+              className="btn btn-danger"
+              style={{ padding: '6px 14px', fontSize: '12px' }}
             >
               {rejectState === 'loading' ? 'Rejecting…' : 'Confirm reject'}
             </button>
@@ -790,7 +694,7 @@ function ApprovalCard({
                 setRejectReason('')
               }}
               className="text-xs"
-              style={{ color: '#6b7280' }}
+              style={{ color: 'var(--ink-3)' }}
             >
               Cancel
             </button>

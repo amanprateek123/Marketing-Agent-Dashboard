@@ -31,19 +31,19 @@ interface CreativePackage {
 
 const API = 'http://localhost:8082/api/v1'
 
-/* ─── Design tokens ─── */
+/* ─── Design tokens — mapped onto the global Editorial Intelligence Console palette ─── */
 const C = {
-  bg: '#f4f4f5', surface: '#ffffff', surfaceMuted: '#fafafa',
-  border: '#e4e4e7', borderLight: '#f4f4f5',
-  text: '#18181b', textSecondary: '#52525b', textMuted: '#a1a1aa', textFaint: '#d4d4d8',
-  accent: '#0284c7', accentLight: '#e0f2fe', accentBorder: '#bae6fd',
-  green: '#15803d', greenBg: '#dcfce7', greenBorder: '#bbf7d0',
-  amber: '#b45309', amberBg: '#fef3c7', amberBorder: '#fde68a',
-  red: '#b91c1c', redBg: '#fee2e2', redBorder: '#fecaca',
-  indigo: '#4338ca', indigoBg: '#e0e7ff', indigoBorder: '#c7d2fe',
-  purple: '#7c3aed', purpleBg: '#f3e8ff', purpleBorder: '#ddd6fe',
-  orange: '#c2410c', orangeBg: '#fff7ed', orangeBorder: '#fed7aa',
-  blue: '#1d4ed8', blueBg: '#dbeafe', blueBorder: '#bfdbfe',
+  bg: 'var(--paper)', surface: 'var(--surface)', surfaceMuted: 'var(--surface-warm)',
+  border: 'var(--hairline)', borderLight: 'var(--hairline-light)',
+  text: 'var(--ink)', textSecondary: 'var(--ink-2)', textMuted: 'var(--ink-3)', textFaint: 'var(--ink-4)',
+  accent: 'var(--accent)', accentLight: 'var(--accent-bg)', accentBorder: 'var(--accent-border)',
+  green: 'var(--good)', greenBg: 'var(--good-bg)', greenBorder: 'var(--good-border)',
+  amber: 'var(--warn)', amberBg: 'var(--warn-bg)', amberBorder: 'var(--warn-border)',
+  red: 'var(--bad)', redBg: 'var(--bad-bg)', redBorder: 'var(--bad-border)',
+  indigo: 'var(--accent-strong)', indigoBg: 'var(--accent-bg)', indigoBorder: 'var(--accent-border)',
+  purple: 'var(--accent)', purpleBg: 'var(--accent-bg)', purpleBorder: 'var(--accent-border)',
+  orange: 'var(--warn)', orangeBg: 'var(--warn-bg)', orangeBorder: 'var(--warn-border)',
+  blue: 'var(--info)', blueBg: 'var(--info-bg)', blueBorder: 'var(--info-border)',
 } as const
 
 /* ═════════════════════════════════════════════════════════════════
@@ -52,9 +52,9 @@ const C = {
 function MetricCell({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.textMuted }}>{label}</p>
-      <p className="text-lg font-bold tabular-nums leading-tight truncate" style={{ color: color || C.text }}>{value}</p>
-      {sub && <p className="text-[11px] mt-0.5 tabular-nums" style={{ color: C.textMuted }}>{sub}</p>}
+      <p className="micro-label mb-1.5">{label}</p>
+      <p className="display-num text-[22px] truncate" style={{ color: color || C.text }}>{value}</p>
+      {sub && <p className="mono text-[11px] mt-0.5 tabular-nums" style={{ color: C.textMuted }}>{sub}</p>}
     </div>
   )
 }
@@ -70,27 +70,27 @@ function AdRow({ ad }: { ad: CampaignAd }) {
   const hist = ad.replacementHistory || []
   return (
     <>
-      <tr className="group transition-colors hover:bg-sky-50/30" style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-        <td className="px-4 py-3">
+      <tr className="group">
+        <td>
           <p className="text-[13px] font-medium" style={{ color: C.text }}>{ad.name || '—'}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {ad.hookStyle && <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.borderLight}` }}>{ad.hookStyle}</span>}
             {ad.format && <FormatBadge format={ad.format} />}
             {fatigued && <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.redBg, color: C.red }}><FlameKindling size={9} />Fatigue</span>}
-            {hist.length > 0 && <button onClick={e => { e.stopPropagation(); setHistOpen(h => !h) }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors hover:bg-sky-100" style={{ color: C.accent }}><History size={9} className="inline mr-0.5" />{hist.length} swap{hist.length !== 1 ? 's' : ''}</button>}
+            {hist.length > 0 && <button onClick={e => { e.stopPropagation(); setHistOpen(h => !h) }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-opacity hover:opacity-70" style={{ color: C.accent }}><History size={9} className="inline mr-0.5" />{hist.length} swap{hist.length !== 1 ? 's' : ''}</button>}
           </div>
         </td>
-        <td className="px-4 py-3">{ad.status?.trim() ? <StatusBadge status={ad.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
-        <td className="px-4 py-3 text-right text-[13px] tabular-nums font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
-        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: fatigued ? C.red : C.textSecondary }}>
+        <td>{ad.status?.trim() ? <StatusBadge status={ad.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
+        <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
+        <td className="num mono" style={{ color: fatigued ? C.red : C.textSecondary }}>
           {ctr != null ? <>{ctr.toFixed(2)}%{ad.ctrBaseline != null && <span className="ml-1 text-[10px]" style={{ color: C.textMuted }}>/{ad.ctrBaseline.toFixed(1)}%</span>}</> : '—'}
         </td>
-        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: C.textSecondary }}>{ad.cpc ? formatCurrency(ad.cpc) : '—'}</td>
-        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: C.textSecondary }}>{conversions != null ? conversions : (ad.impressions ?? '—')}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{ad.cpc ? formatCurrency(ad.cpc) : '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{conversions != null ? conversions : (ad.impressions ?? '—')}</td>
       </tr>
       {histOpen && hist.length > 0 && (
-        <tr><td colSpan={6} className="px-6 py-3" style={{ background: C.surfaceMuted }}>
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: C.textMuted }}>Hook History</p>
+        <tr><td colSpan={6} style={{ background: C.surfaceMuted }}>
+          <p className="micro-label mb-2">Hook History</p>
           {hist.map((e, j) => (
             <div key={j} className="flex items-center gap-2 text-xs py-1">
               <code className="px-1.5 py-0.5 rounded" style={{ background: C.redBg, color: C.red, fontSize: 11 }}>{e.oldHook}</code>
@@ -127,8 +127,8 @@ function AdSetRow({
   const freq = adSet.metrics?.frequency ?? adSet.frequency, cpa = adSet.metrics?.cpa ?? adSet.cpa
   return (
     <>
-      <tr className="group transition-colors hover:bg-sky-50/30 cursor-pointer" style={{ borderBottom: `1px solid ${C.borderLight}` }} onClick={() => setOpen(!open)}>
-        <td className="px-5 py-4">
+      <tr className="group cursor-pointer" onClick={() => setOpen(!open)}>
+        <td>
           <div className="flex items-center gap-2.5">
             {siblingFormat && (
               <span
@@ -139,7 +139,7 @@ function AdSetRow({
                 {groupHead ? '┐' : '┘'}
               </span>
             )}
-            <ChevronRight size={14} className={cn('transition-transform text-sky-400', open && 'rotate-90')} style={{ color: ads.length ? C.accent : C.textFaint }} />
+            <ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} style={{ color: ads.length ? C.accent : C.textFaint }} />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold" style={{ color: C.text }}>{adSet.name || '—'}</p>
@@ -159,19 +159,19 @@ function AdSetRow({
             </div>
           </div>
         </td>
-        <td className="px-4 py-4">{adSet.status?.trim() ? <StatusBadge status={adSet.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums" style={{ color: C.textSecondary }}>{adSet.impressions?.toLocaleString() ?? '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums" style={{ color: C.textSecondary }}>{adSet.clicks?.toLocaleString() ?? '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums" style={{ color: C.textSecondary }}>{ctr != null ? `${ctr.toFixed(2)}%` : '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums font-semibold" style={{ color: roas != null ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null ? `${roas.toFixed(2)}x` : '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums" style={{ color: C.textSecondary }}>{cpa ? formatCurrency(cpa) : '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums" style={{ color: C.textSecondary }}>{freq?.toFixed(2) || '—'}</td>
-        <td className="px-4 py-4 text-right text-sm tabular-nums font-medium" style={{ color: C.text }}>{conv ?? '—'}</td>
+        <td>{adSet.status?.trim() ? <StatusBadge status={adSet.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
+        <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{adSet.impressions?.toLocaleString() ?? '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{adSet.clicks?.toLocaleString() ?? '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{ctr != null ? `${ctr.toFixed(2)}%` : '—'}</td>
+        <td className="num mono font-semibold" style={{ color: roas != null ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null ? `${roas.toFixed(2)}x` : '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{cpa ? formatCurrency(cpa) : '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{freq?.toFixed(2) || '—'}</td>
+        <td className="num mono font-medium" style={{ color: C.text }}>{conv ?? '—'}</td>
       </tr>
       {open && ads.length > 0 && (
-        <tr><td colSpan={10} className="px-8 py-3" style={{ background: C.surfaceMuted }}>
-          <table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad / Hook', 'Status', 'Spend', 'CTR', 'CPC', 'Conv.'].map((h, i) => <th key={h} className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest ${i < 2 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead>
+        <tr><td colSpan={10} style={{ background: C.surfaceMuted }}>
+          <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'CTR', 'CPC', 'Conv.'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
           <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} />)}</tbody></table>
         </td></tr>
       )}
@@ -197,7 +197,7 @@ const ACTION_STYLES: Record<string, { bg: string; color: string; border: string;
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const s = ACTION_STYLES[type] || { bg: '#f4f4f5', color: '#6b7280', border: '#e5e7eb', label: type.replace(/_/g, ' ') }
+  const s = ACTION_STYLES[type] || { bg: 'var(--muted)', color: 'var(--ink-3)', border: 'var(--hairline)', label: type.replace(/_/g, ' ') }
   const icons: Record<string, React.ReactNode> = {
     pause_ad: <Pause size={11} />,
     pause_adset: <Pause size={11} />,
@@ -245,7 +245,7 @@ function DaypartingGrid({ activeHours }: { activeHours: number[] }) {
   const set = new Set(activeHours)
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Active hours (UTC)</p>
+      <p className="micro-label">Active hours (UTC)</p>
       <div className="grid grid-cols-24 gap-0.5" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div
@@ -269,7 +269,7 @@ function DaypartingGrid({ activeHours }: { activeHours: number[] }) {
 function ReplaceBadge({ status }: { status?: string }) {
   if (!status) return null
   const m: Record<string, { bg: string; c: string; b: string; spin?: boolean }> = { queued: { bg: C.blueBg, c: C.blue, b: C.blueBorder, spin: true }, producing: { bg: C.blueBg, c: C.blue, b: C.blueBorder, spin: true }, complete: { bg: C.greenBg, c: C.green, b: C.greenBorder }, failed: { bg: C.redBg, c: C.red, b: C.redBorder } }
-  const s = m[status] || { bg: '#f4f4f5', c: '#6b7280', b: '#e5e7eb' }
+  const s = m[status] || { bg: 'var(--muted)', c: 'var(--ink-3)', b: 'var(--hairline)' }
   return <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: s.bg, color: s.c, border: `1px solid ${s.b}` }}>{s.spin ? <Loader2 size={10} className="animate-spin" /> : status === 'complete' ? <CheckCircle size={10} /> : <XCircle size={10} />}{status[0].toUpperCase() + status.slice(1)}</span>
 }
 
@@ -329,7 +329,7 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
             return <button key={f} onClick={() => { setFilter(f); setLoading(true) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize" style={on ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textMuted, border: `1px solid ${C.border}` }}>{f}{n > 0 && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={on ? { background: 'rgba(255,255,255,.2)' } : { background: C.borderLight }}>{n}</span>}</button>
           })}
         </div>
-        <button onClick={() => load(filter)} className="text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ color: C.textMuted, border: `1px solid ${C.border}` }}><RefreshCw size={11} />Refresh</button>
+        <button onClick={() => load(filter)} className="btn btn-ghost"><RefreshCw size={11} />Refresh</button>
       </div>
 
       {loading ? (
@@ -352,7 +352,7 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
             const typeS = ACTION_STYLES[action.type] || { border: C.border }
 
             return (
-              <div key={action.actionId} className="rounded-2xl overflow-hidden transition-shadow hover:shadow-md" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+              <div key={action.actionId} className="card card-hover overflow-hidden">
                 {/* Color top bar */}
                 <div className="h-1" style={{ background: typeS.border }} />
 
@@ -454,18 +454,18 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                   {pending && (
                     <div className="flex items-center gap-2.5 mt-4 pt-4" style={{ borderTop: `1px solid ${C.borderLight}` }}>
                       {growth && (
-                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50" style={aS === 'success' ? { background: C.greenBg, color: C.green } : aS === 'error' ? { background: C.redBg, color: C.red } : { background: C.green, color: '#fff', boxShadow: '0 2px 8px rgba(21,128,61,.18)' }}>
+                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.green, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <ThumbsUp size={13} />}
                           {aS === 'loading' ? 'Approving…' : aS === 'success' ? 'Approved!' : aS === 'error' ? 'Failed' : 'Approve'}
                         </button>
                       )}
                       {pause && (
-                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50" style={aS === 'success' ? { background: C.greenBg, color: C.green } : aS === 'error' ? { background: C.redBg, color: C.red } : { background: C.red, color: '#fff', boxShadow: '0 2px 8px rgba(185,28,28,.18)' }}>
+                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.red, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <Pause size={13} />}
                           {aS === 'loading' ? 'Executing…' : aS === 'success' ? 'Executed!' : aS === 'error' ? 'Failed' : 'Execute Now'}
                         </button>
                       )}
-                      <button onClick={() => override(action.actionId)} disabled={oS === 'loading'} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textMuted }}>
+                      <button onClick={() => override(action.actionId)} disabled={oS === 'loading'} className="btn btn-ghost">
                         {oS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : oS === 'success' ? <CheckCircle size={13} /> : <Ban size={13} />}
                         {oS === 'loading' ? 'Overriding…' : oS === 'success' ? 'Done' : 'Override'}
                       </button>
@@ -494,13 +494,13 @@ function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']>
       style={{ background: passed ? C.greenBg : C.surfaceMuted, border: `1px solid ${passed ? C.greenBorder : C.border}` }}
     >
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Shrunken ROAS</p>
+        <p className="micro-label">Shrunken ROAS</p>
         <p className="text-base font-bold tabular-nums" style={{ color: C.text }}>
           {b.shrunkenROAS != null ? `${b.shrunkenROAS.toFixed(2)}x` : '—'}
         </p>
       </div>
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>
+        <p className="micro-label">
           Lower ROAS · {Math.round(conf * 100)}%
         </p>
         <p className="text-base font-bold tabular-nums" style={{ color: passed ? C.green : C.text }}>
@@ -509,7 +509,7 @@ function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']>
       </div>
       {passed && (
         <div className="col-span-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-md" style={{ background: '#fff', color: C.green, border: `1px solid ${C.greenBorder}` }}>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-md" style={{ background: C.surface, color: C.green, border: `1px solid ${C.greenBorder}` }}>
             <CheckCircle size={10} /> Above breakeven ({breakeven.toFixed(2)}x) at {Math.round(conf * 100)}% confidence
           </span>
         </div>
@@ -544,7 +544,7 @@ function ThompsonAllocationBar({ adSets }: { adSets: NonNullable<AuditSnapshot['
   const total = allocs.reduce((s, a) => s + a.alloc, 0) || 1
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: C.textMuted }}>Thompson allocation</p>
+      <p className="micro-label mb-2">Thompson allocation</p>
       <div className="rounded-md overflow-hidden flex h-2" style={{ border: `1px solid ${C.borderLight}` }}>
         {allocs.map((a, i) => {
           const pct = (a.alloc / total) * 100
@@ -648,29 +648,29 @@ function ShadowActionsPanel({ tenantId, campaignId }: { tenantId: string; campai
   if (actions.length === 0) return <p className="text-xs italic px-3 py-6 text-center" style={{ color: C.textMuted }}>No shadow actions captured.</p>
 
   return (
-    <div className="rounded-lg overflow-x-auto" style={{ border: `1px solid ${C.borderLight}` }}>
-      <table className="w-full">
+    <div className="card-inset overflow-x-auto">
+      <table className="data-table">
         <thead>
-          <tr style={{ background: C.surfaceMuted, borderBottom: `1px solid ${C.borderLight}` }}>
-            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Proposed</th>
-            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Blocked because</th>
-            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Regret</th>
-            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-widest" style={{ color: C.textMuted }}>Age</th>
+          <tr>
+            <th>Proposed</th>
+            <th>Blocked because</th>
+            <th>Regret</th>
+            <th className="num">Age</th>
           </tr>
         </thead>
         <tbody>
           {actions.map((a, i) => (
-            <tr key={i} style={{ borderBottom: i < actions.length - 1 ? `1px solid ${C.borderLight}` : 'none' }}>
-              <td className="px-3 py-2.5 text-xs font-semibold capitalize" style={{ color: C.text }}>
+            <tr key={i}>
+              <td className="text-xs font-semibold capitalize" style={{ color: C.text }}>
                 {shadowFieldText(a.proposedAction)}
               </td>
-              <td className="px-3 py-2.5 text-xs" style={{ color: C.textSecondary }}>
+              <td className="text-xs" style={{ color: C.textSecondary }}>
                 {shadowFieldText(a.blockedReason)}
               </td>
-              <td className="px-3 py-2.5">
+              <td>
                 <RegretLabel label={a.regretLabel} />
               </td>
-              <td className="px-3 py-2.5 text-right text-[11px] tabular-nums" style={{ color: C.textMuted }}>
+              <td className="num mono text-[11px]" style={{ color: C.textMuted }}>
                 {a.age || (a.proposedAt ? formatRelativeTime(a.proposedAt) : '—')}
               </td>
             </tr>
@@ -793,9 +793,9 @@ export default function CampaignDetailPage({ params }: PageProps) {
   async function doReject() { setRejectState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: rejectReason }) }); if (!r.ok) throw new Error(); setRejectState('success'); flash('Rejected', 'success'); setRejectOpen(false); setRejectReason(''); fetchCampaign() } catch (e) { setRejectState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setRejectState('idle'), 3000) } }
 
   /* ─── Guards ─── */
-  if (loading) return <div className="flex items-center justify-center min-h-screen" style={{ background: C.bg }}><Loader2 size={24} className="animate-spin" style={{ color: C.accent }} /></div>
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 size={24} className="animate-spin" style={{ color: C.accent }} /></div>
   if (error || !campaign) return (
-    <div className="p-8 max-w-3xl mx-auto" style={{ background: C.bg, minHeight: '100vh' }}>
+    <div className="p-8 max-w-3xl mx-auto min-h-screen">
       <Link href={`/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm mb-6" style={{ color: C.textMuted }}><ArrowLeft size={14} />Back</Link>
       <div className="rounded-2xl p-5" style={{ background: C.redBg, border: `1px solid ${C.redBorder}` }}><p className="text-sm font-medium" style={{ color: C.red }}><AlertCircle size={15} className="inline mr-2" />{error || 'Campaign not found'}</p></div>
     </div>
@@ -821,42 +821,43 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const rc = campaign.roas != null ? (campaign.roas >= 2 ? C.green : campaign.roas >= 1 ? C.amber : C.red) : C.textFaint
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh' }}>
+    <div className="min-h-screen">
       {/* Toast */}
       {toast && <div className="fixed top-5 right-5 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl" style={toast.type === 'success' ? { background: C.greenBg, border: `1px solid ${C.greenBorder}`, color: C.green } : { background: C.redBg, border: `1px solid ${C.redBorder}`, color: C.red }}>{toast.message}</div>}
 
       {/* ─── TOP BAR ─── */}
-      <div className="px-8 pt-6 pb-0 max-w-7xl mx-auto">
-        <Link href={`/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5 transition-colors hover:text-sky-600" style={{ color: C.textMuted }}><ArrowLeft size={14} />Campaigns</Link>
+      <div className="px-8 pt-8 pb-0 max-w-6xl mx-auto stagger">
+        <Link href={`/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5 transition-opacity hover:opacity-70" style={{ color: C.textMuted }}><ArrowLeft size={14} />Campaigns</Link>
 
         {/* ─── HEADER ─── */}
         <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
           <div>
+            <p className="micro-label mb-2">Campaign</p>
             <div className="flex items-center gap-3 mb-1.5">
-              <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: C.text }}>{campaign.name || campaign.topic || 'Untitled'}</h1>
+              <h1 className="page-title">{campaign.name || campaign.topic || 'Untitled'}</h1>
               <StatusBadge status={campaign.status} />
             </div>
-            {campaign.topic && campaign.name && <p className="text-sm mb-2" style={{ color: C.textMuted }}>{campaign.topic}</p>}
+            {campaign.topic && campaign.name && <p className="page-subtitle mb-2">{campaign.topic}</p>}
             <div className="flex items-center gap-3 flex-wrap text-xs" style={{ color: C.textMuted }}>
               {campaign.source === 'agent' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}><Bot size={11} />Agent</span>}
               {campaign.source === 'manual' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><User size={11} />Manual</span>}
               {campaign.objective && <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{campaign.objective}</span>}
               <FormatBadge format={campaign.creativeFormat} />
               <PromptsVersionBadge version={campaign.promptsVersion} />
-              {campaign.metaCampaignId && <code className="font-mono text-[11px]" style={{ color: C.textMuted }}>{campaign.metaCampaignId}</code>}
-              {campaign.launchedAt && <span><Clock size={10} className="inline mr-1" />{formatDate(campaign.launchedAt)}</span>}
-              {campaign.lastAuditedAt && <span><Shield size={10} className="inline mr-1" />{formatDateTime(campaign.lastAuditedAt)}</span>}
-              {campaign.runId && <Link href={`/dashboard/${tenantId}/runs/${campaign.runId}`} className="font-semibold transition-colors hover:text-sky-600" style={{ color: C.accent }}>View Run<ExternalLink size={10} className="inline ml-0.5" /></Link>}
+              {campaign.metaCampaignId && <code className="mono text-[11px]" style={{ color: C.textMuted }}>{campaign.metaCampaignId}</code>}
+              {campaign.launchedAt && <span className="mono"><Clock size={10} className="inline mr-1" />{formatDate(campaign.launchedAt)}</span>}
+              {campaign.lastAuditedAt && <span className="mono"><Shield size={10} className="inline mr-1" />{formatDateTime(campaign.lastAuditedAt)}</span>}
+              {campaign.runId && <Link href={`/dashboard/${tenantId}/runs/${campaign.runId}`} className="font-semibold transition-opacity hover:opacity-70" style={{ color: C.accent }}>View Run<ExternalLink size={10} className="inline ml-0.5" /></Link>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {campaign.status === 'active' && <button onClick={doPause} disabled={pauseState !== 'idle'} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>{pauseState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Pause size={14} />}{pauseState === 'loading' ? 'Pausing…' : 'Pause'}</button>}
-            {campaign.status === 'paused' && <button onClick={doResume} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all" style={{ background: C.accentLight, border: `1px solid ${C.accentBorder}`, color: C.accent }}><Play size={14} fill="currentColor" />Resume</button>}
+            {campaign.status === 'active' && <button onClick={doPause} disabled={pauseState !== 'idle'} className="btn" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>{pauseState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Pause size={14} />}{pauseState === 'loading' ? 'Pausing…' : 'Pause'}</button>}
+            {campaign.status === 'paused' && <button onClick={doResume} className="btn btn-accent"><Play size={14} fill="currentColor" />Resume</button>}
           </div>
         </div>
 
         {/* ─── METRICS STRIP ─── */}
-        <div className="rounded-2xl p-5 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <div className="card p-5 mb-6">
           <div className="grid grid-cols-3 md:grid-cols-6 gap-6">
             <MetricCell label="Impressions" value={campaign.impressions?.toLocaleString() ?? '—'} />
             <MetricCell label="Clicks" value={campaign.clicks?.toLocaleString() ?? '—'} />
@@ -910,18 +911,18 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
       {/* ─── APPROVAL PANEL ─── */}
       {isPendingApproval && (
-        <div className="px-8 max-w-7xl mx-auto mb-6">
-          <div className="rounded-2xl overflow-hidden" style={{ border: `2px solid ${C.greenBorder}`, background: '#f0fdf4' }}>
+        <div className="px-8 max-w-6xl mx-auto mb-6">
+          <div className="rounded-2xl overflow-hidden" style={{ border: `2px solid ${C.greenBorder}`, background: C.greenBg }}>
             <div className="px-6 py-4 flex items-center gap-3" style={{ background: C.greenBg, borderBottom: `1px solid ${C.greenBorder}` }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: C.green }}><ThumbsUp size={16} color="#fff" /></div>
-              <div><h2 className="text-sm font-bold" style={{ color: '#14532d' }}>Awaiting Approval</h2><p className="text-xs mt-0.5" style={{ color: '#166534' }}>Review creative, then select a Meta account to launch.</p></div>
+              <ThumbsUp size={16} style={{ color: C.green }} />
+              <div><h2 className="section-title text-[17px]" style={{ color: C.green }}>Awaiting Approval</h2><p className="text-xs mt-0.5" style={{ color: C.green }}>Review creative, then select a Meta account to launch.</p></div>
             </div>
             <div className="p-6 space-y-6">
               {pkgLoading ? <div className="flex items-center gap-2 py-6" style={{ color: C.textMuted }}><Loader2 size={14} className="animate-spin" />Loading creative…</div> : pkg?.copyVariants?.length ? (
-                <div><p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: C.textMuted }}>Copy Variants</p>
+                <div><p className="micro-label mb-3">Copy Variants</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => {
                   const sel = i === (pkg.selectedCopyIndex ?? -1)
-                  return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? '#fff' : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
+                  return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
                     <div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}</div>
                     {v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}
                     <p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>
@@ -929,16 +930,16 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   </div>
                 })}</div></div>
               ) : null}
-              <div className="rounded-xl p-5" style={{ background: '#fff', border: `1px solid ${C.greenBorder}` }}>
-                <label className="block text-xs font-bold mb-2" style={{ color: '#14532d' }}>Meta Ad Account</label>
+              <div className="rounded-xl p-5" style={{ background: C.surface, border: `1px solid ${C.greenBorder}` }}>
+                <label className="micro-label block mb-2" style={{ color: C.green }}>Meta Ad Account</label>
                 {accountIds.length === 0 ? <p className="text-xs" style={{ color: C.textMuted }}>No accounts found.</p> : (
                   <div className="relative mb-4"><select value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm appearance-none pr-10" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.text }}>{accountIds.map(id => <option key={id} value={id}>act_{id}</option>)}</select><ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.textMuted }} /></div>
                 )}
                 <div className="flex gap-3">
-                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40" style={approveState === 'success' ? { background: C.green, color: '#fff' } : { background: C.green, color: '#fff', boxShadow: '0 4px 12px rgba(21,128,61,.25)' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
-                  <button onClick={() => setRejectOpen(o => !o)} className="px-5 py-3 rounded-xl text-sm font-semibold" style={{ background: C.redBg, border: `1px solid ${C.redBorder}`, color: C.red }}><XCircle size={14} className="inline mr-1.5" />Reject</button>
+                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="btn flex-1" style={{ background: C.green, color: '#fff' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
+                  <button onClick={() => setRejectOpen(o => !o)} className="btn btn-danger"><XCircle size={14} className="inline mr-1.5" />Reject</button>
                 </div>
-                {rejectOpen && <div className="mt-4 pt-4 space-y-3" style={{ borderTop: `1px solid ${C.redBorder}` }}><textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason…" rows={3} className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={{ border: `1px solid ${C.redBorder}`, color: C.text }} /><div className="flex gap-2"><button onClick={doReject} disabled={rejectState === 'loading' || !rejectReason.trim()} className="px-5 py-2 rounded-xl text-sm font-bold disabled:opacity-50" style={{ background: C.red, color: '#fff' }}>{rejectState === 'loading' ? 'Rejecting…' : 'Confirm'}</button><button onClick={() => { setRejectOpen(false); setRejectReason('') }} className="text-xs" style={{ color: C.textMuted }}>Cancel</button></div></div>}
+                {rejectOpen && <div className="mt-4 pt-4 space-y-3" style={{ borderTop: `1px solid ${C.redBorder}` }}><textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason…" rows={3} className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={{ border: `1px solid ${C.redBorder}`, color: C.text }} /><div className="flex gap-2"><button onClick={doReject} disabled={rejectState === 'loading' || !rejectReason.trim()} className="btn" style={{ background: C.red, color: '#fff' }}>{rejectState === 'loading' ? 'Rejecting…' : 'Confirm'}</button><button onClick={() => { setRejectOpen(false); setRejectReason('') }} className="text-xs" style={{ color: C.textMuted }}>Cancel</button></div></div>}
               </div>
             </div>
           </div>
@@ -946,12 +947,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
       )}
 
       {/* Debate */}
-      {debate.length > 0 && <div className="px-8 max-w-7xl mx-auto mb-6"><div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}><p className="text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: C.textMuted }}>Review Debate</p><DebateLog rounds={debate} /></div></div>}
+      {debate.length > 0 && <div className="px-8 max-w-6xl mx-auto mb-6"><div className="card p-6"><p className="micro-label mb-4">Review Debate</p><DebateLog rounds={debate} /></div></div>}
 
       {/* ═══════════════════════════════════════════════════════════
          TABS
          ═══════════════════════════════════════════════════════════ */}
-      <div className="px-8 max-w-7xl mx-auto pb-12">
+      <div className="px-8 max-w-6xl mx-auto pb-12">
         <Tabs.Root value={tab} onValueChange={setTab}>
           <Tabs.List className="flex gap-1 mb-6" style={{ borderBottom: `2px solid ${C.border}` }}>
             {tabs.map(t => (
@@ -967,15 +968,15 @@ export default function CampaignDetailPage({ params }: PageProps) {
           <Tabs.Content value="overview">
             <div className="space-y-5">
               {(campaign.reviewNotes || campaign.reviewAdjustments?.budgetAdjusted) && (
-                <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: C.textMuted }}>Review Notes</p>
+                <div className="card p-6">
+                  <p className="micro-label mb-3">Review Notes</p>
                   {campaign.reviewAdjustments?.budgetAdjusted && <div className="px-3 py-2 rounded-lg mb-3 text-sm" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>Budget: {campaign.reviewAdjustments.originalBudget > 0 && formatCurrency(campaign.reviewAdjustments.originalBudget) + ' → '}{formatCurrency(campaign.reviewAdjustments.recommendedBudget)}</div>}
                   {campaign.reviewNotes && <p className="text-sm leading-relaxed" style={{ color: C.textSecondary }}>{campaign.reviewNotes}</p>}
                 </div>
               )}
               {(campaign.campaignConfig?.scaleRules || campaign.campaignConfig?.pauseRules) && (
-                <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: C.textMuted }}>Automation Rules</p>
+                <div className="card p-6">
+                  <p className="micro-label mb-3">Automation Rules</p>
                   <div className="grid md:grid-cols-2 gap-5">
                     {campaign.campaignConfig?.scaleRules && <div><p className="text-xs font-bold mb-1" style={{ color: C.green }}>Scale Rules</p><p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{campaign.campaignConfig.scaleRules}</p></div>}
                     {campaign.campaignConfig?.pauseRules && <div><p className="text-xs font-bold mb-1" style={{ color: C.red }}>Pause Rules</p><p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{campaign.campaignConfig.pauseRules}</p></div>}
@@ -983,14 +984,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 </div>
               )}
               <div className="grid md:grid-cols-2 gap-4">
-                <button onClick={() => setTab('adsets')} className="rounded-2xl p-6 text-left transition-all hover:shadow-lg group" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <button onClick={() => setTab('adsets')} className="card card-hover p-6 text-left group">
                   <Layers size={16} className="mb-3" style={{ color: C.accent }} />
-                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: C.text }}>{live.length || planned.length}</p>
+                  <p className="display-num text-[32px]" style={{ color: C.text }}>{live.length || planned.length}</p>
                   <p className="text-xs font-medium mt-1" style={{ color: C.textMuted }}>{usePlanned ? 'Planned ad sets' : 'Live ad sets'}</p>
                 </button>
-                <button onClick={() => setTab('actions')} className="rounded-2xl p-6 text-left transition-all hover:shadow-lg group" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <button onClick={() => setTab('actions')} className="card card-hover p-6 text-left group">
                   <Zap size={16} className="mb-3" style={{ color: pendingActs > 0 ? C.amber : C.textMuted }} />
-                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: pendingActs > 0 ? C.amber : C.text }}>{pendingActs > 0 ? pendingActs : '0'}</p>
+                  <p className="display-num text-[32px]" style={{ color: pendingActs > 0 ? C.amber : C.text }}>{pendingActs > 0 ? pendingActs : '0'}</p>
                   <p className="text-xs font-medium mt-1" style={{ color: C.textMuted }}>{pendingActs > 0 ? 'Actions need your decision' : 'No pending actions'}</p>
                 </button>
               </div>
@@ -999,12 +1000,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
           {/* ── AD SETS ── */}
           <Tabs.Content value="adsets">
-            <div className="rounded-2xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <div className="card overflow-hidden">
               {usePlanned ? (
-                <div className="overflow-x-auto"><table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={`px-5 py-3 text-[10px] font-bold uppercase tracking-widest ${i === 0 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead>
-                <tbody>{planned.map((a, i) => <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}><td className="px-5 py-4"><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="px-5 py-4 text-right text-sm font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="px-5 py-4 text-right text-sm" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="px-5 py-4 text-right text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
+                <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
+                <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="w-full"><thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>{['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => <th key={h} className={`px-5 py-3 text-[10px] font-bold uppercase tracking-widest ${i < 2 ? 'text-left' : 'text-right'}`} style={{ color: C.textMuted }}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>
@@ -1014,7 +1015,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
           {/* ── AUDIT ── */}
           <Tabs.Content value="audit">
-            <div className="rounded-2xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <div className="card overflow-hidden">
               {snapsLoading ? <div className="py-16 text-center" style={{ color: C.textMuted }}><Loader2 size={16} className="animate-spin mx-auto" /></div>
               : snaps.length === 0 ? <div className="py-16 text-center"><Activity size={24} style={{ color: C.textFaint, margin: '0 auto 8px' }} /><p className="text-sm font-medium" style={{ color: C.textMuted }}>No audit snapshots</p></div>
               : (
@@ -1025,22 +1026,22 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       const latest = d[d.length - 1], prev = d[d.length - 2] ?? latest, delta = prev ? ((latest - prev) / prev) * 100 : 0
                       const min = Math.min(...d), max = Math.max(...d), rng = max - min || 1, W = 180, H = 48
                       const pts = d.map((v, i) => `${(i / (d.length - 1)) * W},${H - ((v - min) / rng) * H}`).join(' ')
-                      return <div key={l} className="rounded-xl p-5" style={{ background: C.surfaceMuted, border: `1px solid ${C.borderLight}` }}>
+                      return <div key={l} className="card-inset p-5">
                         <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-1.5"><I size={13} style={{ color: c }} /><p className="text-xs font-bold" style={{ color: C.textSecondary }}>{l} Trend</p></div><span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: delta >= 0 ? C.greenBg : C.redBg, color: delta >= 0 ? C.green : C.red }}>{delta >= 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%</span></div>
-                        <div className="flex items-end gap-5"><svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none"><polyline points={pts} stroke={c} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" /><circle cx={W} cy={H - ((latest - min) / rng) * H} r={4} fill={c} /></svg><div><p className="text-xl font-extrabold tabular-nums leading-none" style={{ color: c }}>{u === '₹' ? formatCurrency(latest) : `${latest.toFixed(2)}x`}</p><p className="text-[10px] mt-1 font-semibold" style={{ color: C.textMuted }}>Latest</p></div></div>
+                        <div className="flex items-end gap-5"><svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none"><polyline points={pts} stroke={c} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" /><circle cx={W} cy={H - ((latest - min) / rng) * H} r={4} fill={c} /></svg><div><p className="display-num text-xl" style={{ color: c }}>{u === '₹' ? formatCurrency(latest) : `${latest.toFixed(2)}x`}</p><p className="text-[10px] mt-1 font-semibold" style={{ color: C.textMuted }}>Latest</p></div></div>
                       </div>
                     })}</div>
                   })()}
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.textMuted }}>Shadow Actions</p>
+                      <p className="micro-label">Shadow Actions</p>
                       <span className="text-[10px]" style={{ color: C.textFaint }}>What the agent considered but blocked.</span>
                     </div>
                     <ShadowActionsPanel tenantId={tenantId} campaignId={campaignId} />
                   </div>
 
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: C.textMuted }}>Timeline</p>
+                    <p className="micro-label mb-4">Timeline</p>
                     {snaps.slice(0, 15).map((snap, i) => {
                       const v = snap.verdict, vc = v.verdict === 'act' ? C.red : v.verdict === 'watch' ? C.amber : C.green
                       const vb = v.verdict === 'act' ? C.redBg : v.verdict === 'watch' ? C.amberBg : C.greenBg
@@ -1072,25 +1073,25 @@ export default function CampaignDetailPage({ params }: PageProps) {
                           {snap.ads?.length ? (
                             <details className="mt-2">
                               <summary className="text-[11px] cursor-pointer font-semibold" style={{ color: C.textMuted }}>{snap.ads.length} ad{snap.ads.length !== 1 ? 's' : ''}</summary>
-                              <div className="mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderLight}` }}>
-                                <table className="w-full">
+                              <div className="card-inset mt-1.5 overflow-hidden">
+                                <table className="data-table">
                                   <thead>
-                                    <tr style={{ background: C.surfaceMuted }}>
+                                    <tr>
                                       {['Ad', 'Hook', 'Impr.', 'Spend', 'CTR', 'Conv.', 'Fatigue (DiD)'].map(h => (
-                                        <th key={h} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-left" style={{ color: C.textMuted }}>{h}</th>
+                                        <th key={h}>{h}</th>
                                       ))}
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {snap.ads.map((a, j) => (
-                                      <tr key={a.id || j} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-                                        <td className="px-3 py-1.5 text-xs font-medium" style={{ color: C.text }}>{a.name || '—'}</td>
-                                        <td className="px-3 py-1.5">{a.hookStyle ? <span className="text-[11px] px-1.5 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{a.hookStyle}</span> : '—'}</td>
-                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.impressions?.toLocaleString() ?? '—'}</td>
-                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.spend ? formatCurrency(a.metrics.spend) : '—'}</td>
-                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.ctr != null ? `${a.metrics.ctr.toFixed(2)}%` : '—'}</td>
-                                        <td className="px-3 py-1.5 text-xs tabular-nums" style={{ color: C.textSecondary }}>{a.metrics?.conversions ?? '—'}</td>
-                                        <td className="px-3 py-1.5">
+                                      <tr key={a.id || j}>
+                                        <td className="text-xs font-medium" style={{ color: C.text }}>{a.name || '—'}</td>
+                                        <td>{a.hookStyle ? <span className="text-[11px] px-1.5 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{a.hookStyle}</span> : '—'}</td>
+                                        <td className="mono text-xs" style={{ color: C.textSecondary }}>{a.metrics?.impressions?.toLocaleString() ?? '—'}</td>
+                                        <td className="mono text-xs" style={{ color: C.textSecondary }}>{a.metrics?.spend ? formatCurrency(a.metrics.spend) : '—'}</td>
+                                        <td className="mono text-xs" style={{ color: C.textSecondary }}>{a.metrics?.ctr != null ? `${a.metrics.ctr.toFixed(2)}%` : '—'}</td>
+                                        <td className="mono text-xs" style={{ color: C.textSecondary }}>{a.metrics?.conversions ?? '—'}</td>
+                                        <td>
                                           {a.didFatigue && a.didFatigue.length > 0
                                             ? <MiniDiDChart data={a.didFatigue} />
                                             : <span className="text-[11px]" style={{ color: C.textFaint }}>—</span>}
@@ -1114,17 +1115,17 @@ export default function CampaignDetailPage({ params }: PageProps) {
           {/* ── CREATIVE ── */}
           {campaign.creativePackageId && (
             <Tabs.Content value="creative">
-              <div className="rounded-2xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+              <div className="card overflow-hidden">
                 <div className="p-6 space-y-6">
-                  {pkg?.copyVariants?.length ? <div><p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: C.textMuted }}>Copy Variants</p><div className="grid md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => { const sel = i === (pkg.selectedCopyIndex ?? -1); return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? '#fff' : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}><div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}</div>{v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}<p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>{v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}</div> })}</div></div> : null}
+                  {pkg?.copyVariants?.length ? <div><p className="micro-label mb-3">Copy Variants</p><div className="grid md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => { const sel = i === (pkg.selectedCopyIndex ?? -1); return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}><div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}</div>{v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}<p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>{v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}</div> })}</div></div> : null}
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: C.textMuted }}>Images</p>
+                    <p className="micro-label mb-3">Images</p>
                     {pkgLoading ? <Loader2 size={14} className="animate-spin" style={{ color: C.textMuted }} /> : (pkg?.images ?? []).length > 0 ? (
                       <div className="grid grid-cols-3 gap-4">{pkg!.images!.map((img, i) => { const sel = i === (pkg!.selectedCopyIndex ?? 0); const s = imgState[i] || 'idle'; return <div key={i} className="space-y-2"><div className="relative rounded-xl overflow-hidden" style={{ border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>{sel && <span className="absolute top-2 left-2 z-10 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.green, color: '#fff' }}>Selected</span>}{s === 'polling' && <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: 'rgba(255,255,255,.7)' }}><Loader2 size={20} className="animate-spin" style={{ color: C.accent }} /></div>}{img.imageUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img.imageUrl} alt={`V${i+1}`} className="w-full" style={{ maxHeight: 280, objectFit: 'contain', display: 'block' }} /> : <div className="flex items-center justify-center" style={{ height: 180, background: C.surfaceMuted }}><p className="text-[10px]" style={{ color: C.textMuted }}>V{i+1}</p></div>}</div>{img.imagePrompt && <details><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-2 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{img.imagePrompt}</p></details>}<div className="flex gap-1.5"><button onClick={() => rerollImg(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={s === 'loading' ? 'animate-spin' : ''} />{s === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={() => newImgPrompt(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} />New prompt</button></div></div> })}</div>
                     ) : <div className="py-10 text-center rounded-xl" style={{ background: C.surfaceMuted, border: `2px dashed ${C.border}` }}><p className="text-xs" style={{ color: C.textMuted }}>No images</p></div>}
                   </div>
-                  {(pkg?.video?.videoUrl || pkg?.video?.videoPrompt) && <div className="pt-5" style={{ borderTop: `1px solid ${C.borderLight}` }}><div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.textMuted }}>Video</p><div className="flex gap-1.5"><button onClick={rerollVid} disabled={vidRetry !== 'idle' || vidRewrite !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={cn('inline mr-1', vidRetry !== 'idle' && 'animate-spin')} />{vidRetry === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={rewriteVid} disabled={vidRewrite !== 'idle' || vidRetry !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} className={cn('inline mr-1', vidRewrite !== 'idle' && 'animate-spin')} />{vidRewrite === 'idle' ? 'Rewrite' : 'Working…'}</button></div></div>{pkg.video?.videoUrl ? <video controls className="rounded-xl w-full" style={{ maxHeight: 320, border: `1px solid ${C.border}` }}><source src={pkg.video.videoUrl} type="video/mp4" /></video> : <p className="text-xs font-mono p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{vidRetry === 'polling' ? 'Generating…' : pkg.video?.videoPrompt}</p>}{pkg.video?.videoPrompt && pkg.video?.videoUrl && <details className="mt-2"><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{pkg.video.videoPrompt}</p></details>}</div>}
-                  {pkg?.complianceNotes && <div className="rounded-xl px-4 py-3" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}` }}><p className="text-xs font-bold mb-1" style={{ color: C.amber }}>Compliance</p><p className="text-xs leading-relaxed" style={{ color: '#92400e' }}>{pkg.complianceNotes}</p></div>}
+                  {(pkg?.video?.videoUrl || pkg?.video?.videoPrompt) && <div className="pt-5" style={{ borderTop: `1px solid ${C.borderLight}` }}><div className="flex items-center justify-between mb-3"><p className="micro-label">Video</p><div className="flex gap-1.5"><button onClick={rerollVid} disabled={vidRetry !== 'idle' || vidRewrite !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={cn('inline mr-1', vidRetry !== 'idle' && 'animate-spin')} />{vidRetry === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={rewriteVid} disabled={vidRewrite !== 'idle' || vidRetry !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} className={cn('inline mr-1', vidRewrite !== 'idle' && 'animate-spin')} />{vidRewrite === 'idle' ? 'Rewrite' : 'Working…'}</button></div></div>{pkg.video?.videoUrl ? <video controls className="rounded-xl w-full" style={{ maxHeight: 320, border: `1px solid ${C.border}` }}><source src={pkg.video.videoUrl} type="video/mp4" /></video> : <p className="text-xs font-mono p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{vidRetry === 'polling' ? 'Generating…' : pkg.video?.videoPrompt}</p>}{pkg.video?.videoPrompt && pkg.video?.videoUrl && <details className="mt-2"><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{pkg.video.videoPrompt}</p></details>}</div>}
+                  {pkg?.complianceNotes && <div className="rounded-xl px-4 py-3" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}` }}><p className="text-xs font-bold mb-1" style={{ color: C.amber }}>Compliance</p><p className="text-xs leading-relaxed" style={{ color: C.amber }}>{pkg.complianceNotes}</p></div>}
                 </div>
               </div>
             </Tabs.Content>

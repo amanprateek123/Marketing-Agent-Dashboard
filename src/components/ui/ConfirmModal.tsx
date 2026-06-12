@@ -50,52 +50,54 @@ export function ConfirmModal({
       {/* Backdrop */}
       <div
         className="absolute inset-0"
-        style={{ background: 'rgba(15,23,42,0.50)', backdropFilter: 'blur(8px)', animation: 'backdropIn 0.15s ease' }}
+        style={{ background: 'rgba(28,25,23,0.4)', backdropFilter: 'blur(8px)', animation: 'backdropIn 0.15s ease' }}
         onClick={onCancel}
       />
 
       {/* Modal */}
       <div
-        className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden animate-scale-in"
+        className="relative w-full max-w-md mx-4 overflow-hidden animate-scale-in"
         style={{
-          background: '#ffffff',
-          boxShadow: '0 24px 80px rgba(15,23,42,0.18), 0 4px 16px rgba(15,23,42,0.08)',
+          background: 'var(--surface)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 'var(--radius)',
+          boxShadow: 'var(--shadow-overlay)',
         }}
       >
         {/* Accent strip */}
         <div style={{
-          height: 3,
-          background: isDanger
-            ? 'linear-gradient(90deg, #dc2626, #f87171)'
-            : 'linear-gradient(90deg, #4f46e5, #6366f1)',
+          height: 2,
+          background: isDanger ? 'var(--bad)' : 'var(--accent)',
         }} />
 
         <div className="p-6">
           {/* Close */}
           <button
             onClick={onCancel}
-            className="absolute top-4 right-4 p-1.5 rounded-lg transition-colors hover:bg-slate-100"
-            style={{ color: '#9ca3af' }}
+            className="absolute top-4 right-4 p-1.5 rounded-lg transition-colors"
+            style={{ color: 'var(--ink-3)' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
           >
             <X size={16} />
           </button>
 
           {/* Icon */}
           <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
+            className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
             style={{
-              background: isDanger ? '#fee2e2' : 'linear-gradient(135deg, #e0e7ff, #e0e7ff)',
-              border: `1px solid ${isDanger ? '#fecaca' : '#c7d2fe'}`,
+              background: isDanger ? 'var(--bad-bg)' : 'var(--accent-bg)',
+              border: `1px solid ${isDanger ? 'var(--bad-border)' : 'var(--accent-border)'}`,
             }}
           >
-            <Sparkles size={20} style={{ color: isDanger ? '#dc2626' : '#4f46e5' }} />
+            <Sparkles size={20} style={{ color: isDanger ? 'var(--bad)' : 'var(--accent)' }} />
           </div>
 
-          <h3 className="text-lg font-bold mb-1" style={{ color: '#111827' }}>
+          <h3 className="font-display text-lg mb-1" style={{ color: 'var(--ink)' }}>
             {title}
           </h3>
           {description && (
-            <p className="text-sm leading-relaxed" style={{ color: '#4b5563' }}>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>
               {description}
             </p>
           )}
@@ -104,8 +106,7 @@ export function ConfirmModal({
             <button
               onClick={onCancel}
               disabled={loading}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:bg-slate-50 disabled:opacity-50"
-              style={{ color: '#4b5563', border: '1px solid #e5e7eb' }}
+              className="btn btn-ghost"
             >
               {cancelLabel}
             </button>
@@ -113,12 +114,8 @@ export function ConfirmModal({
               ref={confirmRef}
               onClick={onConfirm}
               disabled={loading}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-60"
-              style={{
-                background: isDanger ? '#dc2626' : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                color: '#ffffff',
-                boxShadow: `0 4px 16px ${isDanger ? 'rgba(220,38,38,0.25)' : 'rgba(14,165,233,0.25)'}`,
-              }}
+              className={isDanger ? 'btn' : 'btn btn-accent'}
+              style={isDanger ? { background: 'var(--bad)', color: '#ffffff' } : undefined}
             >
               {loading ? (
                 <span className="flex items-center gap-2">

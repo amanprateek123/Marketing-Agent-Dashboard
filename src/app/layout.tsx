@@ -22,8 +22,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Marketing Agent — AI Marketing Intelligence",
-  description: "Marketing: AI-powered marketing pipeline dashboard",
+  title: "BriefOS — Marketing Intelligence",
+  description: "BriefOS: the autonomous marketing pipeline, observed.",
 };
 
 export default function RootLayout({

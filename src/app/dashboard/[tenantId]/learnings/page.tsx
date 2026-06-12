@@ -31,17 +31,17 @@ function TagList({
   color: 'green' | 'red' | 'amber' | 'blue' | 'zinc'
 }) {
   const list = Array.isArray(items) ? items : [items]
-  const styles: Record<string, React.CSSProperties> = {
-    green:  { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
-    red:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
-    amber:  { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },
-    blue:   { background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#1d4ed8' },
-    zinc:   { background: '#f8f9fb', border: '1px solid #e5e7eb', color: '#52525b' },
+  const chipClass: Record<string, string> = {
+    green: 'chip chip-good',
+    red:   'chip chip-bad',
+    amber: 'chip chip-warn',
+    blue:  'chip chip-accent',
+    zinc:  'chip chip-neutral',
   }
   return (
     <div className="flex flex-wrap gap-1.5">
       {list.map((item, i) => (
-        <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={styles[color]}>
+        <span key={i} className={chipClass[color]}>
           {item}
         </span>
       ))}
@@ -72,30 +72,30 @@ function AudienceScoreRows({ scores }: { scores: Array<{ audience: string; roas:
     <div className="flex flex-col gap-2">
       {scores.map(({ audience, roas, n }) => (
         <div key={audience} className="flex items-center justify-between gap-3">
-          <span className="text-sm capitalize truncate" style={{ color: '#52525b' }}>
+          <span className="text-sm capitalize truncate" style={{ color: 'var(--ink-2)' }}>
             {audience.replace(/_/g, ' ')}
           </span>
           <div className="flex items-center gap-2 flex-1 max-w-[200px]">
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--muted)' }}>
               <div
-                className="h-full rounded-full"
+                className="h-full rounded-full animate-bar-grow"
                 style={{
                   width: `${Math.min((roas / maxRoas) * 100, 100)}%`,
-                  background: roas >= 1.5 ? '#15803d' : roas >= 1 ? '#b45309' : '#b91c1c',
+                  background: roas >= 1.5 ? 'var(--good)' : roas >= 1 ? 'var(--warn)' : 'var(--bad)',
                 }}
               />
             </div>
-            <span className="text-xs font-semibold w-14 text-right tabular-nums" style={{ color: '#18181b' }}>
+            <span className="mono text-xs font-semibold w-14 text-right tabular-nums" style={{ color: 'var(--ink)' }}>
               {roas.toFixed(2)}x
             </span>
             {n !== null && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0"
+                className="mono text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0"
                 title={`${n} campaigns/ad sets behind this score`}
                 style={
                   n >= 5
-                    ? { background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }
-                    : { background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }
+                    ? { background: 'var(--muted)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }
+                    : { background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }
                 }
               >
                 n={n}
@@ -113,8 +113,8 @@ function InsightList({ items, bullet }: { items: string[] | string; bullet?: str
   return (
     <ul className="flex flex-col gap-1.5">
       {list.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#52525b' }}>
-          <span className="mt-0.5 shrink-0" style={{ color: '#4338ca' }}>
+        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: 'var(--ink-2)' }}>
+          <span className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }}>
             {bullet ?? '•'}
           </span>
           {item}
@@ -128,38 +128,31 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div
-      className="rounded-xl overflow-hidden transition-all"
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
-      }}
-    >
+    <div className="card overflow-hidden transition-all">
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left transition-colors hover:bg-zinc-50/60"
-        style={{ background: expanded ? '#fafafa' : '#ffffff' }}
+        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left transition-colors"
+        style={{ background: expanded ? 'var(--surface-warm)' : 'var(--surface)' }}
       >
         <div className="flex items-center gap-4 flex-wrap min-w-0">
           <div className="min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: '#18181b' }}>
+            <p className="text-sm font-semibold truncate" style={{ color: 'var(--ink)' }}>
               {study.campaignName}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#71717a' }}>{study.product}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{study.product}</p>
           </div>
           {study.dateRange && (
-            <span className="text-xs shrink-0" style={{ color: '#a1a1aa' }}>
+            <span className="mono text-xs shrink-0" style={{ color: 'var(--ink-3)' }}>
               {study.dateRange}
             </span>
           )}
           {study.totalSpend !== undefined && (
-            <span className="text-xs font-semibold shrink-0" style={{ color: '#15803d' }}>
+            <span className="mono text-xs font-semibold shrink-0" style={{ color: 'var(--good)' }}>
               {formatCurrency(study.totalSpend)}
             </span>
           )}
           {study.totalConversions !== undefined && (
-            <span className="text-xs shrink-0" style={{ color: '#71717a' }}>
+            <span className="mono text-xs shrink-0" style={{ color: 'var(--ink-3)' }}>
               {study.totalConversions} conv.
             </span>
           )}
@@ -167,14 +160,14 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
         <ChevronDown
           size={15}
           className={cn('transition-transform shrink-0', expanded && 'rotate-180')}
-          style={{ color: '#a1a1aa' }}
+          style={{ color: 'var(--ink-3)' }}
         />
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid #f3f4f6' }}>
+        <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
           {study.context && (
-            <p className="text-sm leading-relaxed mt-4" style={{ color: '#71717a' }}>
+            <p className="text-sm leading-relaxed mt-4" style={{ color: 'var(--ink-2)' }}>
               {study.context}
             </p>
           )}
@@ -183,39 +176,39 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs">✅</span>
-                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#15803d' }}>What Worked</p>
+                <p className="micro-label" style={{ color: 'var(--good)' }}>What Worked</p>
               </div>
               {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
                 <div>
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Hooks</p>
                   <TagList items={study.whatWorked.hooks} color="green" />
                 </div>
               )}
               {study.whatWorked.audiences && study.whatWorked.audiences.length > 0 && (
                 <div>
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Audiences</p>
                   <TagList items={study.whatWorked.audiences} color="blue" />
                 </div>
               )}
               {study.whatWorked.formats && study.whatWorked.formats.length > 0 && (
                 <div>
-                  <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Formats</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Formats</p>
                   <TagList items={study.whatWorked.formats} color="amber" />
                 </div>
               )}
               <div className="flex gap-3 flex-wrap mt-1">
                 {study.whatWorked.bestCPA !== undefined && (
-                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e5e7eb' }}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best CPA</p>
-                    <p className="text-xs font-semibold" style={{ color: '#18181b' }}>
+                  <div className="card-inset px-3 py-2">
+                    <p className="micro-label">Best CPA</p>
+                    <p className="mono text-xs font-semibold" style={{ color: 'var(--ink)' }}>
                       {formatCurrency(study.whatWorked.bestCPA)}
                     </p>
                   </div>
                 )}
                 {study.whatWorked.bestROAS !== undefined && (
-                  <div className="rounded-lg px-3 py-2" style={{ background: '#f6f6f7', border: '1px solid #e5e7eb' }}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c4c4cc' }}>Best ROAS</p>
-                    <p className="text-xs font-semibold" style={{ color: '#15803d' }}>
+                  <div className="card-inset px-3 py-2">
+                    <p className="micro-label">Best ROAS</p>
+                    <p className="mono text-xs font-semibold" style={{ color: 'var(--good)' }}>
                       {Number(study.whatWorked.bestROAS).toFixed(2)}x
                     </p>
                   </div>
@@ -231,22 +224,22 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs">❌</span>
-                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#b91c1c' }}>What Failed</p>
+                  <p className="micro-label" style={{ color: 'var(--bad)' }}>What Failed</p>
                 </div>
                 {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Hooks</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Hooks</p>
                     <TagList items={study.whatFailed.hooks} color="red" />
                   </div>
                 )}
                 {study.whatFailed.audiences && study.whatFailed.audiences.length > 0 && (
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#a1a1aa' }}>Audiences</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Audiences</p>
                     <TagList items={study.whatFailed.audiences} color="red" />
                   </div>
                 )}
                 {study.whatFailed.reason && (
-                  <p className="text-xs italic" style={{ color: '#a1a1aa' }}>
+                  <p className="text-xs italic" style={{ color: 'var(--ink-3)' }}>
                     {study.whatFailed.reason}
                   </p>
                 )}
@@ -254,9 +247,9 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             )}
 
           {study.lesson && (
-            <div className="rounded-xl p-3" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
-              <p className="text-xs font-semibold mb-1" style={{ color: '#4338ca' }}>💡 Lesson</p>
-              <p className="text-sm leading-relaxed" style={{ color: '#4338ca' }}>{study.lesson}</p>
+            <div className="rounded-xl p-3" style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--accent)' }}>💡 Lesson</p>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--accent)' }}>{study.lesson}</p>
             </div>
           )}
         </div>
@@ -288,8 +281,8 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
             style={
               segmentFilter === 'all'
-                ? { background: '#4338ca', color: '#fff' }
-                : { background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
             }
           >
             All ({exemplars.length})
@@ -304,8 +297,8 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                 className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
                 style={
                   active
-                    ? { background: '#4338ca', color: '#fff' }
-                    : { background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }
+                    ? { background: 'var(--accent)', color: '#fff' }
+                    : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
                 }
               >
                 {s.replace(/_/g, ' ')} ({count})
@@ -315,61 +308,56 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
         </div>
       )}
 
-      <div
-        className="rounded-lg overflow-x-auto"
-        style={{ background: '#ffffff', border: '1px solid #f3f4f6' }}
-      >
-        <table className="w-full">
+      <div className="card-inset overflow-x-auto">
+        <table className="data-table">
           <thead>
-            <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
-              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Hook</th>
-              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Style</th>
-              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Audience</th>
-              {hasProduct && (
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Product</th>
-              )}
-              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>CTR</th>
-              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>n</th>
-              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Captured</th>
+            <tr>
+              <th>Hook</th>
+              <th>Style</th>
+              <th>Audience</th>
+              {hasProduct && <th>Product</th>}
+              <th className="num">CTR</th>
+              <th className="num">n</th>
+              <th className="num">Captured</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((e, i) => (
-              <tr key={`${e.hookLine}-${i}`} style={{ borderBottom: i < sorted.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                <td className="px-3 py-2.5 max-w-md">
-                  <p className="text-xs italic leading-snug truncate" style={{ color: '#374151' }} title={e.hookLine}>
+              <tr key={`${e.hookLine}-${i}`}>
+                <td className="max-w-md">
+                  <p className="text-xs italic leading-snug truncate" style={{ color: 'var(--ink-2)' }} title={e.hookLine}>
                     &ldquo;{e.hookLine}&rdquo;
                   </p>
                 </td>
-                <td className="px-3 py-2.5">
+                <td>
                   <HookStyleChip style={e.hookStyle} />
                 </td>
-                <td className="px-3 py-2.5">
-                  <span className="text-[11px] capitalize" style={{ color: '#6b7280' }}>
+                <td>
+                  <span className="text-[11px] capitalize" style={{ color: 'var(--ink-3)' }}>
                     {segmentOf(e).replace(/_/g, ' ')}
                   </span>
                 </td>
                 {hasProduct && (
-                  <td className="px-3 py-2.5">
-                    <span className="text-[11px]" style={{ color: '#6b7280' }}>
+                  <td>
+                    <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                       {e.product ?? '—'}
                     </span>
                   </td>
                 )}
-                <td className="px-3 py-2.5 text-right text-xs tabular-nums font-bold" style={{ color: '#15803d' }}>
+                <td className="num mono text-xs font-bold" style={{ color: 'var(--good)' }}>
                   {e.ctr.toFixed(2)}%
                 </td>
-                <td className="px-3 py-2.5 text-right text-xs tabular-nums" style={{ color: '#6b7280' }}>
+                <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>
                   {e.sampleSize.toLocaleString()}
                 </td>
-                <td className="px-3 py-2.5 text-right text-[11px] tabular-nums" style={{ color: '#9ca3af' }}>
+                <td className="num mono text-[11px]" style={{ color: 'var(--ink-3)' }}>
                   {formatRelativeTime(e.extractedAt)}
                 </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={hasProduct ? 7 : 6} className="px-3 py-8 text-center text-xs italic" style={{ color: '#9ca3af' }}>
+                <td colSpan={hasProduct ? 7 : 6} className="px-3 py-8 text-center text-xs italic" style={{ color: 'var(--ink-3)' }}>
                   No exemplars match the current filter.
                 </td>
               </tr>
@@ -394,9 +382,9 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
   const [now] = useState(() => Date.now())
 
   function cellColor(pct: number) {
-    if (pct >= 80) return { bg: '#fee2e2', fg: '#b91c1c', label: 'high' }
-    if (pct >= 60) return { bg: '#fef3c7', fg: '#b45309', label: 'medium' }
-    return { bg: '#dcfce7', fg: '#166534', label: 'low' }
+    if (pct >= 80) return { bg: 'var(--bad-bg)', fg: 'var(--bad)', label: 'high' }
+    if (pct >= 60) return { bg: 'var(--warn-bg)', fg: 'var(--warn)', label: 'medium' }
+    return { bg: 'var(--good-bg)', fg: 'var(--good)', label: 'low' }
   }
 
   function recencyOpacity(updatedAt?: string) {
@@ -411,7 +399,7 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
 
   if (audiences.length === 0 || hookStyles.length === 0) {
     return (
-      <p className="text-xs italic px-3 py-6 text-center" style={{ color: '#9ca3af' }}>
+      <p className="text-xs italic px-3 py-6 text-center" style={{ color: 'var(--ink-3)' }}>
         No saturation data yet.
       </p>
     )
@@ -422,14 +410,14 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
       <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 4 }}>
         <thead>
           <tr>
-            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
+            <th className="px-2 py-1.5 text-left micro-label">
               Audience ↓ / Hook →
             </th>
             {hookStyles.map((h) => (
               <th
                 key={h}
                 className="px-2 py-1.5 text-center text-[10px] font-medium capitalize"
-                style={{ color: '#6b7280', minWidth: 80 }}
+                style={{ color: 'var(--ink-3)', minWidth: 80 }}
               >
                 {h.replace(/_/g, ' ')}
               </th>
@@ -441,7 +429,7 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
             <tr key={a}>
               <td
                 className="px-2 py-1.5 text-xs font-semibold capitalize whitespace-nowrap"
-                style={{ color: '#374151' }}
+                style={{ color: 'var(--ink-2)' }}
               >
                 {a.replace(/_/g, ' ')}
               </td>
@@ -453,8 +441,8 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
                       key={h}
                       className="text-center text-[10px] tabular-nums"
                       style={{
-                        background: '#f9fafb',
-                        color: '#d1d5db',
+                        background: 'var(--surface-warm)',
+                        color: 'var(--ink-4)',
                         borderRadius: 4,
                         padding: 8,
                       }}
@@ -468,7 +456,7 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
                 return (
                   <td
                     key={h}
-                    className="text-center text-[11px] tabular-nums font-bold"
+                    className="mono text-center text-[11px] tabular-nums font-bold"
                     title={`${a}/${h}: ${cell.pct.toFixed(0)}% saturation, updated ${formatRelativeTime(cell.updatedAt)}`}
                     style={{
                       background: c.bg,
@@ -486,20 +474,20 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
           ))}
         </tbody>
       </table>
-      <div className="flex items-center gap-3 mt-3 text-[11px]" style={{ color: '#6b7280' }}>
+      <div className="flex items-center gap-3 mt-3 text-[11px]" style={{ color: 'var(--ink-3)' }}>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded" style={{ background: '#dcfce7', border: '1px solid #bbf7d0' }} />
+          <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--good-bg)', border: '1px solid var(--good-border)' }} />
           &lt;60% fresh
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded" style={{ background: '#fef3c7', border: '1px solid #fde68a' }} />
+          <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }} />
           60–80% saturating
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded" style={{ background: '#fee2e2', border: '1px solid #fecaca' }} />
+          <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)' }} />
           &gt;80% burned out
         </div>
-        <span className="ml-auto" style={{ color: '#9ca3af' }}>
+        <span className="ml-auto" style={{ color: 'var(--ink-3)' }}>
           Faded cells = stale data
         </span>
       </div>
@@ -513,33 +501,25 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
     <div className="space-y-3">
       {insights.map((insight, i) => {
         const conf = insight.confidence
-        const confColor =
-          conf >= 0.8 ? { bg: '#dcfce7', fg: '#166534', border: '#bbf7d0' }
-          : conf >= 0.6 ? { bg: '#fef3c7', fg: '#b45309', border: '#fde68a' }
-          : { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' }
+        const confClass =
+          conf >= 0.8 ? 'chip chip-good'
+          : conf >= 0.6 ? 'chip chip-warn'
+          : 'chip chip-neutral'
         return (
-          <div
-            key={i}
-            className="rounded-lg p-4"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
-          >
+          <div key={i} className="card p-4">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold leading-snug" style={{ color: '#111827' }}>
+                <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
                   {insight.finding}
                 </p>
                 {insight.productName && (
-                  <span
-                    className="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded font-medium"
-                    style={{ background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }}
-                  >
+                  <span className="chip chip-accent mt-1.5">
                     {insight.productName}
                   </span>
                 )}
               </div>
               <span
-                className="text-[11px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap shrink-0"
-                style={{ background: confColor.bg, color: confColor.fg, border: `1px solid ${confColor.border}` }}
+                className={cn(confClass, 'mono shrink-0')}
                 title={`${(conf * 100).toFixed(0)}% confidence based on ${insight.dataPoints} data points`}
               >
                 {(conf * 100).toFixed(0)}% conf · n={insight.dataPoints}
@@ -548,24 +528,24 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                <p className="micro-label mb-1">
                   Isolated variable
                 </p>
-                <p className="text-xs font-medium" style={{ color: '#4338ca' }}>{insight.isolatedVariable}</p>
+                <p className="text-xs font-medium" style={{ color: 'var(--accent)' }}>{insight.isolatedVariable}</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                <p className="micro-label mb-1">
                   Controlled for
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {(insight.controlledFor ?? []).length === 0 ? (
-                    <span className="text-[11px] italic" style={{ color: '#9ca3af' }}>none</span>
+                    <span className="text-[11px] italic" style={{ color: 'var(--ink-3)' }}>none</span>
                   ) : (
                     (insight.controlledFor ?? []).map((c) => (
                       <span
                         key={c}
                         className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ background: '#f3f4f6', color: '#4b5563' }}
+                        style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}
                       >
                         {c.replace(/_/g, ' ')}
                       </span>
@@ -574,10 +554,10 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
                 </div>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>
+                <p className="micro-label mb-1">
                   Root cause
                 </p>
-                <p className="text-xs" style={{ color: '#374151' }}>{insight.rootCause}</p>
+                <p className="text-xs" style={{ color: 'var(--ink-2)' }}>{insight.rootCause}</p>
               </div>
             </div>
           </div>
@@ -685,10 +665,10 @@ export default function LearningsPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: '#f8f9fb' }}>
+      <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: '#4338ca' }} />
-          <p className="text-sm" style={{ color: '#71717a' }}>Loading learnings...</p>
+          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
+          <p className="text-sm" style={{ color: 'var(--ink-3)' }}>Loading learnings...</p>
         </div>
       </div>
     )
@@ -706,12 +686,6 @@ export default function LearningsPage({ params }: PageProps) {
     })
     .sort((a, b) => (b.whatWorked?.bestROAS ?? 0) - (a.whatWorked?.bestROAS ?? 0))
 
-  const cardStyle: React.CSSProperties = {
-    background: '#ffffff',
-    border: '1px solid #e5e7eb',
-    boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
-  }
-
   const hasPatternData =
     creative?.winningHooks?.length ||
     creative?.losingHooks?.length ||
@@ -722,41 +696,28 @@ export default function LearningsPage({ params }: PageProps) {
     campaign?.timingInsights?.length
 
   return (
-    <div className="p-7 max-w-5xl mx-auto animate-fade-up">
+    <div className="px-8 py-8 max-w-5xl mx-auto stagger">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}
-            >
-              <BookOpen size={15} style={{ color: '#15803d' }} />
-            </div>
-            <div>
-              <h1 className="text-[20px] font-bold tracking-tight" style={{ color: '#18181b' }}>
-                Learnings
-              </h1>
-              <p className="text-xs mt-0.5" style={{ color: '#a1a1aa' }}>
-                AI-synthesized insights from past campaign performance
-                {updatedAt && (
-                  <span className="ml-1">· Updated {new Date(updatedAt).toLocaleDateString()}</span>
-                )}
-              </p>
-            </div>
+      <div className="mb-8">
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <p className="micro-label mb-2">Learning memory</p>
+            <h1 className="page-title">Learnings</h1>
+            <p className="page-subtitle">
+              AI-synthesized insights from past campaign performance
+              {updatedAt && (
+                <span className="ml-1 mono">· Updated {new Date(updatedAt).toLocaleDateString()}</span>
+              )}
+            </p>
           </div>
           <button
             onClick={handleImport}
             disabled={importPhase === 'importing'}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all"
-            style={
-              importPhase === 'importing'
-                ? { background: '#f8f9fb', color: '#a1a1aa', cursor: 'not-allowed' }
-                : importPhase === 'completed'
-                ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
-                : importPhase === 'failed'
-                ? { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }
-                : { background: 'linear-gradient(135deg, #4338ca 0%, #4338ca 100%)', color: '#ffffff', boxShadow: '0 2px 6px rgba(2,132,199,0.35)' }
+            className={
+              importPhase === 'importing' ? 'btn btn-ghost'
+              : importPhase === 'completed' ? 'btn chip-good border'
+              : importPhase === 'failed' ? 'btn btn-danger'
+              : 'btn btn-accent'
             }
           >
             {importPhase === 'importing' ? (
@@ -780,60 +741,57 @@ export default function LearningsPage({ params }: PageProps) {
 
         {/* Progress bar */}
         {(importPhase === 'importing' || importPhase === 'completed') && importProgress && (
-          <div className="mt-4 rounded-xl p-4 flex flex-col gap-3" style={cardStyle}>
+          <div className="card mt-4 p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
               <span
                 className="font-medium capitalize"
-                style={{ color: importProgress.status === 'completed' ? '#15803d' : '#4338ca' }}
+                style={{ color: importProgress.status === 'completed' ? 'var(--good)' : 'var(--accent)' }}
               >
                 {importProgress.status === 'completed' ? '✓ Completed' :
                  importProgress.status === 'failed' ? '✗ Failed' :
                  `${importProgress.status}…`}
               </span>
-              <span style={{ color: '#71717a' }}>
+              <span className="mono" style={{ color: 'var(--ink-3)' }}>
                 {importProgress.completedBatches}/{importProgress.totalBatches} batches
                 {importProgress.totalCampaigns > 0 && ` · ${importProgress.totalCampaigns} campaigns`}
                 {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} case studies`}
               </span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--muted)' }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${importProgress.progress}%`,
-                  background: importProgress.status === 'completed' ? '#15803d' : '#4338ca',
+                  background: importProgress.status === 'completed' ? 'var(--good)' : 'var(--accent)',
                 }}
               />
             </div>
           </div>
         )}
         {importPhase === 'failed' && importError && (
-          <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>{importError}</p>
+          <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{importError}</p>
         )}
       </div>
 
       {error && (
         <div
           className="rounded-xl p-4 mb-6 text-sm"
-          style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}
+          style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
           {error}
         </div>
       )}
 
       {/* ===== SECTION A: PATTERN MEMORY ===== */}
-      <div className="mb-8">
-        <h2 className="text-[15px] font-bold tracking-tight mb-4" style={{ color: '#18181b' }}>
+      <div className="mb-10">
+        <h2 className="section-title mb-4">
           Pattern Memory
         </h2>
 
         {!hasPatternData ? (
-          <div
-            className="rounded-xl py-10 text-center"
-            style={cardStyle}
-          >
-            <p className="text-sm" style={{ color: '#a1a1aa' }}>No learnings data yet.</p>
-            <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>
+          <div className="card py-10 text-center">
+            <p className="text-sm" style={{ color: 'var(--ink-3)' }}>No learnings data yet.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
               Import from Meta to generate AI-synthesized insights.
             </p>
           </div>
@@ -841,11 +799,8 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Winning hooks */}
             {creative?.winningHooks && creative.winningHooks.length > 0 && (
-              <div className="rounded-xl p-5" style={cardStyle}>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#15803d' }}
-                >
+              <div className="card p-5">
+                <h3 className="micro-label mb-3" style={{ color: 'var(--good)' }}>
                   Winning Hooks
                 </h3>
                 <TagList items={creative.winningHooks} color="green" />
@@ -854,11 +809,8 @@ export default function LearningsPage({ params }: PageProps) {
 
             {/* Losing hooks */}
             {creative?.losingHooks && creative.losingHooks.length > 0 && (
-              <div className="rounded-xl p-5" style={cardStyle}>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#b91c1c' }}
-                >
+              <div className="card p-5">
+                <h3 className="micro-label mb-3" style={{ color: 'var(--bad)' }}>
                   Losing Hooks
                 </h3>
                 <TagList items={creative.losingHooks} color="red" />
@@ -867,11 +819,8 @@ export default function LearningsPage({ params }: PageProps) {
 
             {/* Winning formats */}
             {creative?.winningFormats && creative.winningFormats.length > 0 && (
-              <div className="rounded-xl p-5" style={cardStyle}>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#b45309' }}
-                >
+              <div className="card p-5">
+                <h3 className="micro-label mb-3" style={{ color: 'var(--warn)' }}>
                   Winning Formats
                 </h3>
                 <TagList items={creative.winningFormats} color="amber" />
@@ -880,11 +829,8 @@ export default function LearningsPage({ params }: PageProps) {
 
             {/* Losing formats */}
             {creative?.losingFormats && creative.losingFormats.length > 0 && (
-              <div className="rounded-xl p-5" style={cardStyle}>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#71717a' }}
-                >
+              <div className="card p-5">
+                <h3 className="micro-label mb-3" style={{ color: 'var(--ink-3)' }}>
                   Losing Formats
                 </h3>
                 <TagList items={creative.losingFormats} color="zinc" />
@@ -893,11 +839,8 @@ export default function LearningsPage({ params }: PageProps) {
 
             {/* Audience scores (tenant-aggregate ROAS) */}
             {campaign?.audienceScores && Object.keys(campaign.audienceScores).length > 0 && (
-              <div className="rounded-xl p-5" style={cardStyle}>
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: '#4338ca' }}
-                >
+              <div className="card p-5">
+                <h3 className="micro-label mb-3" style={{ color: 'var(--accent)' }}>
                   Audience ROAS · all products
                 </h3>
                 <AudienceScoreRows scores={normalizeAudienceScores(campaign.audienceScores)} />
@@ -907,13 +850,10 @@ export default function LearningsPage({ params }: PageProps) {
             {/* Budget + timing insights */}
             {((campaign?.budgetInsights?.length ?? 0) > 0 ||
               (campaign?.timingInsights?.length ?? 0) > 0) && (
-              <div className="rounded-xl p-5" style={cardStyle}>
+              <div className="card p-5">
                 {campaign?.budgetInsights && campaign.budgetInsights.length > 0 && (
                   <div className="mb-3">
-                    <h3
-                      className="text-xs font-semibold uppercase tracking-wider mb-2"
-                      style={{ color: '#a1a1aa' }}
-                    >
+                    <h3 className="micro-label mb-2">
                       Budget Insights
                     </h3>
                     <InsightList items={campaign.budgetInsights} />
@@ -921,10 +861,7 @@ export default function LearningsPage({ params }: PageProps) {
                 )}
                 {campaign?.timingInsights && campaign.timingInsights.length > 0 && (
                   <div>
-                    <h3
-                      className="text-xs font-semibold uppercase tracking-wider mb-2"
-                      style={{ color: '#a1a1aa' }}
-                    >
+                    <h3 className="micro-label mb-2">
                       Timing Insights
                     </h3>
                     <InsightList items={campaign.timingInsights} bullet="⏱" />
@@ -938,13 +875,13 @@ export default function LearningsPage({ params }: PageProps) {
 
       {/* ===== SECTION A1b: AUDIENCE PERFORMANCE BY PRODUCT ===== */}
       {campaign?.audienceScoresByProduct && Object.keys(campaign.audienceScoresByProduct).length > 0 && (
-        <div className="mb-8">
+        <div className="mb-10">
           <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+            <h2 className="section-title">
               Audience Performance by Product
             </h2>
           </div>
-          <p className="text-xs mb-4" style={{ color: '#a1a1aa' }}>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>
             What the audit verdicts and targeting guards actually consume — per-product scores beat the
             all-products aggregate. Amber n = thin sample, treated as hypothesis-grade by the agents.
           </p>
@@ -953,8 +890,8 @@ export default function LearningsPage({ params }: PageProps) {
               const rows = normalizeAudienceScores(scores)
               if (rows.length === 0) return null
               return (
-                <div key={product} className="rounded-xl p-5" style={cardStyle}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#4338ca' }}>
+                <div key={product} className="card p-5">
+                  <h3 className="micro-label mb-3" style={{ color: 'var(--accent)' }}>
                     {product}
                   </h3>
                   <AudienceScoreRows scores={rows} />
@@ -967,20 +904,17 @@ export default function LearningsPage({ params }: PageProps) {
 
       {/* ===== SECTION A2: WINNING EXEMPLARS ===== */}
       {creative?.winningExemplars && creative.winningExemplars.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-10">
           <div className="flex items-center gap-2 mb-4">
-            <Trophy size={15} style={{ color: '#15803d' }} />
-            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+            <Trophy size={15} style={{ color: 'var(--good)' }} />
+            <h2 className="section-title">
               Winning Exemplars
             </h2>
-            <span
-              className="text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-              style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
-            >
+            <span className="chip chip-neutral mono">
               {creative.winningExemplars.length}
             </span>
           </div>
-          <div className="rounded-xl p-5" style={cardStyle}>
+          <div className="card p-5">
             <WinningExemplarsTable exemplars={creative.winningExemplars} />
           </div>
         </div>
@@ -988,14 +922,14 @@ export default function LearningsPage({ params }: PageProps) {
 
       {/* ===== SECTION A3: HOOK SATURATION HEATMAP ===== */}
       {creative?.audienceHookSaturation && Object.keys(creative.audienceHookSaturation).length > 0 && (
-        <div className="mb-8">
+        <div className="mb-10">
           <div className="flex items-center gap-2 mb-4">
-            <LayoutGrid size={15} style={{ color: '#b45309' }} />
-            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+            <LayoutGrid size={15} style={{ color: 'var(--warn)' }} />
+            <h2 className="section-title">
               Hook Saturation
             </h2>
           </div>
-          <div className="rounded-xl p-5" style={cardStyle}>
+          <div className="card p-5">
             <HookSaturationHeatmap data={creative.audienceHookSaturation} />
           </div>
         </div>
@@ -1003,16 +937,13 @@ export default function LearningsPage({ params }: PageProps) {
 
       {/* ===== SECTION A4: CAUSAL INSIGHTS ===== */}
       {company?.learnings?.causalInsights && company.learnings.causalInsights.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-10">
           <div className="flex items-center gap-2 mb-4">
-            <GitBranch size={15} style={{ color: '#4338ca' }} />
-            <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
+            <GitBranch size={15} style={{ color: 'var(--accent)' }} />
+            <h2 className="section-title">
               Causal Insights
             </h2>
-            <span
-              className="text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-              style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
-            >
+            <span className="chip chip-neutral mono">
               {company.learnings.causalInsights.length}
             </span>
           </div>
@@ -1023,40 +954,36 @@ export default function LearningsPage({ params }: PageProps) {
       {/* ===== SECTION B: CASE STUDIES ===== */}
       <div>
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#18181b' }}>
-            Case Studies
+          <div className="flex items-center gap-2">
+            <h2 className="section-title">
+              Case Studies
+            </h2>
             {caseStudies.length > 0 && (
-              <span
-                className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-                style={{ background: '#f8f9fb', color: '#71717a', border: '1px solid #e5e7eb' }}
-              >
+              <span className="chip chip-neutral mono">
                 {caseStudies.length}
               </span>
             )}
-          </h2>
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a1a1aa' }} />
+          </div>
+          <div className="relative" style={{ width: 256 }}>
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 z-10" style={{ color: 'var(--ink-3)' }} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by campaign or product…"
-              className="rounded-lg pl-8 pr-4 py-1.5 text-xs w-64"
-              style={{ background: '#f6f6f7', border: '1px solid #e5e7eb', color: '#18181b' }}
+              className="input text-xs"
+              style={{ paddingLeft: 32, paddingTop: 6, paddingBottom: 6 }}
             />
           </div>
         </div>
 
         {filteredStudies.length === 0 ? (
-          <div
-            className="rounded-xl py-12 text-center"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
-          >
-            <BookOpen size={28} className="mx-auto mb-3" style={{ color: '#d4d4d8' }} />
-            <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
+          <div className="card py-12 text-center">
+            <BookOpen size={28} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>
               {search ? 'No case studies match your search' : 'No case studies yet'}
             </p>
-            <p className="text-xs mt-1" style={{ color: '#d4d4d8' }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
               {search
                 ? 'Try a different search term'
                 : 'Case studies are created automatically as campaigns complete'}

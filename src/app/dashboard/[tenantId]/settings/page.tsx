@@ -24,7 +24,7 @@ function maskToken(token?: string) {
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <section className="rounded-xl p-5 bg-white" style={{ border: '1px solid #e5e7eb' }}>
+    <section className="card p-6">
       {children}
     </section>
   )
@@ -36,12 +36,12 @@ function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right }
   return (
     <div className="flex items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: iconBg }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-1" style={{ background: iconBg }}>
           <Icon size={15} style={{ color: iconColor }} />
         </div>
         <div>
-          <h2 className="text-sm font-semibold" style={{ color: '#111827' }}>{title}</h2>
-          {subtitle && <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>{subtitle}</p>}
+          <h2 className="section-title">{title}</h2>
+          {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{subtitle}</p>}
         </div>
       </div>
       {right}
@@ -52,10 +52,11 @@ function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right }
 function SaveBtn({ state, onClick, label = 'Save changes' }: { state: 'idle' | 'loading' | 'success' | 'error'; onClick: () => void; label?: string }) {
   return (
     <button onClick={onClick} disabled={state === 'loading'}
-      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-60"
-      style={state === 'success' ? { background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }
-        : state === 'error' ? { background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }
-        : { background: '#4f46e5', color: '#ffffff' }}>
+      className={
+        state === 'success' ? 'btn chip-good border'
+        : state === 'error' ? 'btn btn-danger'
+        : 'btn btn-primary'
+      }>
       {state === 'loading' && <Loader2 size={11} className="animate-spin" />}
       {state === 'success' && <CheckCircle2 size={11} />}
       {state === 'loading' ? 'Saving…' : state === 'success' ? 'Saved!' : state === 'error' ? 'Error — retry' : label}
@@ -64,26 +65,26 @@ function SaveBtn({ state, onClick, label = 'Save changes' }: { state: 'idle' | '
 }
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return <p className="text-xs font-medium mb-1.5" style={{ color: '#374151' }}>{children}{required && <span className="ml-0.5 text-red-500">*</span>}</p>
+  return <p className="micro-label mb-1.5" style={{ color: 'var(--ink-2)' }}>{children}{required && <span className="ml-0.5" style={{ color: 'var(--bad)' }}>*</span>}</p>
 }
 
 function TextInput({ value, onChange, placeholder, mono, type = 'text' }: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; type?: string }) {
   return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-    className={`w-full rounded-lg px-3 py-2 text-sm outline-none border border-gray-200 bg-gray-50 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all ${mono ? 'font-mono' : ''}`} style={{ color: '#111827' }} />
+    className={`input ${mono ? 'mono' : ''}`} />
 }
 
 function TextArea({ value, onChange, placeholder, rows = 2 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
   return <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-    className="w-full rounded-lg px-3 py-2 text-sm resize-none outline-none border border-gray-200 bg-gray-50 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all" style={{ color: '#111827' }} />
+    className="input resize-none" />
 }
 
 function NumericInput({ value, onChange, prefix, suffix, placeholder = '—', step = 1 }: { value: string; onChange: (v: string) => void; prefix?: string; suffix?: string; placeholder?: string; step?: number }) {
   return (
-    <div className="flex items-stretch rounded-lg overflow-hidden border border-gray-200">
-      {prefix && <span className="flex items-center px-2.5 text-xs font-medium bg-gray-100 text-gray-500 border-r border-gray-200">{prefix}</span>}
+    <div className="flex items-stretch overflow-hidden" style={{ border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--surface-warm)' }}>
+      {prefix && <span className="flex items-center px-2.5 text-xs font-medium mono" style={{ background: 'var(--muted)', color: 'var(--ink-3)', borderRight: '1px solid var(--hairline)' }}>{prefix}</span>}
       <input type="number" step={step} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="flex-1 min-w-0 px-3 py-2 text-sm tabular-nums outline-none bg-gray-50" style={{ color: '#111827' }} />
-      {suffix && <span className="flex items-center px-2.5 text-xs font-medium bg-gray-100 text-gray-500 border-l border-gray-200">{suffix}</span>}
+        className="flex-1 min-w-0 px-3 py-2 text-sm tabular-nums outline-none mono bg-transparent" style={{ color: 'var(--ink)' }} />
+      {suffix && <span className="flex items-center px-2.5 text-xs font-medium mono" style={{ background: 'var(--muted)', color: 'var(--ink-3)', borderLeft: '1px solid var(--hairline)' }}>{suffix}</span>}
     </div>
   )
 }
@@ -103,9 +104,9 @@ function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange
     <div>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {value.map((tag, i) => (
-          <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-700">
+          <span key={i} className="chip chip-neutral">
             {tag}
-            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="hover:text-red-500 transition-colors">
+            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="transition-colors hover:text-[var(--bad)]">
               <X size={10} />
             </button>
           </span>
@@ -121,13 +122,12 @@ function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange
             if (e.key === ',' ) { e.preventDefault(); addTag() }
           }}
           placeholder={value.length === 0 ? placeholder : 'Add more…'}
-          className="flex-1 rounded-lg px-3 py-2 text-sm outline-none border border-gray-200 bg-gray-50 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all"
-          style={{ color: '#111827' }}
+          className="input flex-1"
         />
         <button
           onClick={addTag}
           disabled={!input.trim()}
-          className="px-3 py-2 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 transition-all"
+          className="btn btn-ghost px-3 py-2"
         >
           <Plus size={12} />
         </button>
@@ -138,10 +138,10 @@ function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange
 
 function RuleGroup({ icon: Icon, iconColor, iconBg, title, children }: { icon: React.ElementType; iconColor: string; iconBg: string; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl p-4 bg-gray-50 border border-gray-100">
+    <div className="card-inset p-4">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: iconBg }}><Icon size={11} style={{ color: iconColor }} /></div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{title}</p>
+        <p className="micro-label">{title}</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{children}</div>
     </div>
@@ -150,9 +150,8 @@ function RuleGroup({ icon: Icon, iconColor, iconBg, title, children }: { icon: R
 
 function StatusPill({ active }: { active: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-      style={active ? { background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' } : { background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#059669' : '#dc2626' }} />
+    <span className={active ? 'chip chip-good' : 'chip chip-bad'}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? 'var(--good)' : 'var(--bad)' }} />
       {active ? 'Connected' : 'Disconnected'}
     </span>
   )
@@ -173,20 +172,20 @@ function ConversionTracking({ product, onChange }: { product: Product; onChange:
     else onChange({ ...product, customConversionId: product.customConversionId || '', conversionEvent: undefined, customEventName: undefined })
   }
   return (
-    <div className="rounded-xl p-4 space-y-3 bg-gray-50 border border-gray-100">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Conversion Tracking</p>
+    <div className="card-inset p-4 space-y-3">
+      <p className="micro-label">Conversion Tracking</p>
       <div className="flex gap-2 flex-wrap">
         {([{ value: 'standard', label: 'Standard Event' }, { value: 'custom_event', label: 'Custom Event' }, { value: 'custom_conversion', label: 'Custom Conversion' }] as const).map(opt => (
           <button key={opt.value} onClick={() => setMode(opt.value)} className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={mode === opt.value ? { background: '#4f46e5', color: '#fff' } : { background: '#fff', color: '#4b5563', border: '1px solid #e5e7eb' }}>{opt.label}</button>
+            style={mode === opt.value ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {mode === 'standard' && <div><FieldLabel>Event</FieldLabel><select value={product.conversionEvent || 'Purchase'} onChange={e => onChange({ ...product, conversionEvent: e.target.value })}
-          className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-white border border-gray-200" style={{ color: '#111827' }}>{STANDARD_EVENTS.map(ev => <option key={ev}>{ev}</option>)}</select></div>}
+          className="input">{STANDARD_EVENTS.map(ev => <option key={ev}>{ev}</option>)}</select></div>}
         {mode === 'custom_event' && <div><FieldLabel>Event Name</FieldLabel><TextInput value={product.customEventName || ''} onChange={v => onChange({ ...product, customEventName: v })} placeholder="MY_CUSTOM_EVENT" mono /></div>}
         {mode === 'custom_conversion' && <div><FieldLabel>Conversion ID</FieldLabel><TextInput value={product.customConversionId || ''} onChange={v => onChange({ ...product, customConversionId: v })} placeholder="1940441453551274" mono /></div>}
-        <div><FieldLabel>Pixel ID <span className="text-gray-400 font-normal">(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>
+        <div><FieldLabel>Pixel ID <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>
       </div>
     </div>
   )
@@ -200,22 +199,22 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
   function tags(key: 'languages' | 'trendKeywords' | 'differentiators', raw: string) { onChange({ ...product, [key]: raw.split(',').map(s => s.trim()).filter(Boolean) }) }
 
   return (
-    <div className="rounded-xl overflow-hidden transition-all" style={{ border: `1px solid ${isActive ? '#e5e7eb' : '#f3f4f6'}`, background: isActive ? '#fff' : '#fafafa' }}>
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" style={{ borderBottom: open ? '1px solid #f3f4f6' : 'none' }} onClick={() => setOpen(o => !o)}>
+    <div className="rounded-xl overflow-hidden transition-all" style={{ border: `1px solid ${isActive ? 'var(--hairline)' : 'var(--hairline-light)'}`, background: isActive ? 'var(--surface)' : 'var(--surface-warm)' }}>
+      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" style={{ borderBottom: open ? '1px solid var(--hairline-light)' : 'none' }} onClick={() => setOpen(o => !o)}>
         <button className="shrink-0" onClick={e => { e.stopPropagation(); set('active', !isActive) }} title={isActive ? 'Deactivate' : 'Activate'}>
-          {isActive ? <ToggleRight size={20} style={{ color: '#059669' }} /> : <ToggleLeft size={20} style={{ color: '#d1d5db' }} />}
+          {isActive ? <ToggleRight size={20} style={{ color: 'var(--good)' }} /> : <ToggleLeft size={20} style={{ color: 'var(--ink-4)' }} />}
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: isActive ? '#111827' : '#9ca3af' }}>{product.name || <span className="text-gray-300">Unnamed product</span>}</p>
+          <p className="text-sm font-semibold truncate" style={{ color: isActive ? 'var(--ink)' : 'var(--ink-3)' }}>{product.name || <span style={{ color: 'var(--ink-4)' }}>Unnamed product</span>}</p>
           {!open && <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {product.price != null && <span className="text-[11px] text-gray-500">{product.currency || 'INR'} {product.price.toLocaleString()}</span>}
-            {product.conversionEvent && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">{product.conversionEvent}</span>}
-            {!isActive && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400">Inactive</span>}
+            {product.price != null && <span className="text-[11px] mono" style={{ color: 'var(--ink-3)' }}>{product.currency || 'INR'} {product.price.toLocaleString()}</span>}
+            {product.conversionEvent && <span className="chip chip-warn">{product.conversionEvent}</span>}
+            {!isActive && <span className="chip chip-neutral">Inactive</span>}
           </div>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={e => { e.stopPropagation(); onRemove() }} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50"><Trash2 size={13} className="text-red-300" /></button>
-          {open ? <ChevronUp size={14} className="text-gray-300" /> : <ChevronDown size={14} className="text-gray-300" />}
+          <button onClick={e => { e.stopPropagation(); onRemove() }} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--bad-bg)]"><Trash2 size={13} style={{ color: 'var(--bad-border)' }} /></button>
+          {open ? <ChevronUp size={14} style={{ color: 'var(--ink-4)' }} /> : <ChevronDown size={14} style={{ color: 'var(--ink-4)' }} />}
         </div>
       </div>
       {open && (
@@ -223,7 +222,7 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
           <div><FieldLabel required>Name</FieldLabel><TextInput value={product.name} onChange={v => set('name', v)} placeholder="e.g. Pro Plan" /></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><FieldLabel>Price</FieldLabel><div className="flex gap-1.5">
-              <select value={product.currency || 'INR'} onChange={e => set('currency', e.target.value)} className="rounded-lg px-2 py-2 text-xs outline-none bg-gray-50 border border-gray-200 text-gray-700">{['INR', 'USD', 'EUR', 'GBP', 'AED'].map(c => <option key={c}>{c}</option>)}</select>
+              <select value={product.currency || 'INR'} onChange={e => set('currency', e.target.value)} className="input w-auto text-xs" style={{ width: 'auto' }}>{['INR', 'USD', 'EUR', 'GBP', 'AED'].map(c => <option key={c}>{c}</option>)}</select>
               <NumericInput value={product.price != null ? String(product.price) : ''} onChange={v => set('price', v ? Number(v) : undefined)} placeholder="999" />
             </div></div>
             <div><FieldLabel>Conversion Value</FieldLabel><NumericInput value={product.conversionValue != null ? String(product.conversionValue) : ''} onChange={v => set('conversionValue', v ? Number(v) : undefined)} placeholder="999" /></div>
@@ -248,9 +247,9 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
                   placeholder="97"
                 />
               </div>
-              <p className="text-[11px]" style={{ color: '#6b7280' }}>
+              <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                 {product.contributionMargin != null && product.contributionMargin > 0
-                  ? <>→ breakeven ROAS <span className="font-mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
+                  ? <>→ breakeven ROAS <span className="mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
                   : 'Vertical default applies when blank'}
               </p>
             </div>
@@ -274,9 +273,9 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
                     placeholder="0"
                   />
                 </div>
-                <p className="text-[11px]" style={{ color: '#6b7280' }}>
+                <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                   {product.refundRatePercent != null && product.refundRatePercent > 0 && product.conversionValue != null
-                    ? <>→ net value <span className="font-mono font-semibold">₹{Math.round(product.conversionValue * (1 - product.refundRatePercent / 100)).toLocaleString()}</span></>
+                    ? <>→ net value <span className="mono font-semibold">₹{Math.round(product.conversionValue * (1 - product.refundRatePercent / 100)).toLocaleString()}</span></>
                     : 'Blank = no refunds (gross revenue)'}
                 </p>
               </div>
@@ -290,9 +289,9 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
                 title="When on, ad copy/images omit price — the landing page handles pricing (premium positioning)"
               >
                 {product.hidePriceInCreative
-                  ? <ToggleRight size={20} style={{ color: '#059669' }} />
-                  : <ToggleLeft size={20} style={{ color: '#d1d5db' }} />}
-                <span className="text-[11px]" style={{ color: '#6b7280' }}>
+                  ? <ToggleRight size={20} style={{ color: 'var(--good)' }} />
+                  : <ToggleLeft size={20} style={{ color: 'var(--ink-4)' }} />}
+                <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                   {product.hidePriceInCreative ? 'Price suppressed in all ads' : 'Price shown in ads (default)'}
                 </span>
               </button>
@@ -303,7 +302,7 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
           <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {([{ key: 'languages' as const, label: 'Languages', ph: 'hindi, english' }, { key: 'trendKeywords' as const, label: 'Trend Keywords', ph: 'kundli, astrology' }, { key: 'differentiators' as const, label: 'Differentiators', ph: 'AI-powered, fast' }]).map(({ key, label, ph }) => (
-              <div key={key}><FieldLabel>{label}</FieldLabel><p className="text-[11px] mb-1.5 text-gray-400">comma-separated</p>
+              <div key={key}><FieldLabel>{label}</FieldLabel><p className="text-[11px] mb-1.5" style={{ color: 'var(--ink-4)' }}>comma-separated</p>
                 <TextInput value={(product[key] as string[] || []).join(', ')} onChange={v => tags(key, v)} placeholder={ph} /></div>
             ))}
           </div>
@@ -493,48 +492,48 @@ export default function SettingsPage({ params }: PageProps) {
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen"><Loader2 size={22} className="animate-spin text-indigo-500" /></div>
+    <div className="flex items-center justify-center min-h-screen"><Loader2 size={22} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
   )
 
   const metaConnected = !!(settings?.meta?.accessToken)
 
   return (
-    <div className="px-6 py-6 max-w-4xl mx-auto min-h-screen" style={{ background: '#f8f9fb' }}>
+    <div className="px-8 py-8 max-w-4xl mx-auto stagger">
       {/* Toast */}
-      {toast && <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-lg text-sm font-medium animate-scale-in" style={toast.type === 'success' ? { background: '#ecfdf5', color: '#059669' } : { background: '#fef2f2', color: '#dc2626' }}>{toast.msg}</div>}
+      {toast && <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-lg text-sm font-medium animate-scale-in" style={toast.type === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>{toast.msg}</div>}
 
       {/* Page header */}
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-100"><Settings size={16} className="text-indigo-600" /></div>
-          <div><h1 className="text-lg font-bold text-gray-900">Settings</h1><p className="text-xs mt-0.5 text-gray-400">{tenantId}</p></div>
+      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+        <div className="min-w-0">
+          <p className="micro-label mb-2 mono">{tenantId}</p>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Company profile, products, budget rules, and pipeline configuration.</p>
         </div>
-        <button onClick={handleRegen} disabled={regenState === 'loading'}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-60 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost pb-2.5">
           {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
           {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Prompts'}
         </button>
       </div>
 
-      {error && <div className="rounded-xl p-4 mb-5 flex items-center gap-3 text-sm bg-red-50 text-red-600 border border-red-200"><AlertCircle size={14} /> {error}</div>}
+      {error && <div className="rounded-xl p-4 mb-5 flex items-center gap-3 text-sm" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}><AlertCircle size={14} /> {error}</div>}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
 
         {/* ── Company Info ── */}
         <SectionCard>
-          <SectionHeader icon={Building2} iconBg="#eef2ff" iconColor="#4f46e5" title="Company Info" subtitle="Basic company information" />
+          <SectionHeader icon={Building2} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Company Info" subtitle="Basic company information" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div><FieldLabel required>Name</FieldLabel><TextInput value={info.name} onChange={v => setInfo(s => ({ ...s, name: v }))} placeholder="Company name" /></div>
             <div><FieldLabel>Industry</FieldLabel><TextInput value={info.industry} onChange={v => setInfo(s => ({ ...s, industry: v }))} placeholder="e.g. Astrology" /></div>
             <div><FieldLabel>Geography</FieldLabel><TextInput value={info.geography} onChange={v => setInfo(s => ({ ...s, geography: v }))} placeholder="e.g. India" /></div>
             <div><FieldLabel>Language</FieldLabel><TextInput value={info.language} onChange={v => setInfo(s => ({ ...s, language: v }))} placeholder="e.g. English" /></div>
           </div>
-          <div className="mt-4"><SaveBtn state={infoState} onClick={() => saveSection({ name: info.name, industry: info.industry, geography: info.geography, language: info.language }, setInfoState)} label="Save" /></div>
+          <div className="mt-5"><SaveBtn state={infoState} onClick={() => saveSection({ name: info.name, industry: info.industry, geography: info.geography, language: info.language }, setInfoState)} label="Save" /></div>
         </SectionCard>
 
         {/* ── Brand ── */}
         <SectionCard>
-          <SectionHeader icon={Palette} iconBg="#faf5ff" iconColor="#7c3aed" title="Brand & Voice" subtitle="How your brand communicates" />
+          <SectionHeader icon={Palette} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Brand & Voice" subtitle="How your brand communicates" />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><FieldLabel>Target Audience</FieldLabel><TextInput value={brand.targetAudience} onChange={v => setBrand(s => ({ ...s, targetAudience: v }))} placeholder="25-40 year old professionals" /></div>
@@ -548,54 +547,54 @@ export default function SettingsPage({ params }: PageProps) {
               <div><FieldLabel>Topics to Avoid</FieldLabel><TagsInput value={brand.avoid} onChange={v => setBrand(s => ({ ...s, avoid: v }))} placeholder="politics, religion" /></div>
             </div>
           </div>
-          <div className="mt-4"><SaveBtn state={brandState} onClick={() => saveSection({ targetAudience: brand.targetAudience, tone: brand.tone, uniqueValue: brand.uniqueValue, brandGuidelines: brand.brandGuidelines, audiencePersonas: brand.audiencePersonas, customerLanguage: brand.customerLanguage, avoid: brand.avoid }, setBrandState)} label="Save Brand" /></div>
+          <div className="mt-5"><SaveBtn state={brandState} onClick={() => saveSection({ targetAudience: brand.targetAudience, tone: brand.tone, uniqueValue: brand.uniqueValue, brandGuidelines: brand.brandGuidelines, audiencePersonas: brand.audiencePersonas, customerLanguage: brand.customerLanguage, avoid: brand.avoid }, setBrandState)} label="Save Brand" /></div>
         </SectionCard>
 
         {/* ── Products ── */}
         <SectionCard>
-          <SectionHeader icon={Package} iconBg="#ede9fe" iconColor="#7c3aed" title="Products" subtitle="Products the AI promotes — changes trigger prompt regeneration"
-            right={<button onClick={() => setProducts(p => [...p, { name: '', active: true, currency: 'INR' }])} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200"><Plus size={12} /> Add</button>} />
+          <SectionHeader icon={Package} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Products" subtitle="Products the AI promotes — changes trigger prompt regeneration"
+            right={<button onClick={() => setProducts(p => [...p, { name: '', active: true, currency: 'INR' }])} className="btn btn-ghost"><Plus size={12} /> Add</button>} />
           {products.length === 0 ? (
-            <div className="rounded-xl py-10 text-center bg-gray-50 border border-dashed border-gray-200">
-              <Package size={22} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-sm font-medium text-gray-400">No products configured</p>
+            <div className="card-inset py-10 text-center" style={{ borderStyle: 'dashed' }}>
+              <Package size={22} className="mx-auto mb-2" style={{ color: 'var(--ink-4)' }} />
+              <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>No products configured</p>
             </div>
           ) : (
             <div className="space-y-2">
               {products.map((p, i) => <ProductCard key={i} product={p} index={i} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
             </div>
           )}
-          {products.length > 0 && <div className="mt-4 pt-4 border-t border-gray-100"><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save Products" /></div>}
+          {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save Products" /></div>}
         </SectionCard>
 
         {/* ── Budget & Rules ── */}
         <SectionCard>
-          <SectionHeader icon={DollarSign} iconBg="#ecfdf5" iconColor="#059669" title="Budget & Rules" subtitle="Caps, targets, and auto-pause / auto-scale thresholds" />
+          <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget & Rules" subtitle="Caps, targets, and auto-pause / auto-scale thresholds" />
           <div className="space-y-3">
-            <RuleGroup icon={DollarSign} iconBg="#dcfce7" iconColor="#059669" title="Budget Caps">
+            <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget Caps">
               <div><FieldLabel>Weekly Cap</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
               <div><FieldLabel>Max per Campaign</FieldLabel><NumericInput value={budgetFields.maxBudgetPerCampaign ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetPerCampaign: v }))} prefix="₹" /></div>
               <div><FieldLabel>Max Scale %</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingUp} iconBg="#eef2ff" iconColor="#4f46e5" title="Performance Targets">
+            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets">
               <div><FieldLabel>Target ROAS</FieldLabel><NumericInput value={budgetFields.targetROAS ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetROAS: v }))} suffix="x" step={0.1} /></div>
               <div><FieldLabel>Target CPA</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingDown} iconBg="#fef2f2" iconColor="#dc2626" title="Auto-Pause Triggers">
+            <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Auto-Pause Triggers">
               <div><FieldLabel>ROAS below</FieldLabel><NumericInput value={budgetFields.pauseIfROASBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfROASBelow: v }))} suffix="x" step={0.1} /></div>
               <div><FieldLabel>CTR below</FieldLabel><NumericInput value={budgetFields.pauseIfCTRBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfCTRBelow: v }))} suffix="%" step={0.1} /></div>
               <div><FieldLabel>Frequency above</FieldLabel><NumericInput value={budgetFields.pauseIfFrequencyAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfFrequencyAbove: v }))} step={0.1} /></div>
             </RuleGroup>
-            <RuleGroup icon={Zap} iconBg="#fffbeb" iconColor="#d97706" title="Auto-Scale Trigger">
+            <RuleGroup icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Auto-Scale Trigger">
               <div><FieldLabel>Scale if ROAS above</FieldLabel><NumericInput value={budgetFields.scaleIfROASAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, scaleIfROASAbove: v }))} suffix="x" step={0.1} /></div>
             </RuleGroup>
           </div>
-          <div className="mt-4"><SaveBtn state={budgetState} onClick={() => { const body: Record<string, number> = {}; for (const [k, v] of Object.entries(budgetFields)) { if (v.trim()) body[k] = Number(v) }; saveSection(body, setBudgetState) }} label="Save Budget Rules" /></div>
+          <div className="mt-5"><SaveBtn state={budgetState} onClick={() => { const body: Record<string, number> = {}; for (const [k, v] of Object.entries(budgetFields)) { if (v.trim()) body[k] = Number(v) }; saveSection(body, setBudgetState) }} label="Save Budget Rules" /></div>
         </SectionCard>
 
         {/* ── Marketing Preferences ── */}
         <SectionCard>
-          <SectionHeader icon={Megaphone} iconBg="#eef2ff" iconColor="#4f46e5" title="Marketing Preferences" subtitle="Platforms, formats, and content rules" />
+          <SectionHeader icon={Megaphone} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Marketing Preferences" subtitle="Platforms, formats, and content rules" />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><FieldLabel>Platforms</FieldLabel><TagsInput value={marketing.platforms} onChange={v => setMarketing(s => ({ ...s, platforms: v }))} placeholder="instagram, facebook, youtube" /></div>
@@ -607,28 +606,28 @@ export default function SettingsPage({ params }: PageProps) {
               <div><FieldLabel>Run Frequency</FieldLabel><TextInput value={marketing.runFrequency} onChange={v => setMarketing(s => ({ ...s, runFrequency: v }))} placeholder="daily, weekly" /></div>
             </div>
           </div>
-          <div className="mt-4"><SaveBtn state={marketingState} onClick={() => saveSection({ platforms: marketing.platforms, preferredFormats: marketing.preferredFormats, forbiddenTopics: marketing.forbiddenTopics, campaignsPerRun: marketing.campaignsPerRun ? Number(marketing.campaignsPerRun) : undefined, runFrequency: marketing.runFrequency || undefined }, setMarketingState)} label="Save Marketing" /></div>
+          <div className="mt-5"><SaveBtn state={marketingState} onClick={() => saveSection({ platforms: marketing.platforms, preferredFormats: marketing.preferredFormats, forbiddenTopics: marketing.forbiddenTopics, campaignsPerRun: marketing.campaignsPerRun ? Number(marketing.campaignsPerRun) : undefined, runFrequency: marketing.runFrequency || undefined }, setMarketingState)} label="Save Marketing" /></div>
         </SectionCard>
 
         {/* ── Pipeline Config ── */}
         <SectionCard>
-          <SectionHeader icon={Zap} iconBg="#fffbeb" iconColor="#d97706" title="Pipeline Configuration" subtitle="Controls how the AI pipeline runs" />
+          <SectionHeader icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Pipeline Configuration" subtitle="Controls how the AI pipeline runs" />
           <div className="space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
               <FieldLabel>Strategy</FieldLabel>
               {(['conservative', 'balanced', 'experimental'] as const).map(s => (
                 <button key={s} onClick={() => setPipeline(p => ({ ...p, campaignStrategy: s }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize"
-                  style={pipeline.campaignStrategy === s ? { background: '#4f46e5', color: '#fff' } : { background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }}>{s}</button>
+                  style={pipeline.campaignStrategy === s ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{s}</button>
               ))}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <FieldLabel>Mode</FieldLabel>
                 <select value={pipeline.mode} onChange={e => setPipeline(p => ({ ...p, mode: e.target.value }))} disabled={pipeline.autoSwitch}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" style={{ color: '#111827' }}>
+                  className="input disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="daily">Daily</option><option value="weekly">Weekly</option>
                 </select>
-                {pipeline.autoSwitch && <p className="text-[10px] mt-1 text-gray-400">Auto-switch is on</p>}
+                {pipeline.autoSwitch && <p className="text-[10px] mt-1" style={{ color: 'var(--ink-3)' }}>Auto-switch is on</p>}
               </div>
               <div><FieldLabel>Ideas Per Run</FieldLabel><NumericInput value={pipeline.ideasPerRun} onChange={v => setPipeline(p => ({ ...p, ideasPerRun: v }))} placeholder="3" /></div>
               <div><FieldLabel>Cold Start Days</FieldLabel><NumericInput value={pipeline.coldStartDays} onChange={v => setPipeline(p => ({ ...p, coldStartDays: v }))} placeholder="7" /></div>
@@ -636,138 +635,138 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
             <div className="flex items-center gap-4 flex-wrap">
               <button onClick={() => setPipeline(p => ({ ...p, autoSwitch: !p.autoSwitch }))} className="flex items-center gap-2 text-sm">
-                {pipeline.autoSwitch ? <ToggleRight size={22} className="text-indigo-600" /> : <ToggleLeft size={22} className="text-gray-300" />}
-                <span className="font-medium" style={{ color: pipeline.autoSwitch ? '#4f46e5' : '#9ca3af' }}>Auto-switch mode</span>
+                {pipeline.autoSwitch ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
+                <span className="font-medium" style={{ color: pipeline.autoSwitch ? 'var(--accent)' : 'var(--ink-3)' }}>Auto-switch mode</span>
               </button>
               <button onClick={() => setPipeline(p => ({ ...p, scaleRequiresApproval: !p.scaleRequiresApproval }))} className="flex items-center gap-2 text-sm">
-                {pipeline.scaleRequiresApproval ? <ToggleRight size={22} className="text-indigo-600" /> : <ToggleLeft size={22} className="text-gray-300" />}
-                <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? '#4f46e5' : '#9ca3af' }}>Scale requires approval</span>
+                {pipeline.scaleRequiresApproval ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
+                <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? 'var(--accent)' : 'var(--ink-3)' }}>Scale requires approval</span>
               </button>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <FieldLabel>Agent Team Mode</FieldLabel>
               {(['sequential', 'cli'] as const).map(m => (
                 <button key={m} onClick={() => setPipeline(p => ({ ...p, teamMode: m }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                  style={(pipeline as Record<string, unknown>).teamMode === m ? { background: '#4f46e5', color: '#fff' } : { background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }}>
+                  style={(pipeline as Record<string, unknown>).teamMode === m ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>
                   {m === 'sequential' ? 'Sequential (default)' : 'CLI Debate'}
                 </button>
               ))}
-              <p className="text-xs w-full" style={{ color: '#9ca3af' }}>Sequential: reliable, fast. CLI Debate: higher quality, uses tmux.</p>
+              <p className="text-xs w-full" style={{ color: 'var(--ink-3)' }}>Sequential: reliable, fast. CLI Debate: higher quality, uses tmux.</p>
             </div>
           </div>
-          <div className="mt-4"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save Pipeline Config" /></div>
+          <div className="mt-5"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save Pipeline Config" /></div>
         </SectionCard>
 
         {/* ── Competitors ── */}
         <SectionCard>
-          <SectionHeader icon={Users} iconBg="#fef2f2" iconColor="#dc2626" title="Competitors" subtitle="Used by scouts and research agents" />
+          <SectionHeader icon={Users} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Competitors" subtitle="Used by scouts and research agents" />
           <div className="space-y-4">
             <div><FieldLabel>Competitors</FieldLabel><TagsInput value={competitors.competitors} onChange={v => setCompetitors(s => ({ ...s, competitors: v }))} placeholder="Nike, Adidas, Puma" /></div>
             <div><FieldLabel>Competitor Notes</FieldLabel><TextArea value={competitors.competitorNotes} onChange={v => setCompetitors(s => ({ ...s, competitorNotes: v }))} placeholder="Key things to watch for…" /></div>
             <div><FieldLabel>Calendar Context</FieldLabel><TextArea value={competitors.calendarContext} onChange={v => setCompetitors(s => ({ ...s, calendarContext: v }))} placeholder="Seasonal events, sale periods…" /></div>
           </div>
-          <div className="mt-4"><SaveBtn state={competitorsState} onClick={() => saveSection({ competitors: competitors.competitors, competitorNotes: competitors.competitorNotes, calendarContext: competitors.calendarContext }, setCompetitorsState)} label="Save Competitors" /></div>
+          <div className="mt-5"><SaveBtn state={competitorsState} onClick={() => saveSection({ competitors: competitors.competitors, competitorNotes: competitors.competitorNotes, calendarContext: competitors.calendarContext }, setCompetitorsState)} label="Save Competitors" /></div>
         </SectionCard>
 
         {/* ── Notifications ── */}
         <SectionCard>
-          <SectionHeader icon={Bell} iconBg="#fef2f2" iconColor="#dc2626" title="Notifications" subtitle="Where pipeline digests and alerts are delivered" />
+          <SectionHeader icon={Bell} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Notifications" subtitle="Where pipeline digests and alerts are delivered" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><FieldLabel>Slack Webhook</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="https://hooks.slack.com/…" mono /></div>
             <div><FieldLabel>Email</FieldLabel><TextInput value={delivery.email} onChange={v => setDelivery(s => ({ ...s, email: v }))} placeholder="team@company.com" type="email" /></div>
             <div><FieldLabel>WhatsApp Number</FieldLabel><TextInput value={delivery.whatsappNumber} onChange={v => setDelivery(s => ({ ...s, whatsappNumber: v }))} placeholder="+91..." /></div>
             <div><FieldLabel>Notion Database ID</FieldLabel><TextInput value={delivery.notionDatabaseId} onChange={v => setDelivery(s => ({ ...s, notionDatabaseId: v }))} placeholder="abc123..." mono /></div>
           </div>
-          <div className="mt-4"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { slackWebhook: delivery.slackWebhook || undefined, email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save Notifications" /></div>
+          <div className="mt-5"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { slackWebhook: delivery.slackWebhook || undefined, email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save Notifications" /></div>
         </SectionCard>
 
         {/* ── Meta Ads ── */}
         <SectionCard>
-          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? '#ecfdf5' : '#fef2f2'} iconColor={metaConnected ? '#059669' : '#dc2626'} title="Meta Ads" subtitle="Access token and account details" right={<StatusPill active={metaConnected} />} />
+          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} title="Meta Ads" subtitle="Access token and account details" right={<StatusPill active={metaConnected} />} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
             {[{ label: 'Access Token', value: maskToken(settings?.meta?.accessToken), active: !!settings?.meta?.accessToken },
               { label: 'Ad Account ID', value: settings?.meta?.accountId || '—', active: !!settings?.meta?.accountId },
               { label: 'Page ID', value: settings?.meta?.pageId || '—', active: !!settings?.meta?.pageId }
             ].map(f => (
               <div key={f.label}>
-                <p className="text-[11px] font-medium uppercase tracking-wide mb-1.5 text-gray-400">{f.label}</p>
+                <p className="micro-label mb-1.5">{f.label}</p>
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.active ? '#059669' : '#e5e7eb' }} />
-                  <p className="text-sm font-mono truncate text-gray-900">{f.value}</p>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.active ? 'var(--good)' : 'var(--ink-4)' }} />
+                  <p className="text-sm mono truncate" style={{ color: 'var(--ink)' }}>{f.value}</p>
                 </div>
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mb-4 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mb-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div><FieldLabel>Pixel ID</FieldLabel><TextInput value={meta.pixelId} onChange={v => setMeta(s => ({ ...s, pixelId: v }))} placeholder="123456789" mono /></div>
-            <div><FieldLabel>Account IDs <span className="text-gray-400 font-normal">(comma-separated)</span></FieldLabel><TextInput value={meta.accountIdsRaw} onChange={v => setMeta(s => ({ ...s, accountIdsRaw: v }))} placeholder="123456, 789012" mono /></div>
+            <div><FieldLabel>Account IDs <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(comma-separated)</span></FieldLabel><TextInput value={meta.accountIdsRaw} onChange={v => setMeta(s => ({ ...s, accountIdsRaw: v }))} placeholder="123456, 789012" mono /></div>
           </div>
           <SaveBtn state={metaState} onClick={() => { const accountIds = meta.accountIdsRaw.split(',').map(s => s.trim()).filter(Boolean); saveSection({ meta: { accountIds, pixelId: meta.pixelId.trim() || undefined } }, setMetaState) }} label="Save Meta Settings" />
         </SectionCard>
 
         {/* ── AI Prompts ── */}
         <SectionCard>
-          <SectionHeader icon={ShieldCheck} iconBg="#f3f4f6" iconColor="#9ca3af" title="AI Agent Prompts" subtitle="Force-regenerate all system prompts from current company data" />
+          <SectionHeader icon={ShieldCheck} iconBg="var(--muted)" iconColor="var(--ink-3)" title="AI Agent Prompts" subtitle="Force-regenerate all system prompts from current company data" />
           <div className="flex items-center gap-3">
-            <button onClick={handleRegen} disabled={regenState === 'loading'} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-60 bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100">
+            <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost">
               {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Now'}
             </button>
-            <p className="text-xs text-gray-400">Takes ~10–30 seconds. Safe to run at any time.</p>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Takes ~10–30 seconds. Safe to run at any time.</p>
           </div>
 
           {/* Prompts version history */}
-          <div className="mt-5 pt-5" style={{ borderTop: '1px solid #f3f4f6' }}>
+          <div className="mt-5 pt-5" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7280' }}>Version history</h3>
-                <p className="text-[11px] mt-0.5" style={{ color: '#9ca3af' }}>Rollback to a previous prompt set if a regeneration regresses agent behavior.</p>
+                <h3 className="micro-label">Version history</h3>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>Rollback to a previous prompt set if a regeneration regresses agent behavior.</p>
               </div>
             </div>
 
             {promptsHistory.length === 0 ? (
-              <p className="text-xs italic" style={{ color: '#9ca3af' }}>No prior versions yet.</p>
+              <p className="text-xs italic" style={{ color: 'var(--ink-3)' }}>No prior versions yet.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid #f3f4f6' }}>
-                <table className="w-full">
+              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--hairline-light)' }}>
+                <table className="data-table">
                   <thead>
-                    <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Version</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Generated</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Learning version</th>
-                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>Action</th>
+                    <tr>
+                      <th>Version</th>
+                      <th>Generated</th>
+                      <th>Learning version</th>
+                      <th className="num">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...promptsHistory]
                       .sort((a, b) => b.version - a.version)
-                      .map((entry, i, arr) => {
+                      .map((entry, i) => {
                         const isCurrent = i === 0
                         const rs = rollbackState[entry.version] ?? 'idle'
                         return (
-                          <tr key={entry.version} style={{ borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                            <td className="px-3 py-2.5">
+                          <tr key={entry.version}>
+                            <td>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-mono font-semibold" style={{ color: '#111827' }}>v{entry.version}</span>
+                                <span className="text-xs mono font-semibold" style={{ color: 'var(--ink)' }}>v{entry.version}</span>
                                 {isCurrent && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>Current</span>
+                                  <span className="chip chip-good">Current</span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 text-xs tabular-nums" style={{ color: '#4b5563' }}>{formatDateTime(entry.generatedAt)}</td>
-                            <td className="px-3 py-2.5 text-xs font-mono" style={{ color: '#6b7280' }}>{entry.learningVersion != null ? `L${entry.learningVersion}` : '—'}</td>
-                            <td className="px-3 py-2.5 text-right">
+                            <td className="text-xs mono tabular-nums">{formatDateTime(entry.generatedAt)}</td>
+                            <td className="text-xs mono">{entry.learningVersion != null ? `L${entry.learningVersion}` : '—'}</td>
+                            <td className="num">
                               {isCurrent ? (
-                                <span className="text-[11px]" style={{ color: '#9ca3af' }}>—</span>
+                                <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>—</span>
                               ) : (
                                 <button
                                   onClick={() => handleRollback(entry.version)}
                                   disabled={rs === 'loading'}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors disabled:opacity-60"
                                   style={
-                                    rs === 'success' ? { background: '#dcfce7', color: '#166534' }
-                                    : rs === 'error' ? { background: '#fee2e2', color: '#b91c1c' }
-                                    : { background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }
+                                    rs === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }
+                                    : rs === 'error' ? { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }
+                                    : { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }
                                   }
                                 >
                                   {rs === 'loading' ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
@@ -787,25 +786,22 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Fix Caption Videos ── */}
         <SectionCard>
-          <SectionHeader icon={Sparkles} iconBg="#fef3c7" iconColor="#d97706" title="Fix Caption Videos" subtitle="Re-fetch video creatives that are missing captions" />
+          <SectionHeader icon={Sparkles} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Fix Caption Videos" subtitle="Re-fetch video creatives that are missing captions" />
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={handleFixCaptionVideos}
               disabled={fixCaptionState === 'loading'}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
-              style={
-                fixCaptionState === 'success'
-                  ? { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
-                  : fixCaptionState === 'error'
-                  ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
-                  : { background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }
+              className={
+                fixCaptionState === 'success' ? 'btn chip-good border'
+                : fixCaptionState === 'error' ? 'btn btn-danger'
+                : 'btn btn-ghost'
               }
             >
               {fixCaptionState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               {fixCaptionState === 'loading' ? 'Processing…' : fixCaptionState === 'success' ? 'Done!' : fixCaptionState === 'error' ? 'Failed' : 'Re-fetch Videos Without Captions'}
             </button>
             {fixCaptionResult && (
-              <p className="text-xs font-medium" style={{ color: fixCaptionState === 'error' ? '#b91c1c' : '#15803d' }}>
+              <p className="text-xs font-medium" style={{ color: fixCaptionState === 'error' ? 'var(--bad)' : 'var(--good)' }}>
                 {fixCaptionResult}
               </p>
             )}

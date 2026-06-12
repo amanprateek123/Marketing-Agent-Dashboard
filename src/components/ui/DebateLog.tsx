@@ -20,35 +20,35 @@ function getRoleConfig(from: string): {
   if (r === 'strategist') {
     return {
       label: 'Strategist',
-      bubbleStyle: { background: '#eff6ff', border: '1px solid #e0e7ff', color: '#1e3a5f' },
+      bubbleStyle: { background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', color: 'var(--ink)' },
       align: 'left',
-      avatarBg: '#1d4ed8',
+      avatarBg: 'var(--accent)',
       avatarColor: '#ffffff',
     }
   }
   if (r === 'contrarian') {
     return {
       label: 'Contrarian',
-      bubbleStyle: { background: '#fef2f2', border: '1px solid #fecaca', color: '#5f1010' },
+      bubbleStyle: { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--ink)' },
       align: 'right',
-      avatarBg: '#dc2626',
+      avatarBg: 'var(--bad)',
       avatarColor: '#ffffff',
     }
   }
   if (r === 'reviewer') {
     return {
       label: 'Reviewer',
-      bubbleStyle: { background: '#fffbeb', border: '1px solid #fde68a', color: '#5a3e0a' },
+      bubbleStyle: { background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--ink)' },
       align: 'center',
-      avatarBg: '#d97706',
+      avatarBg: 'var(--warn)',
       avatarColor: '#ffffff',
     }
   }
   return {
     label: from,
-    bubbleStyle: { background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#1e293b' },
+    bubbleStyle: { background: 'var(--muted)', border: '1px solid var(--hairline)', color: 'var(--ink)' },
     align: 'center',
-    avatarBg: '#4b5563',
+    avatarBg: 'var(--ink-2)',
     avatarColor: '#ffffff',
   }
 }
@@ -56,7 +56,7 @@ function getRoleConfig(from: string): {
 export function DebateLog({ rounds, rationale }: DebateLogProps) {
   if (!rounds || rounds.length === 0) {
     return (
-      <div className="text-sm italic py-6 text-center" style={{ color: '#9ca3af' }}>
+      <div className="text-sm italic py-6 text-center" style={{ color: 'var(--ink-3)' }}>
         No debate rounds recorded.
       </div>
     )
@@ -75,11 +75,11 @@ export function DebateLog({ rounds, rationale }: DebateLogProps) {
       {sortedRounds.map(([roundNum, entries]) => (
         <div key={roundNum} className="flex flex-col gap-2.5">
           <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px" style={{ background: '#f3f4f6' }} />
-            <span className="text-[10px] font-bold uppercase tracking-widest px-2" style={{ color: '#9ca3af', letterSpacing: '0.1em' }}>
+            <div className="flex-1 h-px" style={{ background: 'var(--hairline-light)' }} />
+            <span className="micro-label px-2">
               Round {roundNum}
             </span>
-            <div className="flex-1 h-px" style={{ background: '#f3f4f6' }} />
+            <div className="flex-1 h-px" style={{ background: 'var(--hairline-light)' }} />
           </div>
           {entries.map((entry, ei) => {
             const config = getRoleConfig(entry.from)
@@ -100,7 +100,7 @@ export function DebateLog({ rounds, rationale }: DebateLogProps) {
                 </div>
                 <div
                   className={cn(
-                    'max-w-[75%] rounded-2xl px-4 py-3',
+                    'max-w-[75%] rounded-xl px-4 py-3',
                     config.align === 'center' && 'max-w-[85%]'
                   )}
                   style={config.bubbleStyle}
@@ -116,7 +116,7 @@ export function DebateLog({ rounds, rationale }: DebateLogProps) {
         </div>
       ))}
       {rationale && (
-        <p className="text-xs italic mt-2 px-1 leading-relaxed font-display" style={{ color: '#4b5563' }}>
+        <p className="text-xs italic mt-2 px-1 leading-relaxed font-display" style={{ color: 'var(--ink-2)' }}>
           {rationale}
         </p>
       )}

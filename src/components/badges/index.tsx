@@ -30,9 +30,9 @@ const AUDIENCE_STAGE_CONFIG: Record<
   AudienceStage,
   { label: string; bg: string; fg: string; border: string; icon: React.ElementType }
 > = {
-  cold: { label: 'Cold',  bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', icon: Snowflake },
-  warm: { label: 'Warm',  bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: Sun },
-  hot:  { label: 'Hot',   bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: Flame },
+  cold: { label: 'Cold',  bg: 'var(--info-bg)', fg: 'var(--info)', border: 'var(--info-border)', icon: Snowflake },
+  warm: { label: 'Warm',  bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: Sun },
+  hot:  { label: 'Hot',   bg: 'var(--bad-bg)',  fg: 'var(--bad)',  border: 'var(--bad-border)',  icon: Flame },
 }
 
 export function AudienceStageBadge({ stage }: { stage?: AudienceStage }) {
@@ -55,7 +55,7 @@ export function ExplorationBadge({ active = true }: { active?: boolean }) {
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
-      style={{ background: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff' }}
+      style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
       title="Exploration arm — testing a non-greedy variant"
     >
       <FlaskConical size={10} /> Exploration
@@ -68,9 +68,9 @@ const FORMAT_CONFIG: Record<
   string,
   { label: string; bg: string; fg: string; border: string; icon: React.ElementType }
 > = {
-  video: { label: 'Video', bg: '#eef2ff', fg: '#4338ca', border: '#c7d2fe', icon: Video },
-  image: { label: 'Image', bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', icon: ImageIcon },
-  mixed: { label: 'Mixed', bg: '#f5f3ff', fg: '#6d28d9', border: '#ddd6fe', icon: Layers },
+  video: { label: 'Video', bg: 'var(--accent-bg)', fg: 'var(--accent)', border: 'var(--accent-border)', icon: Video },
+  image: { label: 'Image', bg: 'var(--good-bg)',   fg: 'var(--good)',   border: 'var(--good-border)',   icon: ImageIcon },
+  mixed: { label: 'Mixed', bg: 'var(--info-bg)',   fg: 'var(--info)',   border: 'var(--info-border)',   icon: Layers },
 }
 
 export function FormatBadge({ format }: { format?: string | CreativeFormat }) {
@@ -78,9 +78,9 @@ export function FormatBadge({ format }: { format?: string | CreativeFormat }) {
   const key = format.toLowerCase()
   const c = FORMAT_CONFIG[key] ?? {
     label: format,
-    bg: '#f3f4f6',
-    fg: '#4b5563',
-    border: '#e5e7eb',
+    bg: 'var(--muted)',
+    fg: 'var(--ink-2)',
+    border: 'var(--hairline)',
     icon: Layers,
   }
   const Icon = c.icon
@@ -99,8 +99,8 @@ export function PromptsVersionBadge({ version }: { version?: number }) {
   if (version == null) return null
   return (
     <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold whitespace-nowrap"
-      style={{ background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }}
+      className="mono inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap"
+      style={{ background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}
       title={`Generated using prompts v${version}`}
     >
       prompts v{version}
@@ -118,8 +118,8 @@ export function HookStyleChip({ style }: { style?: HookStyle | string }) {
   if (!style) return null
   const isMeme = !DR_HOOKS.has(style)
   const palette = isMeme
-    ? { bg: '#fef3c7', fg: '#92400e', border: '#fde68a' }
-    : { bg: '#e0e7ff', fg: '#3730a3', border: '#c7d2fe' }
+    ? { bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)' }
+    : { bg: 'var(--accent-bg)', fg: 'var(--accent-strong)', border: 'var(--accent-border)' }
   const label = style.replace(/_/g, ' ')
   return (
     <span
@@ -133,18 +133,18 @@ export function HookStyleChip({ style }: { style?: HookStyle | string }) {
 
 // ── UrgencyDot ────────────────────────────────────────────────────────────
 const URGENCY_COLORS: Record<string, string> = {
-  high:   '#ef4444',
-  medium: '#f59e0b',
-  low:    '#9ca3af',
+  high:   'var(--bad)',
+  medium: 'var(--warn)',
+  low:    'var(--ink-3)',
 }
 
 export function UrgencyDot({ urgency }: { urgency?: 'high' | 'medium' | 'low' | string }) {
   if (!urgency) return null
-  const color = URGENCY_COLORS[urgency] ?? '#d1d5db'
+  const color = URGENCY_COLORS[urgency] ?? 'var(--ink-4)'
   return (
     <span
       className="inline-flex items-center gap-1 text-[11px] font-medium capitalize whitespace-nowrap"
-      style={{ color: '#4b5563' }}
+      style={{ color: 'var(--ink-2)' }}
     >
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: color }} />
       {urgency}
@@ -154,7 +154,7 @@ export function UrgencyDot({ urgency }: { urgency?: 'high' | 'medium' | 'low' | 
 
 // ── LeakDiagnosisBadge ────────────────────────────────────────────────────
 // Maps the audit agent's diagnosed primary leak to a badge with:
-//   - color (severity tier: red=urgent stop, orange=fix this cycle, yellow=schedule, gray=healthy)
+//   - color (severity tier: bad=urgent stop, warn=fix this cycle / schedule, good=healthy)
 //   - icon (visual category cue)
 //   - tooltip explaining what the leak means + what action follows
 // 'none' renders a green "Healthy" pill; null renders nothing (synthetic skip).
@@ -164,42 +164,42 @@ const LEAK_DIAGNOSIS_CONFIG: Record<
 > = {
   chronic_unprofitable: {
     label: 'Unprofitable',
-    bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: TrendingDown,
+    bg: 'var(--bad-bg)', fg: 'var(--bad)', border: 'var(--bad-border)', icon: TrendingDown,
     tooltip: 'Shrunken + upper-95% ROAS both below breakeven with ≥3 conversions. Action: pause worst-ROAS ad set.',
   },
   data_gap: {
     label: 'Data Gap',
-    bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: Database,
+    bg: 'var(--bad-bg)', fg: 'var(--bad)', border: 'var(--bad-border)', icon: Database,
     tooltip: 'conversionValue missing on the active product — ROAS uncomputable. Fix the product config before any pause/scale.',
   },
   auction_leak: {
     label: 'Auction Leak',
-    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: Activity,
+    bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: Activity,
     tooltip: 'Account-wide CPMs spiking while your campaign is stable. Action: reduce_total_budget / dayparting — not creative.',
   },
   creative_leak: {
     label: 'Creative Leak',
-    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: AlertTriangle,
+    bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: AlertTriangle,
     tooltip: 'CTR below benchmark or fatigued. Action: replace_creative on the worst ads.',
   },
   audience_lp_leak: {
     label: 'Audience / LP',
-    bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa', icon: Users,
+    bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: Users,
     tooltip: 'CTR healthy but CVR collapsed — audience or landing page leaks. Action: refresh_audience, investigate LP funnel. Do NOT replace_creative.',
   },
   creative_diversity_leak: {
     label: 'Hook Saturation',
-    bg: '#fefce8', fg: '#a16207', border: '#fde68a', icon: Sparkles,
+    bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: Sparkles,
     tooltip: 'One hookStyle monopolises this audience (≥70% impressions). Action: add_creative with a different hookStyle.',
   },
   fragmentation: {
     label: 'Fragmented',
-    bg: '#fefce8', fg: '#a16207', border: '#fde68a', icon: Scissors,
+    bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)', icon: Scissors,
     tooltip: 'Too many overlapping ad sets, none past learning phase. Action: consolidate via shift_budget_between_adsets.',
   },
   none: {
     label: 'Healthy',
-    bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', icon: CheckCircle2,
+    bg: 'var(--good-bg)', fg: 'var(--good)', border: 'var(--good-border)', icon: CheckCircle2,
     tooltip: 'No leak identified by the auditor. Check INSUFFICIENT EVIDENCE in contextInsight if this is a young campaign.',
   },
 }
@@ -238,16 +238,16 @@ export function BreakevenBadge({
   if (roas == null || breakeven == null || breakeven <= 0) return null
   const ratio = roas / breakeven
   const palette = ratio < 1
-    ? { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' }
+    ? { bg: 'var(--bad-bg)', fg: 'var(--bad)', border: 'var(--bad-border)' }
     : ratio < 1.5
-      ? { bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' }
-      : { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0' }
+      ? { bg: 'var(--warn-bg)', fg: 'var(--warn)', border: 'var(--warn-border)' }
+      : { bg: 'var(--good-bg)', fg: 'var(--good)', border: 'var(--good-border)' }
   const sourceLabel = source
     ? source === 'product' ? 'product-set margin' : source === 'vertical' ? 'vertical default' : 'fallback margin (0.50)'
     : null
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap font-mono"
+      className="mono inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap"
       style={{ background: palette.bg, color: palette.fg, border: `1px solid ${palette.border}` }}
       title={`Breakeven ROAS ${breakeven.toFixed(2)}x${sourceLabel ? ` (${sourceLabel})` : ''}. ROAS below breakeven = losing money after COGS/fees.`}
     >
@@ -261,9 +261,9 @@ const REGRET_CONFIG: Record<
   string,
   { label: string; bg: string; fg: string; border: string; icon: React.ElementType }
 > = {
-  correct_block:  { label: 'Correct block',  bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', icon: CheckCircle2 },
-  missed_signal:  { label: 'Missed signal',  bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: XCircle },
-  inconclusive:   { label: 'Inconclusive',   bg: '#f9fafb', fg: '#6b7280', border: '#e5e7eb', icon: HelpCircle },
+  correct_block:  { label: 'Correct block',  bg: 'var(--good-bg)', fg: 'var(--good)', border: 'var(--good-border)', icon: CheckCircle2 },
+  missed_signal:  { label: 'Missed signal',  bg: 'var(--bad-bg)',  fg: 'var(--bad)',  border: 'var(--bad-border)',  icon: XCircle },
+  inconclusive:   { label: 'Inconclusive',   bg: 'var(--muted)',   fg: 'var(--ink-2)', border: 'var(--hairline)',   icon: HelpCircle },
 }
 
 export function RegretLabel({

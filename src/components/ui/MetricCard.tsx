@@ -21,33 +21,24 @@ export function MetricCard({
   trend,
   trendUp,
   className,
-  iconColor = '#4f46e5',
-  iconBg = '#e0e7ff',
+  iconColor = 'var(--accent)',
+  iconBg = 'var(--accent-bg)',
   accentColor,
   sublabel,
 }: MetricCardProps) {
   return (
-    <div
-      className={cn('rounded-2xl overflow-hidden relative', className)}
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
-      }}
-    >
+    <div className={cn('card overflow-hidden relative', className)}>
       {accentColor && (
         <div className="h-[2px] w-full" style={{ background: accentColor }} />
       )}
 
       <div className="p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p
-            className="text-[10px] font-bold uppercase tracking-[0.1em] leading-tight"
-            style={{ color: '#d1d5db' }}
-          >
+          <p className="micro-label leading-tight">
             {label}
           </p>
           <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: iconBg }}
           >
             <Icon size={15} style={{ color: iconColor }} strokeWidth={2} />
@@ -55,8 +46,8 @@ export function MetricCard({
         </div>
 
         <p
-          className="text-[28px] font-black leading-none tracking-tight truncate font-mono"
-          style={{ color: '#111827', fontVariantNumeric: 'tabular-nums' }}
+          className="display-num text-[30px] truncate"
+          style={{ color: 'var(--ink)' }}
         >
           {value}
         </p>
@@ -65,18 +56,18 @@ export function MetricCard({
           <div className="flex items-center gap-2 mt-3">
             {trend && (
               <span
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md"
                 style={
                   trendUp
-                    ? { color: '#15803d', background: '#f0fdf4' }
-                    : { color: '#dc2626', background: '#fef2f2' }
+                    ? { color: 'var(--good)', background: 'var(--good-bg)' }
+                    : { color: 'var(--bad)', background: 'var(--bad-bg)' }
                 }
               >
-                {trendUp ? '\u2191' : '\u2193'} {trend}
+                {trendUp ? '↑' : '↓'} {trend}
               </span>
             )}
             {sublabel && (
-              <p className="text-xs truncate" style={{ color: '#9ca3af' }}>{sublabel}</p>
+              <p className="text-xs truncate" style={{ color: 'var(--ink-3)' }}>{sublabel}</p>
             )}
           </div>
         )}

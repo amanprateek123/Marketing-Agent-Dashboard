@@ -51,42 +51,37 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
   return (
     <Link
       href={`/dashboard/${tenantId}/runs/${run.runId}`}
-      className="group block rounded-2xl overflow-hidden transition-all duration-300 animate-reveal-up hover:shadow-lg"
-      style={{
-        animationDelay: `${index * 50}ms`,
-        background: '#ffffff',
-        boxShadow: '0 1px 3px rgba(26,26,26,0.04), 0 1px 2px rgba(26,26,26,0.02)',
-        textDecoration: 'none',
-      }}
+      className="group block card card-hover overflow-hidden animate-reveal-up"
+      style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="p-5 flex items-center gap-5">
         {/* Phase indicator */}
         <div
           className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', running && 'animate-pulse')}
           style={{
-            background: completed ? '#ecfdf5' : failed ? '#fef2f2' : running ? '#eef2ff' : '#f3f4f6',
+            background: completed ? 'var(--good-bg)' : failed ? 'var(--bad-bg)' : running ? 'var(--accent-bg)' : 'var(--muted)',
           }}
         >
-          {completed ? <CheckCircle2 size={18} style={{ color: '#059669' }} />
-           : failed ? <XCircle size={18} style={{ color: '#dc2626' }} />
-           : running ? <Loader2 size={18} className="animate-spin" style={{ color: '#4f46e5' }} />
-           : <Clock size={18} style={{ color: '#9ca3af' }} />}
+          {completed ? <CheckCircle2 size={18} style={{ color: 'var(--good)' }} />
+           : failed ? <XCircle size={18} style={{ color: 'var(--bad)' }} />
+           : running ? <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+           : <Clock size={18} style={{ color: 'var(--ink-3)' }} />}
         </div>
 
         {/* Main info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 mb-1">
-            <span className="text-[13px] font-semibold" style={{ color: '#111827' }}>
+            <span className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
               {getPhaseLabel(run.status)}
             </span>
             <StatusBadge status={run.status} />
           </div>
-          <div className="flex items-center gap-3 text-[12px]" style={{ color: '#9ca3af' }}>
-            <code className="font-mono">{run.runId.slice(0, 10)}</code>
+          <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--ink-3)' }}>
+            <code className="mono">{run.runId.slice(0, 10)}</code>
             {run.startedAt && (
               <>
-                <span style={{ color: '#d1d5db' }}>&middot;</span>
-                <span>{formatDateTime(run.startedAt)}</span>
+                <span style={{ color: 'var(--ink-4)' }}>&middot;</span>
+                <span className="mono">{formatDateTime(run.startedAt)}</span>
               </>
             )}
           </div>
@@ -95,10 +90,10 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
         {/* Duration */}
         {duration && (
           <div className="text-right shrink-0 hidden sm:block">
-            <p className="text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: '#d1d5db' }}>
+            <p className="micro-label mb-0.5">
               Duration
             </p>
-            <p className="text-lg font-bold font-mono tabular-nums" style={{ color: '#111827' }}>
+            <p className="text-lg font-semibold mono tabular-nums" style={{ color: 'var(--ink)' }}>
               {duration}
             </p>
           </div>
@@ -108,7 +103,7 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
         <ArrowRight
           size={16}
           className="shrink-0 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200"
-          style={{ color: '#4f46e5' }}
+          style={{ color: 'var(--accent)' }}
         />
       </div>
     </Link>
@@ -166,93 +161,93 @@ export default function RunsPage({ params }: PageProps) {
   const tabCounts: Record<TabKey, number> = { all: total, running, completed, failed }
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8f9fb' }}>
+    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
       {/* Header */}
-      <div className="px-8 pt-8 pb-0 max-w-5xl mx-auto animate-fade-up">
-        <div className="flex items-end justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: '#111827' }}>
-              Pipeline Runs
-            </h1>
-            <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>
-              {total} run{total !== 1 ? 's' : ''} total
-              {running > 0 && <span style={{ color: '#4f46e5' }}> &middot; {running} active</span>}
-            </p>
-          </div>
-          <button
-            onClick={() => fetchRuns(true)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-all disabled:opacity-50"
-            style={{ background: '#ffffff', color: '#4b5563', boxShadow: '0 1px 3px rgba(26,26,26,0.06)' }}
+      <div className="flex items-end justify-between gap-4 mb-8">
+        <div>
+          <p className="micro-label mb-2">Pipeline activity</p>
+          <h1 className="page-title">Pipeline Runs</h1>
+          <p className="page-subtitle">
+            {total} run{total !== 1 ? 's' : ''} total
+            {running > 0 && <span style={{ color: 'var(--accent)' }}> &middot; {running} active</span>}
+          </p>
+        </div>
+        <button
+          onClick={() => fetchRuns(true)}
+          disabled={refreshing}
+          className="btn btn-ghost"
+        >
+          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Stats row */}
+      <div className="card px-2 py-5 mb-8 grid grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'Total',     value: total,     color: 'var(--ink)' },
+          { label: 'Running',   value: running,   color: 'var(--accent)' },
+          { label: 'Completed', value: completed, color: 'var(--good)' },
+          { label: 'Failed',    value: failed,    color: 'var(--bad)' },
+        ].map((s, i) => (
+          <div
+            key={s.label}
+            className="px-6 py-1"
+            style={i > 0 ? { borderLeft: '1px solid var(--hairline-light)' } : undefined}
           >
-            <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
-            Refresh
-          </button>
-        </div>
+            <p className="micro-label mb-2">{s.label}</p>
+            <p className="display-num text-[30px]" style={{ color: s.color }}>{s.value}</p>
+          </div>
+        ))}
+      </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-px rounded-2xl overflow-hidden mb-8" style={{ background: '#e5e7eb' }}>
-          {[
-            { label: 'Total',     value: total,     color: '#111827' },
-            { label: 'Running',   value: running,   color: '#4f46e5' },
-            { label: 'Completed', value: completed, color: '#059669' },
-            { label: 'Failed',    value: failed,    color: '#dc2626' },
-          ].map(s => (
-            <div key={s.label} className="bg-white py-5 px-4 text-center">
-              <p className="text-3xl font-black font-mono tabular-nums" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mt-1" style={{ color: '#d1d5db' }}>{s.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Tab bar — underline style */}
-        <div className="flex items-center gap-1 border-b" style={{ borderColor: '#e5e7eb' }}>
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.key
-            const count = tabCounts[tab.key]
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className="relative px-4 py-3 text-[13px] font-medium transition-colors"
-                style={{ color: isActive ? '#111827' : '#9ca3af' }}
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span className="ml-1.5 text-[10px] font-semibold tabular-nums" style={{ color: isActive ? '#4f46e5' : '#d1d5db' }}>
-                    {count}
-                  </span>
-                )}
-                {isActive && (
-                  <div className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: '#4f46e5' }} />
-                )}
-              </button>
-            )
-          })}
-        </div>
+      {/* Tab bar — underline style */}
+      <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--hairline)' }}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.key
+          const count = tabCounts[tab.key]
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className="relative px-4 py-3 text-[13px] font-medium transition-colors"
+              style={{ color: isActive ? 'var(--ink)' : 'var(--ink-3)' }}
+            >
+              {tab.label}
+              {count > 0 && (
+                <span className="ml-1.5 text-[10px] font-semibold mono tabular-nums" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
+                  {count}
+                </span>
+              )}
+              {isActive && (
+                <div className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: 'var(--accent)' }} />
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Content */}
-      <div className="px-8 py-6 max-w-5xl mx-auto">
+      <div>
         {error && (
-          <div className="flex items-center gap-3 rounded-2xl p-4 mb-6 text-sm font-medium animate-scale-in"
-            style={{ background: '#fef2f2', color: '#dc2626' }}>
+          <div className="flex items-center gap-3 rounded-xl p-4 mb-6 text-sm font-medium animate-scale-in"
+            style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
             <AlertCircle size={15} /> {error}
           </div>
         )}
 
         {loading ? (
           <div className="flex flex-col items-center gap-3 py-24">
-            <Loader2 size={24} className="animate-spin" style={{ color: '#4f46e5' }} />
-            <p className="text-sm" style={{ color: '#9ca3af' }}>Loading runs&hellip;</p>
+            <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <p className="text-sm" style={{ color: 'var(--ink-2)' }}>Loading runs&hellip;</p>
           </div>
         ) : filteredRuns.length === 0 ? (
-          <div className="rounded-2xl py-20 text-center" style={{ background: '#ffffff', boxShadow: '0 1px 3px rgba(26,26,26,0.04)' }}>
-            <Activity size={28} className="mx-auto mb-3" style={{ color: '#d1d5db' }} />
-            <p className="text-sm font-semibold" style={{ color: '#4b5563' }}>
+          <div className="card py-20 text-center">
+            <Activity size={28} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
               {activeTab === 'all' ? 'No pipeline runs yet' : `No ${activeTab} runs`}
             </p>
-            <p className="text-xs mt-1.5" style={{ color: '#d1d5db' }}>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--ink-3)' }}>
               {activeTab === 'all' ? 'Trigger a run from the Overview page to get started' : 'Try a different filter'}
             </p>
           </div>

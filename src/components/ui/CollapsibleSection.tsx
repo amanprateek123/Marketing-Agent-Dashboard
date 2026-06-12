@@ -25,20 +25,20 @@ export function CollapsibleSection({
   return (
     <Collapsible.Root open={open} onOpenChange={setOpen} className={className}>
       <Collapsible.Trigger
-        className="flex w-full items-center justify-between py-2.5 px-4 rounded-lg transition-colors cursor-pointer group"
-        style={{ background: open ? '#f3f4f6' : '#fafafa' }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#f3f4f6' }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = open ? '#f3f4f6' : '#fafafa' }}
+        className="flex w-full items-center justify-between py-2.5 px-4 rounded-[var(--radius-sm)] transition-colors cursor-pointer group"
+        style={{
+          background: open ? 'var(--muted)' : 'var(--surface-warm)',
+          border: '1px solid var(--hairline-light)',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)' }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = open ? 'var(--muted)' : 'var(--surface-warm)' }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold" style={{ color: '#18181b' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
             {title}
           </span>
           {badge !== undefined && (
-            <span
-              className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{ background: '#e0e7ff', color: '#1d4ed8' }}
-            >
+            <span className="chip chip-accent">
               {badge}
             </span>
           )}
@@ -46,7 +46,7 @@ export function CollapsibleSection({
         <ChevronDown
           size={15}
           className={cn('transition-transform duration-200', open && 'rotate-180')}
-          style={{ color: '#a1a1aa' }}
+          style={{ color: 'var(--ink-3)' }}
         />
       </Collapsible.Trigger>
       <Collapsible.Content className="overflow-hidden data-[state=open]:animate-none">

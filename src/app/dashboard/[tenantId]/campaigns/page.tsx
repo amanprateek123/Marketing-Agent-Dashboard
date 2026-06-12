@@ -45,19 +45,13 @@ const STATUS_FILTERS = [
 
 // ── Source badge ──────────────────────────────────────────────────────────────
 function SourceBadge({ source }: { source?: 'agent' | 'manual' }) {
-  if (!source) return <span style={{ color: '#d1d5db' }}>—</span>
+  if (!source) return <span style={{ color: 'var(--ink-4)' }}>—</span>
   return source === 'agent' ? (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-      style={{ background: '#e0e7ff', color: '#1d4ed8', border: '1px solid #c7d2fe' }}
-    >
+    <span className="chip chip-accent">
       <Bot size={9} /> Agent
     </span>
   ) : (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-      style={{ background: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' }}
-    >
+    <span className="chip chip-neutral">
       <User size={9} /> Manual
     </span>
   )
@@ -66,38 +60,34 @@ function SourceBadge({ source }: { source?: 'agent' | 'manual' }) {
 // ── Inline ad row ─────────────────────────────────────────────────────────────
 function InlineAdRow({ ad }: { ad: CampaignAd }) {
   return (
-    <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+    <tr style={{ borderBottom: '1px solid var(--hairline-light)' }}>
       <td className="px-4 py-2 pl-14">
         <div>
-          <p className="text-xs font-medium truncate" style={{ color: '#111827', maxWidth: 200 }}>{ad.name || '—'}</p>
+          <p className="text-xs font-medium truncate" style={{ color: 'var(--ink)', maxWidth: 200 }}>{ad.name || '—'}</p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {ad.hookStyle && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#4b5563' }}>
-                {ad.hookStyle}
-              </span>
+              <span className="chip chip-neutral">{ad.hookStyle}</span>
             )}
             {ad.format && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: '#e0e7ff', color: '#1d4ed8' }}>
-                {ad.format}
-              </span>
+              <span className="chip chip-accent">{ad.format}</span>
             )}
           </div>
         </div>
       </td>
-      <td className="px-4 py-2 text-xs tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
+      <td className="px-4 py-2 text-xs mono tabular-nums whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
         {ad.spend ? formatCurrency(ad.spend) : '—'}
       </td>
-      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#4b5563' }}>
+      <td className="px-4 py-2 text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
         {ad.impressions?.toLocaleString() ?? '—'}
       </td>
-      <td className="px-4 py-2 text-xs tabular-nums" style={{ color: '#4b5563' }}>
+      <td className="px-4 py-2 text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
         {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '—'}
       </td>
-      <td className="px-4 py-2 text-xs tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
+      <td className="px-4 py-2 text-xs mono tabular-nums whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
         {ad.cpc ? formatCurrency(ad.cpc) : '—'}
       </td>
-      <td className="px-4 py-2 text-xs" style={{ color: '#9ca3af' }}>—</td>
-      <td className="px-4 py-2 text-xs" style={{ color: '#9ca3af' }}>—</td>
+      <td className="px-4 py-2 text-xs" style={{ color: 'var(--ink-3)' }}>—</td>
+      <td className="px-4 py-2 text-xs" style={{ color: 'var(--ink-3)' }}>—</td>
       <td className="px-4 py-2" />
     </tr>
   )
@@ -110,45 +100,45 @@ function InlineAdSetRow({ adSet }: { adSet: CampaignAdSet }) {
 
   return (
     <>
-      <tr style={{ background: '#eef2ff', borderBottom: '1px solid #e0e7ff' }}>
+      <tr style={{ background: 'var(--accent-bg)', borderBottom: '1px solid var(--accent-border)' }}>
         <td className="px-4 py-2.5 pl-12">
           <div className="flex items-center gap-2">
             {ads.length > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); setAdsOpen((o) => !o) }}
-                className="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-sky-100 transition-colors"
+                className="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--accent-border)] transition-colors"
               >
                 <ChevronRight
                   size={11}
                   className={cn('transition-transform', adsOpen && 'rotate-90')}
-                  style={{ color: '#4f46e5' }}
+                  style={{ color: 'var(--accent)' }}
                 />
               </button>
             )}
             <div className="min-w-0">
-              <p className="text-xs font-medium truncate" style={{ color: '#4338ca', maxWidth: 200 }}>{adSet.name || '—'}</p>
+              <p className="text-xs font-medium truncate" style={{ color: 'var(--accent-strong)', maxWidth: 200 }}>{adSet.name || '—'}</p>
               {adSet.audienceType && (
-                <p className="text-[11px] capitalize mt-0.5" style={{ color: '#7dd3fc' }}>{adSet.audienceType.replace(/_/g, ' ')}</p>
+                <p className="text-[11px] capitalize mt-0.5" style={{ color: 'var(--ink-3)' }}>{adSet.audienceType.replace(/_/g, ' ')}</p>
               )}
             </div>
           </div>
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums whitespace-nowrap" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums whitespace-nowrap" style={{ color: 'var(--accent-strong)' }}>
           {adSet.spend ? formatCurrency(adSet.spend) : '—'}
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums" style={{ color: 'var(--accent-strong)' }}>
           {adSet.impressions?.toLocaleString() ?? '—'}
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums" style={{ color: 'var(--accent-strong)' }}>
           {adSet.ctr != null ? `${adSet.ctr.toFixed(2)}%` : '—'}
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums whitespace-nowrap" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums whitespace-nowrap" style={{ color: 'var(--accent-strong)' }}>
           {adSet.cpa ? formatCurrency(adSet.cpa) : '—'}
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums" style={{ color: 'var(--accent-strong)' }}>
           {adSet.frequency?.toFixed(2) || '—'}
         </td>
-        <td className="px-4 py-2.5 text-xs tabular-nums" style={{ color: '#4338ca' }}>
+        <td className="px-4 py-2.5 text-xs mono tabular-nums" style={{ color: 'var(--accent-strong)' }}>
           {adSet.conversions ?? '—'}
         </td>
         <td className="px-4 py-2.5">
@@ -175,31 +165,28 @@ function CampaignRow({
 
   return (
     <>
-      <tr
-        className="group transition-colors hover:bg-slate-50/80"
-        style={{ borderBottom: open ? 'none' : '1px solid #f3f4f6' }}
-      >
+      <tr className="group">
         {/* Campaign name */}
-        <td className="px-5 py-3.5" style={{ maxWidth: 0, width: '35%' }}>
+        <td style={{ maxWidth: 0, width: '35%' }}>
           <div className="flex items-start gap-2 min-w-0">
             {/* Expand toggle (non-pending only) */}
             {!isPending ? (
               <button
                 onClick={() => setOpen((o) => !o)}
-                className="mt-0.5 shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-sky-100 transition-colors"
+                className="mt-0.5 shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-[var(--accent-bg)] transition-colors"
                 title={open ? 'Collapse' : 'Expand ad sets'}
               >
                 <ChevronDown
                   size={12}
                   className={cn('transition-transform', !open && '-rotate-90')}
-                  style={{ color: adSets.length > 0 ? '#4f46e5' : '#e5e7eb' }}
+                  style={{ color: adSets.length > 0 ? 'var(--accent)' : 'var(--ink-4)' }}
                 />
               </button>
             ) : (
               /* Pending pulse dot */
               <span className="mt-1.5 shrink-0 relative inline-flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#f59e0b' }} />
-                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#f59e0b' }} />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: 'var(--warn)' }} />
+                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: 'var(--warn)' }} />
               </span>
             )}
 
@@ -207,24 +194,24 @@ function CampaignRow({
               <Link
                 href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="text-sm font-medium hover:text-sky-600 transition-colors block truncate"
-                style={{ color: '#111827' }}
+                className="text-[13px] font-semibold transition-opacity hover:opacity-70 block truncate"
+                style={{ color: 'var(--ink)' }}
                 title={campaign.name || campaign.topic || 'Untitled Campaign'}
               >
                 {campaign.name || campaign.topic || 'Untitled Campaign'}
               </Link>
               {campaign.name && campaign.topic && (
-                <p className="text-[11px] truncate mt-0.5" style={{ color: '#9ca3af' }} title={campaign.topic}>
+                <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--ink-3)' }} title={campaign.topic}>
                   {campaign.topic}
                 </p>
               )}
               {isPending && (
-                <p className="text-[11px] mt-0.5 font-medium" style={{ color: '#d97706' }}>
+                <p className="text-[11px] mt-0.5 font-medium" style={{ color: 'var(--warn)' }}>
                   Awaiting approval
                 </p>
               )}
               {!isPending && adSets.length > 0 && (
-                <p className="text-[11px] mt-0.5" style={{ color: '#4f46e5' }}>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--accent)' }}>
                   {adSets.length} ad set{adSets.length !== 1 ? 's' : ''}
                 </p>
               )}
@@ -233,53 +220,53 @@ function CampaignRow({
         </td>
 
         {/* Status */}
-        <td className="px-4 py-3.5 whitespace-nowrap">
+        <td className="whitespace-nowrap">
           <StatusBadge status={campaign.status} />
         </td>
 
         {/* Source */}
-        <td className="px-4 py-3.5 whitespace-nowrap">
+        <td className="whitespace-nowrap">
           <SourceBadge source={campaign.source} />
         </td>
 
         {/* Budget */}
-        <td className="px-4 py-3.5 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
-          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#e5e7eb' }}>—</span>}
+        <td className="num whitespace-nowrap mono text-[12px]">
+          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
         {/* Spend */}
-        <td className="px-4 py-3.5 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
-          {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: '#e5e7eb' }}>—</span>}
+        <td className="num whitespace-nowrap mono text-[12px]">
+          {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
         {/* ROAS */}
-        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+        <td className="num whitespace-nowrap">
           {campaign.roas != null ? (
-            <span className="text-sm font-semibold tabular-nums" style={{
-              color: campaign.roas >= 2 ? '#16a34a' : campaign.roas >= 1 ? '#d97706' : '#dc2626'
+            <span className="mono text-[12px] font-semibold" style={{
+              color: campaign.roas >= 2 ? 'var(--good)' : campaign.roas >= 1 ? 'var(--warn)' : 'var(--bad)'
             }}>
               {campaign.roas.toFixed(2)}x
             </span>
-          ) : <span style={{ color: '#e5e7eb' }}>—</span>}
+          ) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
         {/* CTR */}
-        <td className="px-4 py-3.5 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
-          {campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : <span style={{ color: '#e5e7eb' }}>—</span>}
+        <td className="num whitespace-nowrap mono text-[12px]">
+          {campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
         {/* Conversions */}
-        <td className="px-4 py-3.5 text-right text-sm tabular-nums font-medium whitespace-nowrap" style={{ color: '#111827' }}>
-          {campaign.conversions != null ? campaign.conversions : <span style={{ color: '#e5e7eb' }}>—</span>}
+        <td className="num whitespace-nowrap mono text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>
+          {campaign.conversions != null ? campaign.conversions : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
         {/* Launched */}
-        <td className="px-4 py-3.5 text-right text-xs tabular-nums whitespace-nowrap" style={{ color: '#9ca3af' }}>
+        <td className="num whitespace-nowrap text-[11px] mono" style={{ color: 'var(--ink-3)' }}>
           {formatDate(campaign.launchedAt)}
         </td>
 
         {/* Action */}
-        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+        <td className="num whitespace-nowrap">
           <div className="flex items-center justify-end gap-2">
             {!isPending && (() => {
               const GROWTH_TYPES = ['scale_adset', 'replace_creative', 'add_creative', 'add_adset']
@@ -290,8 +277,7 @@ function CampaignRow({
                 <Link
                   href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
                   onClick={e => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
-                  style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+                  className="chip chip-warn transition-opacity hover:opacity-80"
                 >
                   <AlertCircle size={10} /> {approvalNeeded} awaiting approval
                 </Link>
@@ -301,8 +287,7 @@ function CampaignRow({
             {isPending ? (
               <Link
                 href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors whitespace-nowrap"
-                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+                className="chip chip-warn transition-opacity hover:opacity-80"
                 onClick={e => e.stopPropagation()}
               >
                 Review <ChevronRight size={10} />
@@ -311,7 +296,7 @@ function CampaignRow({
               <ChevronRight
                 size={14}
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: '#4f46e5' }}
+                style={{ color: 'var(--accent)' }}
               />
             )}
           </div>
@@ -320,21 +305,21 @@ function CampaignRow({
 
       {/* Live ad sets expansion */}
       {open && !isPending && (
-        <tr style={{ borderBottom: '1px solid #c7d2fe' }}>
-          <td colSpan={10} className="px-0 py-0">
+        <tr style={{ borderBottom: '1px solid var(--accent-border)' }}>
+          <td colSpan={10} className="px-0 py-0" style={{ padding: 0 }}>
             {adSets.length === 0 ? (
-              <div className="px-12 py-3 text-xs" style={{ background: '#eef2ff', color: '#9ca3af' }}>
+              <div className="px-12 py-3 text-xs" style={{ background: 'var(--accent-bg)', color: 'var(--ink-3)' }}>
                 No ad sets on this campaign yet.
               </div>
             ) : (
-              <table className="w-full" style={{ background: '#eef2ff' }}>
+              <table className="w-full" style={{ background: 'var(--accent-bg)' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #c7d2fe' }}>
+                  <tr style={{ borderBottom: '1px solid var(--accent-border)' }}>
                     {['Ad Set / Audience', 'Spend', 'Impressions', 'CTR', 'CPA', 'Freq.', 'Conv.', 'Status'].map((h, i) => (
                       <th
                         key={h}
-                        className={`px-4 py-2 text-[10px] font-semibold uppercase tracking-wider ${i === 0 ? 'pl-12 text-left' : 'text-left'}`}
-                        style={{ color: '#7dd3fc' }}
+                        className={`px-4 py-2 micro-label ${i === 0 ? 'pl-12 text-left' : 'text-left'}`}
+                        style={{ color: 'var(--accent)' }}
                       >
                         {h}
                       </th>
@@ -357,10 +342,10 @@ function CampaignRow({
 
 // ── Sort icon ─────────────────────────────────────────────────────────────────
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  if (col !== sortKey) return <ArrowUpDown size={10} style={{ color: '#d1d5db' }} />
+  if (col !== sortKey) return <ArrowUpDown size={10} style={{ color: 'var(--ink-4)' }} />
   return sortDir === 'asc'
-    ? <ArrowUp size={10} style={{ color: '#4f46e5' }} />
-    : <ArrowDown size={10} style={{ color: '#4f46e5' }} />
+    ? <ArrowUp size={10} style={{ color: 'var(--accent)' }} />
+    : <ArrowDown size={10} style={{ color: 'var(--accent)' }} />
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -380,18 +365,15 @@ function StatCard({
   accent?: string
 }) {
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
-    >
-      {accent && <div className="h-0.75" style={{ background: accent }} />}
-      <div className="p-4 flex items-center gap-3">
+    <div className="card overflow-hidden">
+      {accent && <div style={{ height: 2, background: accent }} />}
+      <div className="px-5 py-4 flex items-center gap-3.5">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: iconBg }}>
           <Icon size={15} style={{ color: iconColor }} />
         </div>
         <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-wide truncate" style={{ color: '#9ca3af' }}>{label}</p>
-          <p className="text-lg font-bold leading-tight tabular-nums truncate" style={{ color: '#111827' }}>{value}</p>
+          <p className="micro-label mb-1 truncate">{label}</p>
+          <p className="display-num text-[22px] truncate" style={{ color: 'var(--ink)' }}>{value}</p>
         </div>
       </div>
     </div>
@@ -509,33 +491,23 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   ]
 
   return (
-    <div className="px-6 py-6 max-w-7xl mx-auto animate-fade-up" style={{ background: '#f8f9fb', minHeight: '100vh' }}>
+    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
 
       {/* ── Page header ─────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-2xl flex items-center justify-center"
-            style={{ background: '#e0e7ff', border: '1px solid #c7d2fe' }}
-          >
-            <Megaphone size={16} style={{ color: '#4f46e5' }} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight" style={{ color: '#111827' }}>Campaigns</h1>
-            <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>{tenantId}</p>
-          </div>
+      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+        <div className="min-w-0">
+          <p className="micro-label mb-2 mono">{tenantId}</p>
+          <h1 className="page-title">Campaigns</h1>
+          <p className="page-subtitle">Every campaign across the account — live, pending, and archived.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap pb-1">
           <button
             onClick={handleRunAudit}
             disabled={auditState === 'loading'}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60"
-            style={
-              auditState === 'success'
-                ? { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
-                : auditState === 'error'
-                ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
-                : { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' }
+            className={
+              auditState === 'success' ? 'btn chip-good border'
+              : auditState === 'error' ? 'btn btn-danger'
+              : 'btn btn-primary'
             }
           >
             {auditState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
@@ -543,8 +515,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
           </button>
           <button
             onClick={fetchCampaigns}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:border-sky-300 hover:text-sky-600"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563' }}
+            className="btn btn-ghost"
           >
             <RefreshCw size={12} /> Refresh
           </button>
@@ -556,8 +527,8 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
         <div
           className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
           style={auditState === 'error'
-            ? { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }
-            : { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' }
+            ? { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }
+            : { background: 'var(--good-bg)', border: '1px solid var(--good-border)', color: 'var(--good)' }
           }
         >
           {auditState === 'error' ? <AlertCircle size={14} /> : <Activity size={14} />}
@@ -568,26 +539,23 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       {/* ── Pending approval alert ───────────────────────────────── */}
       {pendingCampaigns > 0 && statusFilter !== 'pending_approval' && (
         <div
-          className="rounded-xl p-4 mb-5 flex items-center justify-between gap-4 flex-wrap"
-          style={{ background: '#fffbeb', border: '2px solid #fbbf24' }}
+          className="card p-4 mb-5 flex items-center justify-between gap-4 flex-wrap"
+          style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-border)' }}
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#fef3c7' }}>
-              <AlertCircle size={14} style={{ color: '#f59e0b' }} />
-            </div>
+            <AlertCircle size={16} style={{ color: 'var(--warn)' }} className="shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+              <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>
                 {pendingCampaigns} campaign{pendingCampaigns !== 1 ? 's' : ''} need{pendingCampaigns === 1 ? 's' : ''} your approval
               </p>
-              <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ink-2)' }}>
                 Click a pending campaign to review the creative package and launch on Meta.
               </p>
             </div>
           </div>
           <button
             onClick={() => setStatusFilter('pending_approval')}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-opacity hover:opacity-90"
-            style={{ background: '#f59e0b', color: '#ffffff' }}
+            className="btn btn-primary shrink-0"
           >
             Show pending <ChevronRight size={11} />
           </button>
@@ -596,28 +564,25 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
 
       {/* ── Stats row ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <StatCard icon={Megaphone}  label="Total"    value={campaigns.length}                              iconColor="#4b5563" iconBg="#f3f4f6" />
-        <StatCard icon={Activity}   label="Active"   value={activeCampaigns}                               iconColor="#16a34a" iconBg="#dcfce7" accent="#22c55e" />
-        <StatCard icon={DollarSign} label="Spend"    value={formatCurrency(totalSpend)}                   iconColor="#4f46e5" iconBg="#e0e7ff" accent="#4f46e5" />
-        <StatCard icon={TrendingUp} label="Avg ROAS" value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'} iconColor="#d97706" iconBg="#fef3c7" accent="#f59e0b" />
+        <StatCard icon={Megaphone}  label="Total"    value={campaigns.length}                              iconColor="var(--ink-2)" iconBg="var(--muted)" />
+        <StatCard icon={Activity}   label="Active"   value={activeCampaigns}                               iconColor="var(--good)" iconBg="var(--good-bg)" accent="var(--good)" />
+        <StatCard icon={DollarSign} label="Spend"    value={formatCurrency(totalSpend)}                   iconColor="var(--accent)" iconBg="var(--accent-bg)" accent="var(--accent)" />
+        <StatCard icon={TrendingUp} label="Avg ROAS" value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'} iconColor="var(--warn)" iconBg="var(--warn-bg)" accent="var(--warn)" />
       </div>
 
       {/* ── Error ────────────────────────────────────────────────── */}
       {error && (
-        <div className="rounded-xl p-4 mb-4 flex items-center gap-3 text-sm" style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' }}>
+        <div className="rounded-xl p-4 mb-4 flex items-center gap-3 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
           <AlertCircle size={14} className="shrink-0" /> {error}
         </div>
       )}
 
       {/* ── Table card ───────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
-      >
+      <div className="card overflow-hidden">
         {/* Filter bar */}
         <div
           className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap"
-          style={{ borderBottom: '1px solid #f3f4f6' }}
+          style={{ borderBottom: '1px solid var(--hairline-light)' }}
         >
           {/* Status tabs */}
           <div className="flex items-center gap-0.5 flex-wrap">
@@ -631,18 +596,18 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
                   style={
                     active
-                      ? { background: 'linear-gradient(135deg,#4f46e5,#4338ca)', color: '#ffffff', boxShadow: '0 1px 4px rgba(2,132,199,0.25)' }
-                      : { background: 'transparent', color: '#4b5563' }
+                      ? { background: 'var(--ink)', color: 'var(--paper)' }
+                      : { background: 'transparent', color: 'var(--ink-2)' }
                   }
                 >
                   {f.label}
                   {count > 0 && (
                     <span
-                      className="text-[10px] min-w-4.5 text-center px-1 py-0.5 rounded-full leading-none font-semibold"
+                      className="text-[10px] min-w-4.5 text-center px-1 py-0.5 rounded-full leading-none font-semibold mono"
                       style={
                         active
-                          ? { background: 'rgba(255,255,255,0.25)', color: '#fff' }
-                          : { background: '#f1f2f4', color: '#9ca3af' }
+                          ? { background: 'rgba(255,255,255,0.22)', color: 'var(--paper)' }
+                          : { background: 'var(--muted)', color: 'var(--ink-3)' }
                       }
                     >
                       {count}
@@ -655,21 +620,21 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
 
           {/* Search */}
           <div className="relative">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9ca3af' }} />
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-3)' }} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search campaigns…"
-              className="pl-8 pr-3 py-1.5 rounded-lg text-xs"
-              style={{ background: '#f6f7f9', border: '1px solid #e5e7eb', color: '#111827', width: 200, outline: 'none' }}
+              className="input pl-8 text-xs"
+              style={{ width: 200 }}
             />
           </div>
         </div>
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 gap-2.5" style={{ color: '#9ca3af' }}>
+          <div className="flex items-center justify-center py-20 gap-2.5" style={{ color: 'var(--ink-3)' }}>
             <Loader2 size={16} className="animate-spin" />
             <span className="text-sm">Loading campaigns…</span>
           </div>
@@ -689,43 +654,41 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="data-table">
               <thead>
-                <tr style={{ background: '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
+                <tr>
                   {/* Campaign */}
-                  <th className="px-5 py-3 text-left" style={{ width: '35%' }}>
+                  <th style={{ width: '35%' }}>
                     <button
                       onClick={() => toggleSort('topic')}
-                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider"
-                      style={{ color: sortKey === 'topic' ? '#4338ca' : '#9ca3af' }}
+                      className="inline-flex items-center gap-1.5 uppercase tracking-[0.09em]"
+                      style={{ color: sortKey === 'topic' ? 'var(--accent)' : undefined }}
                     >
                       Campaign <SortIcon col="topic" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
 
                   {/* Status */}
-                  <th className="px-4 py-3 text-left">
+                  <th>
                     <button
                       onClick={() => toggleSort('status')}
-                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider"
-                      style={{ color: sortKey === 'status' ? '#4338ca' : '#9ca3af' }}
+                      className="inline-flex items-center gap-1.5 uppercase tracking-[0.09em]"
+                      style={{ color: sortKey === 'status' ? 'var(--accent)' : undefined }}
                     >
                       Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
 
                   {/* Source */}
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
-                    Source
-                  </th>
+                  <th>Source</th>
 
                   {/* Numeric sortable cols */}
                   {numericCols.map((col) => (
-                    <th key={col.key} className="px-4 py-3 text-right">
+                    <th key={col.key} className="num">
                       <button
                         onClick={() => toggleSort(col.key)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider ml-auto"
-                        style={{ color: sortKey === col.key ? '#4338ca' : '#9ca3af' }}
+                        className="inline-flex items-center gap-1 uppercase tracking-[0.09em] ml-auto"
+                        style={{ color: sortKey === col.key ? 'var(--accent)' : undefined }}
                       >
                         <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />
                         {col.label}
@@ -733,7 +696,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                     </th>
                   ))}
 
-                  <th className="px-4 py-3 w-10" />
+                  <th className="w-10" />
                 </tr>
               </thead>
 
@@ -755,9 +718,9 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
         {!loading && (
           <div
             className="px-5 py-3 flex items-center justify-between gap-4"
-            style={{ borderTop: '1px solid #f3f4f6' }}
+            style={{ borderTop: '1px solid var(--hairline-light)' }}
           >
-            <p className="text-xs" style={{ color: '#9ca3af' }}>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
               {filtered.length === campaigns.length
                 ? `${campaigns.length} campaign${campaigns.length !== 1 ? 's' : ''}`
                 : `${filtered.length} of ${campaigns.length} campaigns`}
@@ -765,7 +728,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                 <button
                   onClick={() => setStatusFilter('all')}
                   className="ml-2 underline hover:no-underline"
-                  style={{ color: '#4f46e5' }}
+                  style={{ color: 'var(--accent)' }}
                 >
                   Clear filter
                 </button>
@@ -775,7 +738,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
               <button
                 onClick={() => setSearch('')}
                 className="text-xs hover:underline"
-                style={{ color: '#9ca3af' }}
+                style={{ color: 'var(--ink-3)' }}
               >
                 Clear search
               </button>

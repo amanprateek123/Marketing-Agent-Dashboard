@@ -3,15 +3,13 @@
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import {
-  Megaphone, TrendingUp, DollarSign, BarChart3,
-  Wifi, WifiOff, Building2, ArrowRight, Play,
+  Megaphone, Wifi, WifiOff, ArrowRight, Play,
   Loader2, CheckCircle, Activity, AlertTriangle,
   Settings, ChevronRight, Clock, Target,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { MetricCard } from '@/components/ui/MetricCard'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
+import { formatCurrency, formatDateTime } from '@/lib/utils'
 import type { Company, Campaign, PipelineRun } from '@/types'
 import { useRouter } from 'next/navigation'
 
@@ -92,294 +90,186 @@ export default function DashboardPage({ params }: PageProps) {
   const metaConnected = !!(company?.meta?.accessToken)
   const latestRun   = runs[0] ?? null
 
+  const kpis = [
+    { label: 'Campaigns', value: String(campaigns.length), tone: 'var(--ink)' },
+    { label: 'Total spend', value: formatCurrency(totalSpend), tone: 'var(--ink)' },
+    { label: 'Avg ROAS', value: avgRoas > 0 ? `${avgRoas.toFixed(2)}×` : '—',
+      tone: avgRoas >= 1.5 ? 'var(--good)' : avgRoas >= 1 ? 'var(--warn)' : avgRoas > 0 ? 'var(--bad)' : 'var(--ink-4)' },
+    { label: 'Active now', value: String(activeCampaigns), tone: 'var(--accent)' },
+  ]
+
   return (
-    <div className="min-h-screen" style={{ background: '#f8f9fb' }}>
+    <div className="min-h-screen">
+      <div className="px-8 py-8 max-w-6xl mx-auto stagger">
 
-      {/* ── Top Bar ─────────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 px-6 py-3.5 flex items-center justify-between gap-4 flex-wrap"
-        style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb' }}
-      >
-        {/* Company identity */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}
-          >
-            <Building2 size={16} style={{ color: '#4f46e5' }} />
-          </div>
+        {/* ── Masthead ─────────────────────────────────────────────── */}
+        <div className="flex items-end justify-between gap-6 flex-wrap mb-2">
           <div className="min-w-0">
-            <h1 className="text-[15px] font-bold leading-tight truncate" style={{ color: '#111827' }}>
-              {company?.name || tenantId}
-            </h1>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              {company?.industry && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
-                  {company.industry}
-                </span>
-              )}
-              {company?.pipelineConfig?.campaignStrategy && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded font-medium capitalize" style={{ background: '#e0e7ff', color: '#4338ca' }}>
-                  {company.pipelineConfig.campaignStrategy}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right actions */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          {/* Meta status */}
-          <div
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
-            style={metaConnected
-              ? { background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a' }
-              : { background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626' }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: metaConnected ? '#22c55e' : '#ef4444' }} />
-            {metaConnected ? <Wifi size={11} /> : <WifiOff size={11} />}
-            <span className="hidden sm:inline">Meta</span> {metaConnected ? 'Connected' : 'Disconnected'}
+            <p className="micro-label mb-2">{company?.industry ?? 'workspace'}{company?.pipelineConfig?.campaignStrategy ? ` · ${company.pipelineConfig.campaignStrategy}` : ''}</p>
+            <h1 className="page-title">{company?.name || tenantId}</h1>
           </div>
 
-          {/* Latest run chip */}
-          {latestRun && (
-            <Link
-              href={`/dashboard/${tenantId}/runs/${latestRun.runId}`}
-              className="hidden md:inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:border-sky-300"
-              style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4b5563' }}
-            >
-              <Activity size={11} />
-              <span className="font-mono">{latestRun.runId.slice(0, 8)}</span>
-              <StatusBadge status={latestRun.status} />
-            </Link>
-          )}
-
-          {/* Trigger */}
-          <button
-            onClick={handleTrigger}
-            disabled={triggerState === 'loading'}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-60"
-            style={
-              triggerState === 'success' ? { background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac' }
-              : triggerState === 'error'   ? { background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }
-              : triggerState === 'loading' ? { background: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe' }
-              : { background: 'linear-gradient(135deg,#4f46e5,#4338ca)', color: '#ffffff', boxShadow: '0 2px 8px rgba(14,165,233,0.30)', border: '1px solid transparent' }
-            }
-          >
-            {triggerState === 'loading' ? <Loader2 size={13} className="animate-spin" />
-             : triggerState === 'success' ? <CheckCircle size={13} />
-             : <Play size={13} fill="currentColor" />}
-            {triggerState === 'loading' ? 'Starting…'
-              : triggerState === 'success' ? 'Started!'
-              : triggerState === 'error' ? 'Retry'
-              : 'Run Pipeline'}
-          </button>
-
-          {triggerMessage && (
-            <span className="text-xs font-medium hidden sm:inline" style={{ color: triggerState === 'success' ? '#16a34a' : '#dc2626' }}>
-              {triggerMessage}
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0 pb-1">
+            {/* Meta connection */}
+            <span className={metaConnected ? 'chip chip-good' : 'chip chip-bad'}>
+              {metaConnected ? <Wifi size={10} /> : <WifiOff size={10} />}
+              Meta {metaConnected ? 'connected' : 'disconnected'}
             </span>
-          )}
+
+            {/* Latest run */}
+            {latestRun && (
+              <Link
+                href={`/dashboard/${tenantId}/runs/${latestRun.runId}`}
+                className="chip chip-neutral hover:opacity-75 transition-opacity"
+              >
+                <Activity size={10} />
+                <span className="mono">{latestRun.runId.slice(0, 8)}</span>
+                <StatusBadge status={latestRun.status} />
+              </Link>
+            )}
+
+            {/* Trigger */}
+            <button
+              onClick={handleTrigger}
+              disabled={triggerState === 'loading'}
+              className={
+                triggerState === 'success' ? 'btn chip-good border'
+                : triggerState === 'error' ? 'btn btn-danger'
+                : 'btn btn-primary'
+              }
+            >
+              {triggerState === 'loading' ? <Loader2 size={13} className="animate-spin" />
+               : triggerState === 'success' ? <CheckCircle size={13} />
+               : <Play size={12} fill="currentColor" />}
+              {triggerState === 'loading' ? 'Starting…'
+                : triggerState === 'success' ? 'Started'
+                : triggerState === 'error' ? 'Retry'
+                : 'Run Pipeline'}
+            </button>
+            {triggerMessage && (
+              <span className="text-xs font-medium hidden sm:inline" style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}>
+                {triggerMessage}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="px-6 py-6 max-w-7xl mx-auto animate-fade-up space-y-5">
+        {/* ── KPI band — serif numerals over a single hairline ─────── */}
+        <div className="card px-2 py-5 mb-6 grid grid-cols-2 lg:grid-cols-4">
+          {kpis.map((k, i) => (
+            <div
+              key={k.label}
+              className="px-6 py-1"
+              style={i > 0 ? { borderLeft: '1px solid var(--hairline-light)' } : undefined}
+            >
+              <p className="micro-label mb-2">{k.label}</p>
+              <p className="display-num text-[34px]" style={{ color: k.tone }}>{k.value}</p>
+            </div>
+          ))}
+        </div>
 
-        {/* ── Error alerts ─────────────────────────────────────────── */}
+        {/* ── Alerts ───────────────────────────────────────────────── */}
         {companyError && (
-          <div className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm" style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626' }}>
+          <div className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm mb-5"
+            style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
             <AlertTriangle size={14} className="shrink-0" /> {companyError}
           </div>
         )}
 
-        {/* ── Meta not connected banner ─────────────────────────── */}
         {company && !metaConnected && (
-          <div
-            className="flex items-center justify-between gap-4 rounded-xl px-5 py-4 flex-wrap"
-            style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
-          >
+          <div className="card flex items-center justify-between gap-4 px-5 py-4 flex-wrap mb-5"
+            style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-border)' }}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#fef3c7' }}>
-                <AlertTriangle size={14} style={{ color: '#d97706' }} />
-              </div>
+              <AlertTriangle size={16} style={{ color: 'var(--warn)' }} className="shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: '#92400e' }}>Meta account not connected</p>
-                <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>Connect your Meta account in Settings to enable pipeline runs.</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>Meta account not connected</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ink-2)' }}>Connect your Meta account in Settings to enable pipeline runs.</p>
               </div>
             </div>
-            <Link
-              href={`/dashboard/${tenantId}/settings`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
-              style={{ background: '#d97706', color: '#ffffff' }}
-            >
-              <Settings size={11} /> Go to Settings
+            <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost shrink-0">
+              <Settings size={12} /> Go to Settings
             </Link>
           </div>
         )}
 
-        {/* ── Pending approval banner ───────────────────────────── */}
         {pendingCount > 0 && (
-          <div
-            className="flex items-center justify-between gap-4 rounded-xl px-5 py-4 flex-wrap"
-            style={{ background: '#fffbeb', border: '2px solid #fbbf24' }}
-          >
+          <div className="card flex items-center justify-between gap-4 px-5 py-4 flex-wrap mb-5"
+            style={{ background: 'var(--accent-bg)', borderColor: 'var(--accent-border)' }}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#fef3c7' }}>
-                <Target size={14} style={{ color: '#f59e0b' }} />
-              </div>
+              <Target size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
-                  {pendingCount} campaign{pendingCount !== 1 ? 's' : ''} need{pendingCount === 1 ? 's' : ''} your approval
+                <p className="text-sm font-semibold" style={{ color: 'var(--accent-strong)' }}>
+                  {pendingCount} campaign{pendingCount !== 1 ? 's' : ''} awaiting your approval
                 </p>
-                <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>Review and approve before they can launch on Meta.</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ink-2)' }}>Review and approve before they can launch on Meta.</p>
               </div>
             </div>
-            <Link
-              href={`/dashboard/${tenantId}/campaigns?filter=pending_approval`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
-              style={{ background: '#f59e0b', color: '#ffffff' }}
-            >
-              Review now <ChevronRight size={11} />
+            <Link href={`/dashboard/${tenantId}/approvals`} className="btn btn-accent shrink-0">
+              Review now <ChevronRight size={12} />
             </Link>
           </div>
         )}
 
-        {/* ── Metric cards ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard
-            icon={Megaphone}
-            value={campaigns.length}
-            label="Total Campaigns"
-            iconColor="#4b5563"
-            iconBg="#f3f4f6"
-          />
-          <MetricCard
-            icon={DollarSign}
-            value={formatCurrency(totalSpend)}
-            label="Total Spend"
-            iconColor="#16a34a"
-            iconBg="#dcfce7"
-            accentColor="#22c55e"
-          />
-          <MetricCard
-            icon={TrendingUp}
-            value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'}
-            label="Avg ROAS"
-            iconColor="#d97706"
-            iconBg="#fef3c7"
-            accentColor="#f59e0b"
-          />
-          <MetricCard
-            icon={BarChart3}
-            value={activeCampaigns}
-            label="Active Campaigns"
-            iconColor="#4f46e5"
-            iconBg="#e0e7ff"
-            accentColor="#4f46e5"
-          />
-        </div>
+        {/* ── Main grid ────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start mb-5">
 
-        {/* ── Main content grid ─────────────────────────────────────── */}
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
-
-          {/* Recent Campaigns — wider */}
-          <div
-            className="xl:col-span-3 rounded-xl overflow-hidden"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
-          >
-            {/* Card header */}
-            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#eef2ff' }}>
-                  <Megaphone size={12} style={{ color: '#4f46e5' }} />
-                </div>
-                <h2 className="text-sm font-semibold" style={{ color: '#111827' }}>Recent Campaigns</h2>
-                {recentCampaigns.length > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
-                    {recentCampaigns.length}
-                  </span>
-                )}
-              </div>
-              <Link
-                href={`/dashboard/${tenantId}/campaigns`}
-                className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: '#4f46e5' }}
-              >
+          {/* Recent campaigns */}
+          <div className="xl:col-span-3 card overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
+              <h2 className="section-title">Recent Campaigns</h2>
+              <Link href={`/dashboard/${tenantId}/campaigns`}
+                className="inline-flex items-center gap-1 text-xs font-semibold transition-opacity hover:opacity-70"
+                style={{ color: 'var(--accent)' }}>
                 View all <ChevronRight size={11} />
               </Link>
             </div>
 
             {campaignsError ? (
-              <div className="px-5 py-10 text-center text-sm" style={{ color: '#dc2626' }}>{campaignsError}</div>
+              <div className="px-5 py-10 text-center text-sm" style={{ color: 'var(--bad)' }}>{campaignsError}</div>
             ) : recentCampaigns.length === 0 ? (
               <EmptyState icon={Megaphone} title="No campaigns yet" subtitle="Trigger a pipeline run to get started" />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="data-table">
                   <thead>
-                    <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #f3f4f6' }}>
-                      <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af', width: '40%' }}>
-                        Campaign
-                      </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
-                        Status
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
-                        Budget
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
-                        ROAS
-                      </th>
-                      <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#9ca3af' }}>
-                        Launched
-                      </th>
+                    <tr>
+                      <th style={{ width: '40%' }}>Campaign</th>
+                      <th>Status</th>
+                      <th className="num">Budget</th>
+                      <th className="num">ROAS</th>
+                      <th className="num">Launched</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentCampaigns.map((campaign, idx) => (
-                      <tr
-                        key={campaign._id || idx}
-                        className="group transition-colors hover:bg-slate-50"
-                        style={{ borderBottom: idx < recentCampaigns.length - 1 ? '1px solid #f3f4f6' : 'none' }}
-                      >
-                        {/* Name */}
-                        <td className="px-5 py-3" style={{ maxWidth: 0 }}>
+                      <tr key={campaign._id || idx} className="group">
+                        <td style={{ maxWidth: 0 }}>
                           <Link
                             href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-                            className="block text-sm font-medium truncate hover:text-sky-600 transition-colors"
-                            style={{ color: '#111827' }}
+                            className="block text-[13px] font-semibold truncate transition-colors"
+                            style={{ color: 'var(--ink)' }}
                             title={campaign.name || campaign.topic || 'Untitled'}
                           >
                             {campaign.name || campaign.topic || 'Untitled'}
                           </Link>
                           {campaign.name && campaign.topic && (
-                            <p className="text-[11px] truncate mt-0.5" style={{ color: '#9ca3af' }}>{campaign.topic}</p>
+                            <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--ink-3)' }}>{campaign.topic}</p>
                           )}
                         </td>
-
-                        {/* Status */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <StatusBadge status={campaign.status} />
+                        <td className="whitespace-nowrap"><StatusBadge status={campaign.status} /></td>
+                        <td className="num whitespace-nowrap mono text-[12px]">
+                          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
                         </td>
-
-                        {/* Budget */}
-                        <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap" style={{ color: '#4b5563' }}>
-                          {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: '#d1d5db' }}>—</span>}
-                        </td>
-
-                        {/* ROAS */}
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="num whitespace-nowrap">
                           {campaign.roas != null ? (
-                            <span className="text-sm font-semibold tabular-nums" style={{
-                              color: campaign.roas >= 2 ? '#16a34a' : campaign.roas >= 1 ? '#d97706' : '#dc2626'
+                            <span className="mono text-[12px] font-semibold" style={{
+                              color: campaign.roas >= 2 ? 'var(--good)' : campaign.roas >= 1 ? 'var(--warn)' : 'var(--bad)',
                             }}>
-                              {campaign.roas.toFixed(2)}x
+                              {campaign.roas.toFixed(2)}×
                             </span>
-                          ) : <span className="text-sm" style={{ color: '#d1d5db' }}>—</span>}
+                          ) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
                         </td>
-
-                        {/* Launched */}
-                        <td className="px-5 py-3 text-right text-xs tabular-nums whitespace-nowrap" style={{ color: '#9ca3af' }}>
+                        <td className="num whitespace-nowrap text-[11px] mono" style={{ color: 'var(--ink-3)' }}>
                           {formatDateTime(campaign.launchedAt)}
                         </td>
                       </tr>
@@ -390,29 +280,13 @@ export default function DashboardPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Pipeline Runs — narrower */}
-          <div
-            className="xl:col-span-2 rounded-xl overflow-hidden"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
-          >
-            {/* Card header */}
-            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#f0fdf4' }}>
-                  <Activity size={12} style={{ color: '#16a34a' }} />
-                </div>
-                <h2 className="text-sm font-semibold" style={{ color: '#111827' }}>Pipeline Runs</h2>
-                {recentRuns.length > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#f3f4f6', color: '#4b5563' }}>
-                    {recentRuns.length}
-                  </span>
-                )}
-              </div>
-              <Link
-                href={`/dashboard/${tenantId}/runs`}
-                className="inline-flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: '#4f46e5' }}
-              >
+          {/* Pipeline runs */}
+          <div className="xl:col-span-2 card overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
+              <h2 className="section-title">Pipeline Runs</h2>
+              <Link href={`/dashboard/${tenantId}/runs`}
+                className="inline-flex items-center gap-1 text-xs font-semibold transition-opacity hover:opacity-70"
+                style={{ color: 'var(--accent)' }}>
                 View all <ChevronRight size={11} />
               </Link>
             </div>
@@ -420,108 +294,86 @@ export default function DashboardPage({ params }: PageProps) {
             {recentRuns.length === 0 ? (
               <EmptyState icon={Activity} title="No runs yet" iconSize={24} />
             ) : (
-              <div className="divide-y" style={{ borderColor: '#f3f4f6' }}>
-                {recentRuns.map((run) => (
+              <div>
+                {recentRuns.map((run, i) => (
                   <Link
                     key={run.runId}
                     href={`/dashboard/${tenantId}/runs/${run.runId}`}
-                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors group"
+                    className="flex items-center gap-3 px-5 py-3.5 transition-colors group"
+                    style={{ borderTop: i > 0 ? '1px solid var(--hairline-light)' : 'none' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-warm)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    {/* Run ID + time */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono font-semibold truncate" style={{ color: '#4338ca' }}>
+                      <p className="mono text-xs font-semibold truncate" style={{ color: 'var(--accent)' }}>
                         {run.runId.slice(0, 14)}…
                       </p>
                       <div className="flex items-center gap-1 mt-1">
-                        <Clock size={10} style={{ color: '#d1d5db' }} />
-                        <p className="text-[11px] tabular-nums" style={{ color: '#9ca3af' }}>
+                        <Clock size={10} style={{ color: 'var(--ink-4)' }} />
+                        <p className="text-[11px] mono" style={{ color: 'var(--ink-3)' }}>
                           {formatDateTime(run.startedAt)}
                         </p>
                       </div>
                     </div>
-
-                    {/* Status + arrow */}
                     <div className="flex items-center gap-2 shrink-0">
                       <StatusBadge status={run.status} />
-                      <ArrowRight
-                        size={12}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ color: '#9ca3af' }}
-                      />
+                      <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--ink-3)' }} />
                     </div>
                   </Link>
                 ))}
               </div>
             )}
-
-            {/* Footer hint */}
-            {recentRuns.length > 0 && (
-              <div className="px-5 py-3" style={{ borderTop: '1px solid #f3f4f6' }}>
-                <p className="text-[11px]" style={{ color: '#d1d5db' }}>Click any run to view full pipeline output</p>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* ── Company profile strip ─────────────────────────────────── */}
+        {/* ── Colophon — company profile strip ─────────────────────── */}
         {company && (
-          <div
-            className="rounded-xl px-5 py-4 flex items-center justify-between gap-6 flex-wrap"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}
-          >
-            <div className="flex items-center gap-5 flex-wrap min-w-0">
+          <div className="card px-6 py-4 flex items-center justify-between gap-6 flex-wrap" style={{ background: 'var(--surface-warm)' }}>
+            <div className="flex items-center gap-7 flex-wrap min-w-0">
               {company.tone && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Tone</p>
-                  <p className="text-sm font-medium capitalize truncate" style={{ color: '#111827' }}>{company.tone}</p>
+                  <p className="micro-label mb-1">Tone</p>
+                  <p className="text-[13px] font-medium capitalize truncate" style={{ color: 'var(--ink)' }}>{company.tone}</p>
                 </div>
               )}
               {company.targetAudience && (
-                <div className="min-w-0" style={{ maxWidth: 240 }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Target Audience</p>
-                  <p className="text-sm font-medium truncate" style={{ color: '#111827' }} title={company.targetAudience}>
+                <div className="min-w-0" style={{ maxWidth: 260 }}>
+                  <p className="micro-label mb-1">Audience</p>
+                  <p className="text-[13px] font-medium truncate" style={{ color: 'var(--ink)' }} title={company.targetAudience}>
                     {company.targetAudience}
                   </p>
                 </div>
               )}
               {company.products && company.products.length > 0 && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Products</p>
+                  <p className="micro-label mb-1.5">Products</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {company.products.slice(0, 3).map((p, i) => (
-                      <span
-                        key={i}
-                        className="text-xs px-2 py-0.5 rounded-full font-medium truncate max-w-30"
-                        style={{ background: '#f3f4f6', color: '#4b5563' }}
-                        title={p.name}
-                      >
+                      <span key={i} className="chip chip-neutral truncate" style={{ maxWidth: 140 }} title={p.name}>
                         {p.name}
                       </span>
                     ))}
                     {company.products.length > 3 && (
-                      <span className="text-xs" style={{ color: '#9ca3af' }}>+{company.products.length - 3} more</span>
+                      <span className="text-xs" style={{ color: 'var(--ink-3)' }}>+{company.products.length - 3}</span>
                     )}
                   </div>
                 </div>
               )}
               {company.meta?.accountId && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#9ca3af' }}>Meta Account</p>
-                  <code className="text-xs font-mono" style={{ color: '#4b5563' }}>{company.meta.accountId}</code>
+                  <p className="micro-label mb-1">Meta account</p>
+                  <code className="mono text-xs" style={{ color: 'var(--ink-2)' }}>{company.meta.accountId}</code>
                 </div>
               )}
             </div>
 
-            <Link
-              href={`/dashboard/${tenantId}/settings`}
+            <Link href={`/dashboard/${tenantId}/settings`}
               className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 transition-opacity hover:opacity-70"
-              style={{ color: '#9ca3af' }}
-            >
+              style={{ color: 'var(--ink-3)' }}>
               <Settings size={12} /> Edit profile
             </Link>
           </div>
         )}
-
       </div>
     </div>
   )

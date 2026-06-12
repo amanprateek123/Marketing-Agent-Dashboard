@@ -6,12 +6,12 @@ type Variant = 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'gho
 type Size = 'sm' | 'md'
 
 const variantStyles: Record<Variant, React.CSSProperties> = {
-  primary:   { background: '#4338ca', color: '#ffffff', boxShadow: '0 1px 3px rgba(2,132,199,0.25)' },
-  secondary: { background: '#ffffff', border: '1px solid #e5e7eb', color: '#52525b' },
-  success:   { background: '#dcfce7', border: '1px solid #bbf7d0', color: '#15803d' },
-  danger:    { background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c' },
-  warning:   { background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309' },
-  ghost:     { background: 'transparent', color: '#71717a' },
+  primary:   { background: 'var(--accent)', color: '#ffffff' },
+  secondary: { background: 'var(--surface)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' },
+  success:   { background: 'var(--good-bg)', border: '1px solid var(--good-border)', color: 'var(--good)' },
+  danger:    { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' },
+  warning:   { background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn)' },
+  ghost:     { background: 'transparent', color: 'var(--ink-3)' },
 }
 
 const sizeClasses: Record<Size, string> = {
@@ -42,7 +42,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex items-center rounded-lg font-semibold transition-all',
+        'inline-flex items-center rounded-[10px] font-semibold transition-all',
         sizeClasses[size],
         isDisabled && 'opacity-60 cursor-not-allowed',
         className
