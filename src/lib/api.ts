@@ -134,3 +134,36 @@ export const triggerPipeline = (tenantId: string) =>
   apiFetch<{ runId?: string }>(`/pipeline/${tenantId}/trigger`, {
     method: 'POST',
   })
+
+// ── Landing-page A/B test ────────────────────────────────────────────────────
+// Start a test: generates one creative set, then a pending_approval campaign
+// with two URL-split ad sets (control vs variant). Approve it like any campaign.
+export const startLandingPageTest = (
+  tenantId: string,
+  body: {
+    product: string
+    controlUrl?: string
+    variantUrl: string
+    budget: number
+    audienceType?: string
+    metaAudienceId?: string
+  },
+) =>
+  apiFetch<{ status: string; briefId: string; control: string; variant: string; message: string }>(
+    `/creative/${tenantId}/landing-page-test`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+// Promote the winning page: sets the product's live landingUrl and clears the test.
+export const promoteLandingPage = (tenantId: string, product: string, url: string) =>
+  apiFetch<{ ok: true; product: string; landingUrl: string }>(
+    `/companies/${tenantId}/promote-landing-page`,
+    { method: 'POST', body: JSON.stringify({ product, url }) },
+  )
+
+// Stop tracking a test (clears the record; does NOT pause the Meta campaign).
+export const cancelLandingPageTest = (tenantId: string, product: string) =>
+  apiFetch<{ ok: true; product: string }>(
+    `/companies/${tenantId}/cancel-landing-page-test`,
+    { method: 'POST', body: JSON.stringify({ product }) },
+  )

@@ -34,6 +34,38 @@ export interface Product {
   // headlines, and image overlays (premium positioning — lander handles price).
   hidePriceInCreative?: boolean
   category?: string
+  // Active landing-page A/B test. controlUrl (A) vs variantUrl (B) — two ad sets,
+  // same audience + creatives, URL is the only variable. Winner is report-only:
+  // the audit loop fills `evaluation`/`winnerUrl`, the operator promotes manually.
+  landingPageTest?: LandingPageTest
+}
+
+export interface LandingPageTestArm {
+  url: string
+  conversions: number
+  spend: number
+  cpa: number | null
+  roas: number
+}
+
+export interface LandingPageTest {
+  controlUrl?: string
+  variantUrl?: string
+  audienceType?: string
+  metaAudienceId?: string
+  status: 'running' | 'concluded'
+  campaignId?: string
+  startedAt?: string
+  winnerUrl?: string
+  concludedAt?: string
+  evaluation?: {
+    control: LandingPageTestArm
+    variant: LandingPageTestArm
+    leaderUrl: string | null
+    marginPct: number
+    decided: boolean
+    evaluatedAt?: string
+  }
 }
 
 export interface BudgetSettings {

@@ -5,10 +5,10 @@ import {
   Settings, Wifi, WifiOff, Package, Users, Bell, Building2, Target, Loader2,
   CheckCircle2, RefreshCw, DollarSign, TrendingUp, TrendingDown, Zap, Plus,
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
-  ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X,
+  ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X, FlaskConical, Trophy,
 } from 'lucide-react'
-import type { Company, Product, PromptsHistoryEntry } from '@/types'
-import { getCompany, rollbackPrompts } from '@/lib/api'
+import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm } from '@/types'
+import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
 
 const API_BASE = 'http://localhost:8082/api/v1'
@@ -192,7 +192,152 @@ function ConversionTracking({ product, onChange }: { product: Product; onChange:
 }
 
 // ── Product card ─────────────────────────────────────────────────────────────
-function ProductCard({ product, index, onChange, onRemove }: { product: Product; index: number; onChange: (p: Product) => void; onRemove: () => void }) {
+// ── Landing-page A/B test — one creative set, two URL-split ad sets ──────────
+// Self-contained: reads its own live status from the server (so it never
+// collides with the bulk product-save form), and drives start / promote /
+// cancel via the dedicated endpoints. Winner is report-only — promotion is an
+// explicit click here, the agent never changes landingUrl on its own.
+function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { tenantId: string; productName: string; defaultControlUrl: string }) {
+  const [test, setTest] = useState<LandingPageTest | null | undefined>(undefined) // undefined = loading
+  const [urlA, setUrlA] = useState(defaultControlUrl)
+  const [urlB, setUrlB] = useState('')
+  const [budget, setBudget] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [justStarted, setJustStarted] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'good' | 'bad'; text: string } | null>(null)
+
+  async function load() {
+    try {
+      const c = await getCompany(tenantId)
+      const p = (c.products || []).find(pp => pp.name === productName)
+      setTest(p?.landingPageTest ?? null)
+      if (!urlA && p?.landingUrl) setUrlA(p.landingUrl)
+    } catch { setTest(null) }
+  }
+  useEffect(() => { load() }, [tenantId, productName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function onStart() {
+    setMsg(null)
+    if (!urlA || !urlB) { setMsg({ type: 'bad', text: 'Both URLs (A and B) are required.' }); return }
+    if (urlA === urlB) { setMsg({ type: 'bad', text: 'URL B must differ from URL A.' }); return }
+    const b = Number(budget)
+    if (!Number.isFinite(b) || b <= 0) { setMsg({ type: 'bad', text: 'Enter a positive daily budget.' }); return }
+    setBusy(true)
+    try {
+      await startLandingPageTest(tenantId, { product: productName, controlUrl: urlA, variantUrl: urlB, budget: b })
+      setJustStarted(true)
+      setMsg({ type: 'good', text: 'Generating creative… the LP_TEST campaign will appear under Approvals in a few minutes. Approve it there to go live.' })
+    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Failed to start test.' }) }
+    finally { setBusy(false) }
+  }
+
+  async function onPromote(url: string) {
+    setBusy(true); setMsg(null)
+    try {
+      await promoteLandingPage(tenantId, productName, url)
+      setMsg({ type: 'good', text: `Promoted — ${url} is now the live landing URL. Test cleared.` })
+      await load()
+    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Promote failed.' }) }
+    finally { setBusy(false) }
+  }
+
+  async function onCancel() {
+    setBusy(true); setMsg(null)
+    try {
+      await cancelLandingPageTest(tenantId, productName)
+      setJustStarted(false)
+      setMsg({ type: 'good', text: 'Test record cleared. (Pause the Meta campaign separately if it is live.)' })
+      await load()
+    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Cancel failed.' }) }
+    finally { setBusy(false) }
+  }
+
+  const Header = (
+    <div className="flex items-center gap-2">
+      <FlaskConical size={13} style={{ color: 'var(--accent)' }} />
+      <FieldLabel>Landing Page A/B Test</FieldLabel>
+    </div>
+  )
+
+  if (!productName) {
+    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Save the product first to run a landing-page test.</p></div>
+  }
+  if (test === undefined) {
+    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Loading test status…</p></div>
+  }
+
+  const ev = test?.evaluation
+  const isWinner = (url?: string | null) => url && ev?.leaderUrl && url === ev.leaderUrl
+
+  const Arm = ({ label, arm, win }: { label: string; arm?: LandingPageTestArm; win?: boolean }) => (
+    <div className="card-inset p-3" style={win ? { borderColor: 'var(--good-border)', background: 'var(--good-bg)' } : undefined}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="micro-label">{label}</span>
+        {win && <span className="chip chip-good inline-flex items-center gap-1"><Trophy size={10} /> Leading</span>}
+      </div>
+      <p className="text-[11px] mono truncate mb-2" style={{ color: 'var(--ink-2)' }} title={arm?.url}>{arm?.url || '—'}</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div><p className="micro-label">Conv</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.conversions ?? 0}</p></div>
+        <div><p className="micro-label">CPA</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.cpa != null ? `₹${arm.cpa.toLocaleString()}` : '—'}</p></div>
+        <div><p className="micro-label">ROAS</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.roas != null ? `${arm.roas}x` : '—'}</p></div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="card-inset p-3.5">
+      <div className="flex items-center justify-between gap-2 mb-2.5">
+        {Header}
+        {test && <span className={`chip ${test.status === 'concluded' ? 'chip-good' : 'chip-accent'}`}>{test.status === 'concluded' ? 'Winner found' : 'Running'}</span>}
+      </div>
+
+      {msg && <div className="mb-2.5 px-2.5 py-1.5 rounded-md text-[11px]" style={msg.type === 'good' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>{msg.text}</div>}
+
+      {/* ── Active test: show live per-URL results + actions ── */}
+      {test ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Arm label="A · Control" arm={ev?.control} win={!!isWinner(ev?.control?.url)} />
+            <Arm label="B · Variant" arm={ev?.variant} win={!!isWinner(ev?.variant?.url)} />
+          </div>
+          {ev ? (
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+              {ev.decided
+                ? <>Leader beats the other by <span className="mono font-semibold" style={{ color: 'var(--good)' }}>{ev.marginPct}%</span> on CPA — decisive.</>
+                : <>Gathering data — needs ≥15 conversions per arm and ≥15% CPA gap to call a winner. Current gap <span className="mono">{ev.marginPct}%</span>.</>}
+            </p>
+          ) : (
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Waiting for the first conversions to report per URL.</p>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {(test.winnerUrl || ev?.leaderUrl) && (
+              <button disabled={busy} onClick={() => onPromote((test.winnerUrl || ev?.leaderUrl) as string)} className="btn btn-accent text-xs inline-flex items-center gap-1.5">
+                <Trophy size={12} /> Promote {isWinner(ev?.variant?.url) ? 'B' : 'A'} as live URL
+              </button>
+            )}
+            <button disabled={busy} onClick={onCancel} className="btn btn-ghost text-xs">Clear test</button>
+          </div>
+          {test.campaignId && <p className="text-[10px] mono" style={{ color: 'var(--ink-4)' }}>campaign {test.campaignId}</p>}
+        </div>
+      ) : justStarted ? (
+        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Creative generating + campaign being created. It will show up in Approvals shortly — approve it to launch, then results appear here.</p>
+      ) : (
+        /* ── No active test: the start form ── */
+        <div className="space-y-2.5">
+          <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Tests two pages head-to-head — same audience + creative, only the URL differs. One creative set is generated and shared across both. Winner is reported here; you promote it.</p>
+          <div><FieldLabel>URL A · Control</FieldLabel><TextInput value={urlA} onChange={setUrlA} placeholder="https://…/v1" mono type="url" /></div>
+          <div><FieldLabel>URL B · Variant</FieldLabel><TextInput value={urlB} onChange={setUrlB} placeholder="https://…/v2" mono type="url" /></div>
+          <div className="w-40"><FieldLabel>Daily Budget</FieldLabel><NumericInput value={budget} onChange={setBudget} prefix="₹" placeholder="5000" /></div>
+          <button disabled={busy} onClick={onStart} className="btn btn-accent text-xs inline-flex items-center gap-1.5">
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />} Start test
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProductCard({ product, index, onChange, onRemove, tenantId }: { product: Product; index: number; onChange: (p: Product) => void; onRemove: () => void; tenantId: string }) {
   const [open, setOpen] = useState(index === 0)
   const isActive = product.active !== false
   function set<K extends keyof Product>(key: K, val: Product[K]) { onChange({ ...product, [key]: val }) }
@@ -299,6 +444,7 @@ function ProductCard({ product, index, onChange, onRemove }: { product: Product;
           </div>
           <ConversionTracking product={product} onChange={onChange} />
           <div><FieldLabel>Landing URL</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
+          <LandingPageTestSection tenantId={tenantId} productName={product.name} defaultControlUrl={product.landingUrl || ''} />
           <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {([{ key: 'languages' as const, label: 'Languages', ph: 'hindi, english' }, { key: 'trendKeywords' as const, label: 'Trend Keywords', ph: 'kundli, astrology' }, { key: 'differentiators' as const, label: 'Differentiators', ph: 'AI-powered, fast' }]).map(({ key, label, ph }) => (
@@ -561,7 +707,7 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {products.map((p, i) => <ProductCard key={i} product={p} index={i} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
+              {products.map((p, i) => <ProductCard key={i} product={p} index={i} tenantId={tenantId} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
             </div>
           )}
           {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save Products" /></div>}
