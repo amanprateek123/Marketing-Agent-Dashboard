@@ -1,55 +1,55 @@
 @import "tailwindcss";
 
 /* ════════════════════════════════════════════════════════════════════════
-   BriefOS — "Mission Control"
-   Dark operations console · phosphor data · glowing semantics · dense
+   Meridian — Intelligence Console (bright theme, v1.0)
+   Warm off-white paper · high-contrast ink · restrained indigo accent
    All colors flow from these tokens — never hardcode hex in pages.
    ════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Surfaces — warm near-black console (stone-950 family) */
-  --paper: #0c0a09;            /* app background */
-  --surface: #161311;          /* panels */
-  --surface-warm: #1c1917;     /* raised / header strips */
-  --muted: #24201d;            /* wells, tracks */
+  /* Surfaces — warm off-white paper */
+  --paper: #faf9f6;            /* app background — warm cream */
+  --surface: #ffffff;          /* panels — pure white */
+  --surface-warm: #f4f1eb;     /* raised / header strips — subtly warmer */
+  --muted: #ece8df;            /* wells, tracks, chips */
 
-  /* Ink — warm light text scale */
-  --ink: #f5f3f0;
-  --ink-2: #b8b2ab;
-  --ink-3: #7d766e;
-  --ink-4: #4a443e;
+  /* Ink — deep warm neutrals scaled */
+  --ink: #16130f;              /* primary text — near-black warm */
+  --ink-2: #4a443c;            /* secondary */
+  --ink-3: #78716c;            /* tertiary */
+  --ink-4: #a8a29e;            /* faint */
 
-  /* Hairlines */
-  --hairline: #2a2522;
-  --hairline-light: #211d1a;
+  /* Hairlines — near-invisible on paper */
+  --hairline: #e0dbd0;
+  --hairline-light: #ece8df;
 
-  /* Accent — electric indigo, reads as a glow on dark */
-  --accent: #818cf8;
-  --accent-strong: #a5b4fc;
-  --accent-bg: rgba(99, 102, 241, 0.14);
-  --accent-border: rgba(129, 140, 248, 0.35);
+  /* Accent — deep indigo (readable on bright bg) */
+  --accent: #4f46e5;
+  --accent-strong: #3730a3;
+  --accent-bg: rgba(79, 70, 229, 0.08);
+  --accent-border: rgba(79, 70, 229, 0.25);
 
-  /* Semantic — phosphor brights with translucent fields */
-  --good: #4ade80;
-  --good-bg: rgba(74, 222, 128, 0.10);
-  --good-border: rgba(74, 222, 128, 0.30);
-  --warn: #fbbf24;
-  --warn-bg: rgba(251, 191, 36, 0.10);
-  --warn-border: rgba(251, 191, 36, 0.30);
-  --bad: #f87171;
-  --bad-bg: rgba(248, 113, 113, 0.10);
-  --bad-border: rgba(248, 113, 113, 0.32);
-  --info: #22d3ee;
-  --info-bg: rgba(34, 211, 238, 0.10);
-  --info-border: rgba(34, 211, 238, 0.30);
+  /* Semantic — desaturated for bright bg legibility */
+  --good: #059669;             /* emerald-600 */
+  --good-bg: rgba(5, 150, 105, 0.08);
+  --good-border: rgba(5, 150, 105, 0.28);
+  --warn: #b45309;             /* amber-700 */
+  --warn-bg: rgba(180, 83, 9, 0.09);
+  --warn-border: rgba(180, 83, 9, 0.28);
+  --bad: #b91c1c;              /* red-700 */
+  --bad-bg: rgba(185, 28, 28, 0.08);
+  --bad-border: rgba(185, 28, 28, 0.28);
+  --info: #0369a1;             /* sky-700 */
+  --info-bg: rgba(3, 105, 161, 0.08);
+  --info-border: rgba(3, 105, 161, 0.28);
 
-  /* Elevation — dark UIs elevate with borders + glow, not gray shadows */
-  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -8px rgba(0, 0, 0, 0.6);
-  --shadow-overlay: 0 24px 72px -16px rgba(0, 0, 0, 0.85);
-  --glow-accent: 0 0 18px -4px rgba(129, 140, 248, 0.45);
-  --glow-good: 0 0 14px -4px rgba(74, 222, 128, 0.5);
-  --glow-bad: 0 0 14px -4px rgba(248, 113, 113, 0.5);
+  /* Elevation — bright UIs elevate with soft shadows, no glow */
+  --shadow-soft: 0 1px 2px rgba(23, 20, 15, 0.05), 0 1px 3px rgba(23, 20, 15, 0.04);
+  --shadow-raised: 0 4px 12px -4px rgba(23, 20, 15, 0.12), 0 2px 6px -2px rgba(23, 20, 15, 0.06);
+  --shadow-overlay: 0 24px 72px -16px rgba(23, 20, 15, 0.18);
+  --glow-accent: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  --glow-good: 0 0 0 3px rgba(5, 150, 105, 0.12);
+  --glow-bad: 0 0 0 3px rgba(185, 28, 28, 0.12);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -82,7 +82,7 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--paper); color-scheme: dark; }
+html { background: var(--paper); color-scheme: light; }
 
 body {
   background: var(--paper);
@@ -90,12 +90,12 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 13.5px;
+  font-size: 15px;
   line-height: 1.55;
   position: relative;
 }
 
-/* Console atmosphere: faint blueprint grid + vignette */
+/* Paper atmosphere: faint blueprint grid + top vignette */
 body::before {
   content: '';
   position: fixed;
@@ -103,8 +103,8 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    linear-gradient(rgba(23, 20, 15, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 20, 15, 0.025) 1px, transparent 1px);
   background-size: 36px 36px;
   mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, black 30%, transparent 100%);
 }
@@ -114,58 +114,67 @@ body > * { position: relative; z-index: 1; }
 
 .font-display { font-family: var(--font-display), Georgia, serif; }
 
-/* Page title — uppercase mono callsign + the page name */
+/* Page title — big, sentence-case, human. */
 .page-title {
-  font-size: 22px;
+  font-size: 28px;
   line-height: 1.15;
-  font-weight: 750;
-  letter-spacing: -0.015em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink-3);
-  margin-top: 4px;
+  margin-top: 6px;
+  line-height: 1.5;
 }
 
+/* Section title — sentence case, sans-serif, easy to read. */
 .section-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-2);
-  font-family: var(--font-mono), monospace;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--ink);
 }
 
-/* Big console numerals — mono, bright */
+/* Big numerals — tabular nums for alignment, but NOT monospace-forced
+   (mono makes non-tech users think it's code). Kept mono only when
+   next to code-like strings via .mono. */
 .display-num {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.micro-label {
-  font-size: 9.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
-.mono { font-family: var(--font-mono), ui-monospace, monospace; }
+/* Small label above a metric — sentence case, readable. */
+.micro-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
 
-/* Serif survives in ONE role: the editorial voice of the machine —
-   wordmark + insight pull-quotes. Everything else is console. */
+/* Monospace is opt-in per element — reserve for IDs, code, timestamps. */
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Serif survives in ONE role: the wordmark + occasional insight pull-quotes. */
 .insight-quote {
   font-family: var(--font-display), Georgia, serif;
   font-style: italic;
-  font-size: 15px;
-  line-height: 1.45;
-  color: var(--ink-2);
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* Explainer text — smaller than body but readable. */
+.explain {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
 }
 
 /* ── Surfaces ─────────────────────────────────────────────────────────── */
@@ -207,40 +216,36 @@ table { border-collapse: collapse; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead tr { background: var(--surface-warm); border-bottom: 1px solid var(--hairline); }
 .data-table th {
-  padding: 8px 14px;
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.11em;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--ink-3);
-  font-family: var(--font-mono), monospace;
   text-align: left;
   white-space: nowrap;
 }
 .data-table th.num, .data-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .data-table td {
-  padding: 10px 14px;
-  font-size: 12.5px;
-  color: var(--ink-2);
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--ink);
   border-top: 1px solid var(--hairline-light);
 }
 .data-table tbody tr { transition: background 0.1s ease; }
-.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
+.data-table tbody tr:hover { background: rgba(23, 20, 15, 0.03); }
 
 /* ── Chips ────────────────────────────────────────────────────────────── */
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 650;
-  font-family: var(--font-mono), monospace;
-  letter-spacing: 0.02em;
-  padding: 2px 8px;
-  border-radius: 5px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
   white-space: nowrap;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 .chip-good    { background: var(--good-bg);   color: var(--good);   border: 1px solid var(--good-border); }
 .chip-warn    { background: var(--warn-bg);   color: var(--warn);   border: 1px solid var(--warn-border); }
@@ -255,29 +260,31 @@ table { border-collapse: collapse; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  font-size: 12.5px;
-  font-weight: 650;
-  padding: 8px 15px;
-  border-radius: 9px;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.14s ease;
   border: 1px solid transparent;
   white-space: nowrap;
+  line-height: 1.2;
 }
+.btn-lg { font-size: 15px; padding: 12px 22px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-primary { background: var(--ink); color: var(--paper); }
-.btn-primary:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+.btn-primary:hover:not(:disabled) { background: var(--ink-2); transform: translateY(-1px); box-shadow: var(--shadow-raised); }
 
-.btn-accent { background: var(--accent); color: #0c0a09; font-weight: 700; }
+.btn-accent { background: var(--accent); color: #fff; font-weight: 700; }
 .btn-accent:hover:not(:disabled) { background: var(--accent-strong); transform: translateY(-1px); box-shadow: var(--glow-accent); }
 
-.btn-ghost { background: transparent; color: var(--ink-2); border-color: var(--hairline); }
+.btn-ghost { background: var(--surface); color: var(--ink-2); border-color: var(--hairline); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-warm); border-color: var(--ink-4); color: var(--ink); }
 
 .btn-danger { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-border); }
-.btn-danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.18); box-shadow: var(--glow-bad); }
+.btn-danger:hover:not(:disabled) { background: rgba(185, 28, 28, 0.14); box-shadow: var(--glow-bad); }
 
 /* ── Inputs ───────────────────────────────────────────────────────────── */
 
@@ -298,12 +305,12 @@ table { border-collapse: collapse; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
-::selection { background: rgba(129, 140, 248, 0.35); color: #fff; }
+::selection { background: rgba(79, 70, 229, 0.18); color: var(--ink); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
   border-color: var(--accent) !important;
 }
 

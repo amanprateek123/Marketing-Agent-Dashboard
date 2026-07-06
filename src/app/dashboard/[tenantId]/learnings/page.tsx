@@ -17,7 +17,7 @@ import { HookStyleChip } from '@/components/badges'
 import { cn, formatCurrency, formatRelativeTime } from '@/lib/utils'
 import type { Company, CaseStudy, WinningExemplar, CausalInsight, AudienceScoreEntry } from '@/types'
 
-const API_BASE = 'http://localhost:8082/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -281,7 +281,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
             style={
               segmentFilter === 'all'
-                ? { background: 'var(--accent)', color: '#0c0a09' }
+                ? { background: 'var(--accent)', color: '#fff' }
                 : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
             }
           >
@@ -297,7 +297,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                 className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
                 style={
                   active
-                    ? { background: 'var(--accent)', color: '#0c0a09' }
+                    ? { background: 'var(--accent)', color: '#fff' }
                     : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
                 }
               >

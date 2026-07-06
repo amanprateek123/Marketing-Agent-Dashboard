@@ -111,19 +111,18 @@ export default function ApprovalsPage({ params }: PageProps) {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
         <div>
-          <p className="micro-label mb-2">Campaign launch queue</p>
-          <h1 className="page-title">Approvals Inbox</h1>
+          <h1 className="page-title">Ads waiting for you to review</h1>
           <p className="page-subtitle">
-            {pending.length} campaign{pending.length === 1 ? '' : 's'} awaiting approval
+            {pending.length === 0
+              ? 'Nothing waiting right now.'
+              : pending.length === 1
+                ? '1 new ad idea. Approve to launch it on Meta.'
+                : `${pending.length} new ad ideas. Approve to launch them on Meta.`}
           </p>
         </div>
 
-        <button
-          onClick={load}
-          disabled={loading}
-          className="btn btn-ghost"
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+        <button onClick={load} disabled={loading} className="btn btn-ghost">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
@@ -171,8 +170,8 @@ export default function ApprovalsPage({ params }: PageProps) {
         <div className="card">
           <EmptyState
             icon={ShieldCheck}
-            title="Inbox zero"
-            subtitle="No campaigns are waiting on you. New ones will appear here as the pipeline produces them."
+            title="All caught up 🎉"
+            subtitle="The agent will drop new ad ideas here when it has them ready for you to approve."
           />
         </div>
       ) : (
@@ -208,18 +207,16 @@ function WeeklyCapBar({ committed, cap }: { committed: number; cap: number }) {
     <div className="card px-5 py-4 mb-5">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
-          <span className="micro-label">Weekly cap committed</span>
+          <span className="micro-label">Weekly budget in use</span>
         </div>
         <div className="flex items-baseline gap-1.5 tabular-nums">
-          <span className="text-sm font-semibold mono" style={{ color: tone.fg }}>
+          <span className="font-semibold" style={{ color: tone.fg }}>
             {formatCurrency(committed)}
           </span>
-          <span className="text-xs mono" style={{ color: 'var(--ink-3)' }}>
-            of {formatCurrency(cap)}
+          <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>
+            of {formatCurrency(cap)} available
           </span>
-          <span className={`chip ${tone.chip} mono ml-1`}>
-            {pct}%
-          </span>
+          <span className={`chip ${tone.chip} ml-1`}>{pct}% used</span>
         </div>
       </div>
       <div
@@ -599,7 +596,7 @@ function ApprovalCard({
                   <button
                     key={id}
                     onClick={() => setAccountId(id)}
-                    className={`chip mono transition-all ${accountId === id ? 'chip-accent' : 'chip-neutral'}`}
+                    className={`chip transition-all ${accountId === id ? 'chip-accent' : 'chip-neutral'}`}
                   >
                     {id}
                   </button>
@@ -609,41 +606,41 @@ function ApprovalCard({
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 flex-wrap pt-2">
+          <div className="flex items-center gap-3 flex-wrap pt-2">
             <button
               onClick={() => setApproveOpen(true)}
               disabled={approveState === 'loading' || !accountId}
-              className="btn btn-primary"
+              className="btn btn-lg btn-primary"
             >
               {approveState === 'loading' ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
               ) : (
-                <CheckCircle2 size={14} />
+                <CheckCircle2 size={16} />
               )}
-              Approve & launch
+              Yes, launch this ad
             </button>
 
             <button
               onClick={() => setRejectOpen(true)}
               disabled={rejectState === 'loading'}
-              className="btn btn-danger"
+              className="btn btn-lg btn-danger"
             >
-              <XCircle size={14} />
-              Reject
+              <XCircle size={16} />
+              No, reject this
             </button>
 
             <Link
               href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-              className="ml-auto inline-flex items-center gap-1 text-xs font-medium hover:underline"
-              style={{ color: 'var(--accent)' }}
+              className="ml-auto inline-flex items-center gap-1 font-medium hover:underline"
+              style={{ color: 'var(--accent-strong)', fontSize: 14 }}
             >
-              View full detail <ChevronRight size={11} />
+              See full details <ChevronRight size={14} />
             </Link>
           </div>
 
           {!accountId && (
-            <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
-              Connect a Meta account in Settings before approving.
+            <p style={{ color: 'var(--bad)', fontSize: 13 }}>
+              Connect a Meta account in Settings before you can launch this.
             </p>
           )}
         </div>
@@ -652,11 +649,11 @@ function ApprovalCard({
       {/* Approve confirmation */}
       <ConfirmModal
         open={approveOpen}
-        title="Launch on Meta?"
-        description={`This will create the live campaign on ${accountId}. Daily budget ${formatCurrency(budget)}.${
-          overCap ? ' Note: this will exceed your weekly cap.' : ''
+        title="Launch this ad on Meta?"
+        description={`We'll create the live ad on your ${accountId} account, spending up to ${formatCurrency(budget)} per day.${
+          overCap ? ' Heads up: this will push you over your weekly budget.' : ''
         }`}
-        confirmLabel="Approve & launch"
+        confirmLabel="Yes, launch it"
         loading={approveState === 'loading'}
         onCancel={() => setApproveOpen(false)}
         onConfirm={doApprove}

@@ -11,6 +11,13 @@ import type {
   RegretSummary,
   PromptVersionEval,
   SignalAccuracy,
+  IntelligenceDecision,
+  IntelligenceDecisionStatus,
+  CampaignBreakdowns,
+  TimeseriesPoint,
+  MetaAudienceOption,
+  MetaInterestOption,
+  CreateManualCampaignDto,
 } from '@/types'
 
 export const API_BASE =
@@ -78,6 +85,23 @@ export const getCampaigns = (tenantId: string) =>
 export const getCampaign = (tenantId: string, campaignId: string) =>
   apiFetch<Campaign>(`/campaigns/${tenantId}/${campaignId}`)
 
+/** Manual Create Campaign form — writes a pending_approval campaign, bypassing the AI review team. */
+export const createManualCampaign = (tenantId: string, dto: CreateManualCampaignDto) =>
+  apiFetch<{ success: true; campaignId: string; status: string }>(
+    `/campaigns/${tenantId}/create-manual`,
+    { method: 'POST', body: JSON.stringify(dto) },
+  )
+
+export const getMetaAudiences = (tenantId: string, productName?: string) =>
+  apiFetch<MetaAudienceOption[]>(
+    `/campaigns/${tenantId}/meta-audiences${productName ? `?productName=${encodeURIComponent(productName)}` : ''}`,
+  )
+
+export const searchMetaInterests = (tenantId: string, q: string) =>
+  apiFetch<MetaInterestOption[]>(
+    `/campaigns/${tenantId}/meta-interest-search?q=${encodeURIComponent(q)}`,
+  )
+
 export const approveCampaign = (
   tenantId: string,
   campaignId: string,
@@ -121,6 +145,18 @@ export const getAuditSnapshots = (tenantId: string, campaignId: string) =>
 export const getShadowActions = (tenantId: string, campaignId: string) =>
   apiFetch<ShadowAction[]>(
     `/campaigns/${tenantId}/${campaignId}/shadow-actions`,
+  )
+
+/** Segment performance: age×gender, region, placement, hourly, day-of-week, per-asset. */
+export const getCampaignBreakdowns = (tenantId: string, campaignId: string) =>
+  apiFetch<CampaignBreakdowns>(
+    `/campaigns/${tenantId}/${campaignId}/breakdowns`,
+  )
+
+/** Daily series for trend charts. Defaults to the campaign-level rollup. */
+export const getCampaignTimeseries = (tenantId: string, campaignId: string) =>
+  apiFetch<TimeseriesPoint[]>(
+    `/campaigns/${tenantId}/${campaignId}/timeseries`,
   )
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
@@ -167,3 +203,114 @@ export const cancelLandingPageTest = (tenantId: string, product: string) =>
     `/companies/${tenantId}/cancel-landing-page-test`,
     { method: 'POST', body: JSON.stringify({ product }) },
   )
+
+// ── Intelligence pipeline (the 16 engines) ────────────────────────────────
+export interface IntelligenceSnapshotDoc {
+  _id?: string
+  tenantId: string
+  campaignId: string
+  metaCampaignId: string
+  snapshotId: string
+  cycleId?: string
+  schemaVersion: string
+  collectedAt: string | Date
+  metaWindowStart: string | Date
+  metaWindowEnd: string | Date
+  metrics: {
+    campaignLevel: Record<string, number>
+    adSetLevel: Record<string, Record<string, number>>
+    adLevel: Record<string, Record<string, number>>
+  }
+  meta?: {
+    learningStage?: string
+    deliveryStatus?: string
+    accountId?: string
+  }
+  missingFields: string[]
+  freshnessSec?: number
+}
+
+export const getSnapshotHistory = (
+  tenantId: string,
+  campaignId: string,
+  limit = 30,
+) =>
+  apiFetch<IntelligenceSnapshotDoc[]>(
+    `/intelligence/${tenantId}/snapshots/${campaignId}?limit=${limit}`,
+  )
+
+export const getSnapshot = (tenantId: string, snapshotId: string) =>
+  apiFetch<IntelligenceSnapshotDoc>(
+    `/intelligence/${tenantId}/snapshot/${snapshotId}`,
+  )
+
+export const runSnapshotNow = (
+  tenantId: string,
+  body: { campaignId: string; metaCampaignId: string; products?: unknown[] },
+) =>
+  apiFetch<{ snapshotId: string; confidence: number }>(
+    `/intelligence/${tenantId}/snapshot`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+// ── Intelligence proposed decisions (shadow mode) ─────────────────────────
+export interface DecisionsSummary {
+  counts: {
+    shadow_review: number
+    approved: number
+    rejected: number
+    expired: number
+  }
+  latestCycleId: string | null
+  latestCycleAt: string | null
+}
+
+export const getIntelligenceDecisions = (
+  tenantId: string,
+  opts?: { status?: IntelligenceDecisionStatus; sinceHours?: number; limit?: number },
+) => {
+  const q = new URLSearchParams()
+  if (opts?.status) q.set('status', opts.status)
+  if (opts?.sinceHours) q.set('sinceHours', String(opts.sinceHours))
+  if (opts?.limit) q.set('limit', String(opts.limit))
+  const qs = q.toString()
+  return apiFetch<{ decisions: IntelligenceDecision[]; count: number }>(
+    `/intelligence/${tenantId}/decisions${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export const getIntelligenceDecisionsSummary = (tenantId: string) =>
+  apiFetch<DecisionsSummary>(`/intelligence/${tenantId}/decisions/summary`)
+
+export const approveIntelligenceDecision = (
+  tenantId: string,
+  decisionId: string,
+  body?: { reviewer?: string; notes?: string },
+) =>
+  apiFetch<{ ok: true; message: string; decision: IntelligenceDecision }>(
+    `/intelligence/${tenantId}/decisions/${decisionId}/approve`,
+    { method: 'POST', body: JSON.stringify(body ?? {}) },
+  )
+
+export const rejectIntelligenceDecision = (
+  tenantId: string,
+  decisionId: string,
+  body: { reason: string; reviewer?: string },
+) =>
+  apiFetch<{ ok: true; message: string; decision: IntelligenceDecision }>(
+    `/intelligence/${tenantId}/decisions/${decisionId}/reject`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+export const primeIntelligence = (
+  tenantId: string,
+  body?: { skipSync?: boolean; maxCampaigns?: number },
+) =>
+  apiFetch<{
+    message: string
+    totalDecisions: number
+    results: Array<{ name: string; status: string; decisionsWritten: number }>
+  }>(`/intelligence/${tenantId}/prime`, {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  })

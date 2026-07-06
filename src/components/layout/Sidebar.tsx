@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard,
+  Home,
   Activity,
   Megaphone,
   BookOpen,
-  Brain,
+  Sparkles,
   Settings,
   Inbox,
+  Brain,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getCampaigns } from '@/lib/api'
+import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
 
 interface SidebarProps {
   tenantId: string
@@ -22,33 +23,43 @@ interface SidebarProps {
 interface NavItem {
   href: string
   label: string
-  code: string
+  hint: string
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; strokeWidth?: number }>
   badge?: number
 }
 
-const navItems = (tenantId: string, pendingCount: number): NavItem[] => [
-  { href: `/dashboard/${tenantId}`,              label: 'Overview',     code: '01', icon: LayoutDashboard },
-  { href: `/dashboard/${tenantId}/approvals`,    label: 'Approvals',    code: '02', icon: Inbox, badge: pendingCount },
-  { href: `/dashboard/${tenantId}/runs`,         label: 'Pipeline',     code: '03', icon: Activity },
-  { href: `/dashboard/${tenantId}/campaigns`,    label: 'Campaigns',    code: '04', icon: Megaphone },
-  { href: `/dashboard/${tenantId}/learnings`,    label: 'Learnings',    code: '05', icon: BookOpen },
-  { href: `/dashboard/${tenantId}/intelligence`, label: 'Intelligence', code: '06', icon: Brain },
-  { href: `/dashboard/${tenantId}/settings`,     label: 'Config',       code: '07', icon: Settings },
+const navItems = (
+  tenantId: string,
+  pendingCount: number,
+  proposedCount: number,
+): NavItem[] => [
+  { href: `/dashboard/${tenantId}`,                    label: 'Home',            hint: 'Today at a glance',            icon: Home },
+  { href: `/dashboard/${tenantId}/approvals`,          label: 'Waiting for you', hint: 'Ads waiting to launch',        icon: Inbox, badge: pendingCount },
+  { href: `/dashboard/${tenantId}/proposed-actions`,   label: 'Proposed changes',hint: 'What the agent wants to tweak',icon: Brain, badge: proposedCount },
+  { href: `/dashboard/${tenantId}/campaigns`,          label: 'Your ads',        hint: 'Active ads on Meta',           icon: Megaphone },
+  { href: `/dashboard/${tenantId}/runs`,               label: 'Automations',     hint: 'What the agent is doing',      icon: Activity },
+  { href: `/dashboard/${tenantId}/learnings`,          label: 'What worked',     hint: 'Winning patterns',             icon: BookOpen },
+  { href: `/dashboard/${tenantId}/intelligence`,       label: 'System health',   hint: 'How well the agent decides',   icon: Sparkles },
+  { href: `/dashboard/${tenantId}/settings`,           label: 'Settings',        hint: 'Business + Meta setup',        icon: Settings },
 ]
 
 export function Sidebar({ tenantId }: SidebarProps) {
   const pathname = usePathname()
   const [pendingCount, setPendingCount] = useState(0)
+  const [proposedCount, setProposedCount] = useState(0)
   const [reachable, setReachable] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
     async function tick() {
       try {
-        const list = await getCampaigns(tenantId)
+        const [list, summary] = await Promise.all([
+          getCampaigns(tenantId),
+          getIntelligenceDecisionsSummary(tenantId).catch(() => null),
+        ])
         if (!cancelled) {
           setPendingCount(list.filter((c) => c.status === 'pending_approval').length)
+          setProposedCount(summary?.counts?.shadow_review ?? 0)
           setReachable(true)
         }
       } catch {
@@ -63,37 +74,37 @@ export function Sidebar({ tenantId }: SidebarProps) {
     }
   }, [tenantId])
 
-  const items = navItems(tenantId, pendingCount)
+  const items = navItems(tenantId, pendingCount, proposedCount)
 
   return (
     <aside
-      className="w-[218px] shrink-0 flex flex-col h-screen sticky top-0"
+      className="w-[248px] shrink-0 flex flex-col h-screen sticky top-0"
       style={{ background: 'var(--surface)', borderRight: '1px solid var(--hairline)' }}
     >
-      {/* Wordmark — the serif italic is the one human voice in the console */}
-      <div className="px-5 pt-6 pb-4">
+      {/* Wordmark */}
+      <div className="px-6 pt-7 pb-5">
         <Link href={`/dashboard/${tenantId}`} className="block">
-          <p className="font-display italic text-[24px] leading-none" style={{ color: 'var(--ink)' }}>
-            Brief<span style={{ color: 'var(--accent)' }}>OS</span>
+          <p className="font-display italic text-[28px] leading-none" style={{ color: 'var(--ink)' }}>
+            Merid<span style={{ color: 'var(--accent)' }}>i</span>an
+          </p>
+          <p className="text-[12px] mt-1.5" style={{ color: 'var(--ink-3)' }}>
+            Your marketing co-pilot
           </p>
         </Link>
-        {/* System status line */}
+        {/* Live status line */}
         <div
-          className="mt-3.5 flex items-center gap-2 rounded-md px-2.5 py-2"
+          className="mt-4 flex items-center gap-2 rounded-lg px-3 py-2"
           style={{ background: 'var(--paper)', border: '1px solid var(--hairline)' }}
         >
           <span className={cn('beacon', reachable === false && 'beacon-bad')} />
-          <span className="mono text-[10px] tracking-wider" style={{ color: reachable === false ? 'var(--bad)' : 'var(--good)' }}>
-            {reachable === false ? 'API OFFLINE' : 'OPERATIONAL'}
-          </span>
-          <span className="mono text-[10px] ml-auto truncate" style={{ color: 'var(--ink-4)' }}>
-            {tenantId.slice(0, 10)}
+          <span className="text-[12px] font-medium" style={{ color: reachable === false ? 'var(--bad)' : 'var(--good)' }}>
+            {reachable === false ? "Can't reach system" : 'All systems working'}
           </span>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-2 flex flex-col gap-px overflow-y-auto">
+      <nav className="flex-1 px-3 py-2 flex flex-col gap-1 overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon
           const isActive = item.href === `/dashboard/${tenantId}`
@@ -104,26 +115,30 @@ export function Sidebar({ tenantId }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className="relative flex items-center gap-2.5 px-3 py-[8px] rounded-lg text-[12.5px] transition-all duration-120"
+              className="relative flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all duration-120"
               style={
                 isActive
-                  ? { background: 'var(--accent-bg)', color: 'var(--ink)', fontWeight: 650, border: '1px solid var(--accent-border)' }
-                  : { color: 'var(--ink-2)', fontWeight: 500, border: '1px solid transparent' }
+                  ? { background: 'var(--accent-bg)', color: 'var(--ink)', border: '1px solid var(--accent-border)' }
+                  : { color: 'var(--ink-2)', border: '1px solid transparent' }
               }
             >
-              <span className="mono text-[9px] w-4 shrink-0" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
-                {item.code}
-              </span>
               <Icon
-                size={14}
-                strokeWidth={isActive ? 2.1 : 1.6}
-                style={{ color: isActive ? 'var(--accent-strong)' : 'var(--ink-3)' }}
+                size={18}
+                strokeWidth={isActive ? 2.2 : 1.7}
+                style={{ color: isActive ? 'var(--accent-strong)' : 'var(--ink-3)', marginTop: 1 }}
               />
-              <span className="flex-1">{item.label}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-semibold" style={{ color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}>
+                  {item.label}
+                </p>
+                <p className="text-[11.5px] mt-0.5 leading-tight" style={{ color: 'var(--ink-3)' }}>
+                  {item.hint}
+                </p>
+              </div>
               {item.badge != null && item.badge > 0 && (
                 <span
-                  className="mono text-[10px] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums"
-                  style={{ background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}
+                  className="text-[11px] font-bold px-2 py-0.5 rounded-full leading-none tabular-nums shrink-0"
+                  style={{ background: 'var(--warn)', color: '#fff' }}
                 >
                   {item.badge}
                 </span>
@@ -133,9 +148,12 @@ export function Sidebar({ tenantId }: SidebarProps) {
         })}
       </nav>
 
-      <div className="px-5 py-3.5" style={{ borderTop: '1px solid var(--hairline-light)' }}>
-        <p className="mono text-[9px] tracking-widest" style={{ color: 'var(--ink-4)' }}>
-          BRIEFOS v0.3 · MISSION CONTROL
+      <div className="px-6 py-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+          Working on{' '}
+          <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>
+            {tenantId}
+          </span>
         </p>
       </div>
     </aside>

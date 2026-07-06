@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, use, useMemo } from 'react'
+import { useState, useEffect, use, useMemo, useRef, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import * as Tabs from '@radix-ui/react-tabs'
 import {
@@ -13,9 +14,10 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
-import { getShadowActions } from '@/lib/api'
+import { getShadowActions, getIntelligenceDecisions } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction } from '@/types'
+import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 
 /* ─── Local types ─── */
 interface CreativePackage {
@@ -29,7 +31,7 @@ interface CreativePackage {
   complianceNotes?: string
 }
 
-const API = 'http://localhost:8082/api/v1'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
 /* ─── Design tokens — mapped onto the global Editorial Intelligence Console palette ─── */
 const C = {
@@ -60,17 +62,281 @@ function MetricCell({ label, value, sub, color }: { label: string; value: string
 }
 
 /* ═════════════════════════════════════════════════════════════════
+   HOVER PANEL — renders EVERY performance/targeting field
+   ═════════════════════════════════════════════════════════════════ */
+function fmtInt(v: unknown): string {
+  const n = typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) ? n.toLocaleString('en-IN') : '—'
+}
+function fmtMoney(v: unknown): string {
+  const n = typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) && n > 0 ? formatCurrency(n) : '—'
+}
+function fmtPct(v: unknown, digits = 2): string {
+  const n = typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) ? `${n.toFixed(digits)}%` : '—'
+}
+function fmtX(v: unknown): string {
+  const n = typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) && n > 0 ? `${n.toFixed(2)}x` : '—'
+}
+function fmtStr(v: unknown): string {
+  if (v == null || v === '') return '—'
+  return String(v)
+}
+function fmtRanking(v: unknown): { text: string; color: string } {
+  const s = String(v ?? '').toUpperCase()
+  if (s === 'ABOVE_AVERAGE') return { text: 'Above avg', color: C.green }
+  if (s === 'AVERAGE')       return { text: 'Average',   color: C.textSecondary }
+  if (s === 'BELOW_AVERAGE_10' || s === 'BELOW_AVERAGE_20' || s === 'BELOW_AVERAGE_35' || s.startsWith('BELOW')) return { text: 'Below avg', color: C.red }
+  if (s === 'UNKNOWN' || s === '') return { text: 'Not rated', color: C.textFaint }
+  return { text: s.toLowerCase().replace(/_/g, ' '), color: C.textSecondary }
+}
+
+interface AllFieldsPanelProps {
+  kind: 'adset' | 'ad'
+  data: CampaignAdSet | CampaignAd
+  onClose?: () => void
+}
+
+function AllFieldsPanel({ kind, data }: AllFieldsPanelProps) {
+  const isAdSet = kind === 'adset'
+  const d = data as CampaignAdSet & CampaignAd
+  const q = fmtRanking(d.qualityRanking)
+  const e = fmtRanking(d.engagementRanking)
+  const cv = fmtRanking(d.conversionRanking)
+  return (
+    <div
+      className="rounded-xl px-5 py-4 z-30 pointer-events-none"
+      style={{
+        background: C.bg,
+        border: `1px solid ${C.border}`,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.16)',
+        minWidth: 620,
+        maxWidth: 720,
+      }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>
+        {isAdSet ? 'Ad set details' : 'Ad details'} · {d.name || '—'}
+      </p>
+
+      <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-[12px]">
+        <FieldGroup title="Money">
+          <F label="Spend"    value={fmtMoney(d.spend)} />
+          <F label="Revenue"  value={fmtMoney(d.revenue)} />
+          <F label="ROAS"     value={fmtX(d.roas)} />
+          <F label="AOV"      value={fmtMoney(d.aov)} />
+          <F label="CPA"      value={fmtMoney(d.cpa)} />
+          <F label="CPC"      value={fmtMoney(d.cpc)} />
+          <F label="CPM"      value={fmtMoney(d.cpm)} />
+        </FieldGroup>
+
+        <FieldGroup title="Delivery">
+          <F label="Impressions" value={fmtInt(d.impressions)} />
+          <F label="Reach"       value={fmtInt(d.reach)} />
+          <F label="Frequency"   value={typeof d.frequency === 'number' ? d.frequency.toFixed(2) : '—'} />
+          <F label="Clicks"      value={fmtInt(d.clicks)} />
+          <F label="CTR"         value={fmtPct(d.ctr)} />
+          {!isAdSet && <F label="Link clicks" value={fmtInt(d.inlineLinkClicks)} />}
+          {!isAdSet && <F label="Link CTR"    value={fmtPct(d.linkCtr)} />}
+          {isAdSet && <F label="Learning phase" value={fmtStr(d.learningStage)} />}
+          {isAdSet && <F label="Effective status" value={fmtStr(d.effectiveStatus)} />}
+          {!isAdSet && <F label="Effective status" value={fmtStr(d.effectiveStatus)} />}
+        </FieldGroup>
+
+        <FieldGroup title="Funnel">
+          <F label="Purchases"        value={fmtInt(d.conversions)} />
+          <F label="Add to cart"      value={fmtInt(d.addToCart)} />
+          <F label="Initiate checkout" value={fmtInt(d.initiateCheckout)} />
+          <F label="Landing page view" value={fmtInt(d.landingPageView)} />
+          <F label="Conversion rate"  value={fmtPct(d.cvr)} />
+        </FieldGroup>
+
+        <FieldGroup title="Video watch">
+          {!isAdSet && <F label="Hook rate (3s)" value={fmtPct(d.hookRate)} />}
+          {!isAdSet && <F label="Hold rate"      value={fmtPct(d.holdRate)} />}
+          <F label="25%"  value={fmtInt(d.videoP25) + (d.videoP25Pct ? ` (${d.videoP25Pct.toFixed(1)}%)` : '')} />
+          <F label="50%"  value={fmtInt(d.videoP50) + (d.videoP50Pct ? ` (${d.videoP50Pct.toFixed(1)}%)` : '')} />
+          <F label="75%"  value={fmtInt(d.videoP75) + (d.videoP75Pct ? ` (${d.videoP75Pct.toFixed(1)}%)` : '')} />
+          <F label="100%" value={fmtInt(d.videoP100) + (d.videoP100Pct ? ` (${d.videoP100Pct.toFixed(1)}%)` : '')} />
+        </FieldGroup>
+
+        <FieldGroup title="Rankings">
+          <F label="Quality"     value={q.text}  color={q.color} />
+          <F label="Engagement"  value={e.text}  color={e.color} />
+          <F label="Conversion"  value={cv.text} color={cv.color} />
+        </FieldGroup>
+
+        {isAdSet ? (
+          <FieldGroup title="Targeting">
+            <F label="Age"       value={fmtStr(d.age)} />
+            <F label="Gender"    value={fmtStr(d.gender)} />
+            <F label="Placement" value={fmtStr(d.placement)} />
+            <F label="Geo"       value={fmtStr(d.geo)} />
+            <F label="Audience size" value={fmtInt(d.audienceSize)} />
+            {d.interests && d.interests.length > 0 && (
+              <F label="Interests" value={d.interests.slice(0,3).join(', ')} />
+            )}
+            {d.targetingDetail?.advantageAudience != null && (
+              <F
+                label="Advantage+ audience"
+                value={d.targetingDetail.advantageAudience ? 'On (Meta may expand beyond this)' : 'Off (strict)'}
+                color={d.targetingDetail.advantageAudience ? C.amber : C.green}
+              />
+            )}
+            {(d.targetingDetail?.geo?.regions?.length ?? 0) > 0 && (
+              <F label="Regions" value={`${d.targetingDetail!.geo!.regions!.length} selected`} />
+            )}
+            {(d.targetingDetail?.customAudiences?.length ?? 0) > 0 && (
+              <F label="Custom audiences" value={d.targetingDetail!.customAudiences!.map(a => a.name).filter(Boolean).slice(0,2).join(', ') || `${d.targetingDetail!.customAudiences!.length}`} />
+            )}
+            {(d.targetingDetail?.excludedCustomAudiences?.length ?? 0) > 0 && (
+              <F label="Excluded audiences" value={`${d.targetingDetail!.excludedCustomAudiences!.length} excluded`} />
+            )}
+            <F label="Daily budget"    value={fmtMoney(d.dailyBudget)} />
+            <F label="Lifetime budget" value={fmtMoney(d.lifetimeBudget)} />
+            <F label="Optimization"    value={fmtStr(d.optimizationGoal)} />
+          </FieldGroup>
+        ) : (
+          <FieldGroup title="Creative">
+            <F label="Creative ID" value={fmtStr(d.creativeId)} />
+            <F label="Format"      value={fmtStr(d.format)} />
+            <F label="Hook style"  value={fmtStr(d.hookStyle)} />
+            {d.creativeCta && <F label="CTA" value={fmtStr(d.creativeCta)} />}
+            {d.isDynamicCreative && <F label="Dynamic creative" value="Yes — Meta mixes assets" color={C.amber} />}
+          </FieldGroup>
+        )}
+
+        {isAdSet && (
+          <FieldGroup title="Bidding">
+            <F label="Bid strategy" value={fmtStr(d.bidStrategy)} />
+            <F label="Bid amount"   value={fmtMoney(d.bidAmount)} />
+            <F label="Billing event" value={fmtStr(d.billingEvent)} />
+          </FieldGroup>
+        )}
+
+        {isAdSet && (
+          <FieldGroup title="Time window">
+            <F label="From" value={fmtStr(d.dateStart)} />
+            <F label="To"   value={fmtStr(d.dateStop)} />
+          </FieldGroup>
+        )}
+      </div>
+
+      {!isAdSet && (d.creativeTitle || d.creativeBody) && (
+        <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.borderLight}` }}>
+          {d.creativeTitle && <p className="text-[12px] font-semibold mb-1" style={{ color: C.text }}>{d.creativeTitle}</p>}
+          {d.creativeBody && <p className="text-[12px] leading-relaxed" style={{ color: C.textSecondary }}>{d.creativeBody.length > 220 ? `${d.creativeBody.slice(0, 220)}…` : d.creativeBody}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FieldGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="col-span-1">
+      <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: C.accent }}>{title}</p>
+      <div className="flex flex-col gap-1">{children}</div>
+    </div>
+  )
+}
+
+function F({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex justify-between items-baseline gap-3">
+      <span className="text-[11px]" style={{ color: C.textMuted }}>{label}</span>
+      <span className="text-[12px] mono font-medium" style={{ color: color ?? C.text }}>{value}</span>
+    </div>
+  )
+}
+
+/**
+ * Renders `children` in a portal to document.body, anchored to `anchorRef`.
+ * Detaches the hover panel from any table `overflow` clipping.
+ */
+function HoverPortal({
+  anchorRef,
+  children,
+}: {
+  anchorRef: React.RefObject<HTMLElement | null>
+  children: React.ReactNode
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!anchorRef.current) return
+    const r = anchorRef.current.getBoundingClientRect()
+    const gap = 8
+    const viewportW = window.innerWidth
+    const viewportH = window.innerHeight
+    // Measure the panel that just rendered off-screen, so we know its actual height.
+    const measured = panelRef.current?.getBoundingClientRect()
+    const panelWidth = measured?.width || 700
+    const panelHeight = measured?.height || 460
+
+    // Horizontal: align to row's right edge, clamp to viewport with 20px margin.
+    let left = r.right - panelWidth
+    if (left < 20) left = Math.max(20, r.left)
+    if (left + panelWidth > viewportW - 20) left = viewportW - panelWidth - 20
+
+    // Vertical: prefer below; flip above if we'd overflow the viewport bottom.
+    const spaceBelow = viewportH - r.bottom
+    const spaceAbove = r.top
+    let top: number
+    if (spaceBelow >= panelHeight + gap || spaceBelow >= spaceAbove) {
+      top = window.scrollY + r.bottom + gap
+    } else {
+      top = window.scrollY + r.top - panelHeight - gap
+    }
+    // Final safety clamp — never go negative
+    if (top < window.scrollY + 20) top = window.scrollY + 20
+    setPos({ top, left })
+  }, [anchorRef, children])
+
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={{
+        position: 'absolute',
+        top: pos?.top ?? -9999,
+        left: pos?.left ?? -9999,
+        // Hide while measuring so the panel doesn't flash off-screen
+        visibility: pos ? 'visible' : 'hidden',
+        zIndex: 1000,
+        pointerEvents: 'none',
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  )
+}
+
+/* ═════════════════════════════════════════════════════════════════
    AD ROW
    ═════════════════════════════════════════════════════════════════ */
 function AdRow({ ad }: { ad: CampaignAd }) {
   const [histOpen, setHistOpen] = useState(false)
-  const spend = ad.metrics?.spend ?? ad.spend, ctr = ad.metrics?.ctr ?? ad.ctr
-  const conversions = ad.metrics?.conversions ?? undefined
+  const [hovered, setHovered] = useState(false)
+  const rowRef = useRef<HTMLTableRowElement | null>(null)
+  const spend = ad.metrics?.spend ?? ad.spend
+  const ctr = ad.metrics?.ctr ?? ad.ctr
+  const revenue = ad.metrics?.revenue ?? ad.revenue
+  const roas = ad.metrics?.roas ?? ad.roas
+  const conversions = ad.metrics?.conversions ?? ad.conversions
   const fatigued = ctr != null && ad.ctrBaseline != null && ctr < ad.ctrBaseline * 0.65
   const hist = ad.replacementHistory || []
   return (
     <>
-      <tr className="group">
+      <tr
+        ref={rowRef}
+        className="group relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
         <td>
           <p className="text-[13px] font-medium" style={{ color: C.text }}>{ad.name || '—'}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -82,14 +348,28 @@ function AdRow({ ad }: { ad: CampaignAd }) {
         </td>
         <td>{ad.status?.trim() ? <StatusBadge status={ad.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
         <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
+        <td className="num mono font-medium" style={{ color: revenue && revenue > 0 ? C.text : C.textFaint }}>{revenue && revenue > 0 ? formatCurrency(revenue) : '—'}</td>
+        <td className="num mono font-semibold" style={{ color: roas != null && roas > 0 ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas && roas > 0 ? `${roas.toFixed(2)}x` : '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{conversions ?? '—'}</td>
         <td className="num mono" style={{ color: fatigued ? C.red : C.textSecondary }}>
           {ctr != null ? <>{ctr.toFixed(2)}%{ad.ctrBaseline != null && <span className="ml-1 text-[10px]" style={{ color: C.textMuted }}>/{ad.ctrBaseline.toFixed(1)}%</span>}</> : '—'}
         </td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{ad.cpc ? formatCurrency(ad.cpc) : '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{conversions != null ? conversions : (ad.impressions ?? '—')}</td>
+        <td>
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
+            style={{ background: C.bg, color: C.textMuted, border: `1px solid ${C.borderLight}` }}
+          >
+            hover
+          </span>
+        </td>
       </tr>
+      {hovered && (
+        <HoverPortal anchorRef={rowRef}>
+          <AllFieldsPanel kind="ad" data={ad} />
+        </HoverPortal>
+      )}
       {histOpen && hist.length > 0 && (
-        <tr><td colSpan={6} style={{ background: C.surfaceMuted }}>
+        <tr><td colSpan={8} style={{ background: C.surfaceMuted }}>
           <p className="micro-label mb-2">Hook History</p>
           {hist.map((e, j) => (
             <div key={j} className="flex items-center gap-2 text-xs py-1">
@@ -114,20 +394,35 @@ function AdSetRow({
   formatTag,
   siblingFormat,
   groupHead,
+  tenantId,
+  proposalsCount,
 }: {
   adSet: CampaignAdSet
   formatTag?: 'video' | 'image'
   siblingFormat?: 'video' | 'image'
   groupHead?: boolean
+  tenantId?: string
+  proposalsCount?: number
 }) {
   const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const rowRef = useRef<HTMLTableRowElement | null>(null)
   const ads = adSet.ads || []
-  const spend = adSet.metrics?.spend ?? adSet.spend, ctr = adSet.metrics?.ctr ?? adSet.ctr
-  const roas = adSet.metrics?.roas, conv = adSet.metrics?.conversions ?? adSet.conversions
-  const freq = adSet.metrics?.frequency ?? adSet.frequency, cpa = adSet.metrics?.cpa ?? adSet.cpa
+  const spend = adSet.metrics?.spend ?? adSet.spend
+  const ctr = adSet.metrics?.ctr ?? adSet.ctr
+  const roas = adSet.metrics?.roas ?? adSet.roas
+  const conv = adSet.metrics?.conversions ?? adSet.conversions
+  const revenue = adSet.metrics?.revenue ?? adSet.revenue
+  const impressions = adSet.impressions
   return (
     <>
-      <tr className="group cursor-pointer" onClick={() => setOpen(!open)}>
+      <tr
+        ref={rowRef}
+        className="group cursor-pointer relative"
+        onClick={() => setOpen(!open)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
         <td>
           <div className="flex items-center gap-2.5">
             {siblingFormat && (
@@ -161,17 +456,42 @@ function AdSetRow({
         </td>
         <td>{adSet.status?.trim() ? <StatusBadge status={adSet.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
         <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{adSet.impressions?.toLocaleString() ?? '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{adSet.clicks?.toLocaleString() ?? '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{ctr != null ? `${ctr.toFixed(2)}%` : '—'}</td>
-        <td className="num mono font-semibold" style={{ color: roas != null ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null ? `${roas.toFixed(2)}x` : '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{cpa ? formatCurrency(cpa) : '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{freq?.toFixed(2) || '—'}</td>
+        <td className="num mono font-medium" style={{ color: revenue && revenue > 0 ? C.text : C.textFaint }}>{revenue != null && revenue > 0 ? formatCurrency(revenue) : '—'}</td>
+        <td className="num mono font-semibold" style={{ color: roas != null && roas > 0 ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null && roas > 0 ? `${roas.toFixed(2)}x` : '—'}</td>
         <td className="num mono font-medium" style={{ color: C.text }}>{conv ?? '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{impressions?.toLocaleString() ?? '—'}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{ctr != null && ctr > 0 ? `${ctr.toFixed(2)}%` : '—'}</td>
+        <td>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
+              style={{ background: C.surfaceMuted, color: C.textMuted, border: `1px solid ${C.borderLight}` }}
+              title="Hover the row for all 25+ fields"
+            >
+              hover for details
+            </span>
+            {tenantId && adSet.id && proposalsCount && proposalsCount > 0 && (
+              <Link
+                href={`/dashboard/${tenantId}/proposed-actions?targetId=${adSet.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-80"
+                style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}
+                title={`${proposalsCount} agent proposal${proposalsCount === 1 ? '' : 's'} for this ad group`}
+              >
+                {proposalsCount} proposal{proposalsCount === 1 ? '' : 's'}
+              </Link>
+            )}
+          </div>
+        </td>
       </tr>
+      {hovered && (
+        <HoverPortal anchorRef={rowRef}>
+          <AllFieldsPanel kind="adset" data={adSet} />
+        </HoverPortal>
+      )}
       {open && ads.length > 0 && (
-        <tr><td colSpan={10} style={{ background: C.surfaceMuted }}>
-          <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'CTR', 'CPC', 'Conv.'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
+        <tr><td colSpan={8} style={{ background: C.surfaceMuted }}>
+          <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
           <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} />)}</tbody></table>
         </td></tr>
       )}
@@ -254,7 +574,7 @@ function DaypartingGrid({ activeHours }: { activeHours: number[] }) {
             className="h-5 rounded-sm flex items-center justify-center text-[8px] font-mono"
             style={{
               background: set.has(h) ? C.accent : C.surfaceMuted,
-              color: set.has(h) ? '#0c0a09' : C.textFaint,
+              color: set.has(h) ? '#fff' : C.textFaint,
               border: `1px solid ${set.has(h) ? C.accent : C.borderLight}`,
             }}
           >
@@ -326,7 +646,7 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
         <div className="flex gap-1">
           {FILTERS.map(f => {
             const n = counts[f]; const on = filter === f
-            return <button key={f} onClick={() => { setFilter(f); setLoading(true) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize" style={on ? { background: C.accent, color: '#0c0a09' } : { background: C.surface, color: C.textMuted, border: `1px solid ${C.border}` }}>{f}{n > 0 && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={on ? { background: 'rgba(12,10,9,.18)' } : { background: C.borderLight }}>{n}</span>}</button>
+            return <button key={f} onClick={() => { setFilter(f); setLoading(true) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize" style={on ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textMuted, border: `1px solid ${C.border}` }}>{f}{n > 0 && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={on ? { background: 'rgba(23,20,15,0.10)' } : { background: C.borderLight }}>{n}</span>}</button>
           })}
         </div>
         <button onClick={() => load(filter)} className="btn btn-ghost"><RefreshCw size={11} />Refresh</button>
@@ -454,13 +774,13 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                   {pending && (
                     <div className="flex items-center gap-2.5 mt-4 pt-4" style={{ borderTop: `1px solid ${C.borderLight}` }}>
                       {growth && (
-                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.green, color: '#0c0a09' }}>
+                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.green, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <ThumbsUp size={13} />}
                           {aS === 'loading' ? 'Approving…' : aS === 'success' ? 'Approved!' : aS === 'error' ? 'Failed' : 'Approve'}
                         </button>
                       )}
                       {pause && (
-                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.red, color: '#0c0a09' }}>
+                        <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.red, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <Pause size={13} />}
                           {aS === 'loading' ? 'Executing…' : aS === 'success' ? 'Executed!' : aS === 'error' ? 'Failed' : 'Execute Now'}
                         </button>
@@ -763,6 +1083,8 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [snaps, setSnaps] = useState<AuditSnapshot[]>([])
   const [snapsLoading, setSnapsLoading] = useState(false)
   const [tab, setTab] = useState('overview')
+  // Open shadow_review counts keyed by Meta adset ID, populated once per load.
+  const [adsetProposals, setAdsetProposals] = useState<Record<string, number>>({})
 
   const flash = (m: string, t: 'success' | 'error') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 4000) }
 
@@ -784,7 +1106,29 @@ export default function CampaignDetailPage({ params }: PageProps) {
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
   }
-  useEffect(() => { fetchCampaign(); setSnapsLoading(true); fetch(`${API}/campaigns/${tenantId}/${campaignId}/audit-snapshots`).then(r => r.ok ? r.json() : []).then(d => setSnaps(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setSnapsLoading(false)) }, [tenantId, campaignId]) // eslint-disable-line
+  useEffect(() => {
+    fetchCampaign()
+    setSnapsLoading(true)
+    fetch(`${API}/campaigns/${tenantId}/${campaignId}/audit-snapshots`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setSnaps(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setSnapsLoading(false))
+
+    // Load open shadow_review decisions once, index by target (Meta adset ID)
+    // so each AdSetRow can render its own count without a per-row fetch.
+    getIntelligenceDecisions(tenantId, { status: 'shadow_review', limit: 500 })
+      .then(res => {
+        const byAdset: Record<string, number> = {}
+        for (const d of res.decisions) {
+          if (d.targetType === 'adset' && d.targetId) {
+            byAdset[d.targetId] = (byAdset[d.targetId] || 0) + 1
+          }
+        }
+        setAdsetProposals(byAdset)
+      })
+      .catch(() => {})
+  }, [tenantId, campaignId]) // eslint-disable-line
 
   /* ─── Campaign actions ─── */
   async function doPause() { const reason = window.prompt('Reason for pausing?', 'Manual pause'); if (!reason?.trim()) return; setPauseState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) }); if (!r.ok) throw new Error(); setPauseState('success'); flash('Campaign paused', 'success'); fetchCampaign() } catch (e) { setPauseState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setPauseState('idle'), 3000) } }
@@ -812,6 +1156,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 size={14} /> },
     { id: 'adsets', label: 'Ad Sets', count: live.length || planned.length || undefined, icon: <Layers size={14} /> },
+    { id: 'segments', label: 'Segments', icon: <Users size={14} /> },
     { id: 'actions', label: 'Actions', badge: pendingActs || undefined, icon: <Zap size={14} /> },
     { id: 'audit', label: 'Audit', count: snaps.length || undefined, icon: <Activity size={14} /> },
     ...(campaign.creativePackageId ? [{ id: 'creative', label: 'Creative', icon: <ImageIcon size={14} /> }] : []),
@@ -842,6 +1187,27 @@ export default function CampaignDetailPage({ params }: PageProps) {
               {campaign.source === 'agent' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}><Bot size={11} />Agent</span>}
               {campaign.source === 'manual' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><User size={11} />Manual</span>}
               {campaign.objective && <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{campaign.objective}</span>}
+              {campaign.budgetModel && (
+                <span
+                  className="font-bold px-2 py-0.5 rounded-md uppercase"
+                  style={
+                    campaign.budgetModel === 'abo'
+                      ? { background: C.greenBg, border: `1px solid ${C.greenBorder}`, color: C.green }
+                      : campaign.budgetModel === 'asc'
+                        ? { background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }
+                        : { background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }
+                  }
+                  title={
+                    campaign.budgetModel === 'abo'
+                      ? 'Ad-set budgets — budget-shift actions are executable'
+                      : campaign.budgetModel === 'asc'
+                        ? 'Advantage+ Shopping — campaign budget + creative levers only'
+                        : 'Campaign budget optimization — Meta allocates across ad sets'
+                  }
+                >
+                  {campaign.budgetModel}
+                </span>
+              )}
               <FormatBadge format={campaign.creativeFormat} />
               <PromptsVersionBadge version={campaign.promptsVersion} />
               {campaign.metaCampaignId && <code className="mono text-[11px]" style={{ color: C.textMuted }}>{campaign.metaCampaignId}</code>}
@@ -936,10 +1302,10 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   <div className="relative mb-4"><select value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm appearance-none pr-10" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.text }}>{accountIds.map(id => <option key={id} value={id}>act_{id}</option>)}</select><ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.textMuted }} /></div>
                 )}
                 <div className="flex gap-3">
-                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="btn flex-1" style={{ background: C.green, color: '#0c0a09' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
+                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="btn flex-1" style={{ background: C.green, color: '#fff' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
                   <button onClick={() => setRejectOpen(o => !o)} className="btn btn-danger"><XCircle size={14} className="inline mr-1.5" />Reject</button>
                 </div>
-                {rejectOpen && <div className="mt-4 pt-4 space-y-3" style={{ borderTop: `1px solid ${C.redBorder}` }}><textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason…" rows={3} className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={{ border: `1px solid ${C.redBorder}`, color: C.text }} /><div className="flex gap-2"><button onClick={doReject} disabled={rejectState === 'loading' || !rejectReason.trim()} className="btn" style={{ background: C.red, color: '#0c0a09' }}>{rejectState === 'loading' ? 'Rejecting…' : 'Confirm'}</button><button onClick={() => { setRejectOpen(false); setRejectReason('') }} className="text-xs" style={{ color: C.textMuted }}>Cancel</button></div></div>}
+                {rejectOpen && <div className="mt-4 pt-4 space-y-3" style={{ borderTop: `1px solid ${C.redBorder}` }}><textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason…" rows={3} className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={{ border: `1px solid ${C.redBorder}`, color: C.text }} /><div className="flex gap-2"><button onClick={doReject} disabled={rejectState === 'loading' || !rejectReason.trim()} className="btn" style={{ background: C.red, color: '#fff' }}>{rejectState === 'loading' ? 'Rejecting…' : 'Confirm'}</button><button onClick={() => { setRejectOpen(false); setRejectReason('') }} className="text-xs" style={{ color: C.textMuted }}>Cancel</button></div></div>}
               </div>
             </div>
           </div>
@@ -1005,10 +1371,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Impr.', 'Clicks', 'CTR', 'ROAS', 'CPA', 'Freq.', 'Conv.'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>
+
+          {/* ── SEGMENTS ── */}
+          <Tabs.Content value="segments"><SegmentsPanel tenantId={tenantId} campaignId={campaignId} /></Tabs.Content>
 
           {/* ── ACTIONS ── */}
           <Tabs.Content value="actions"><ActionsPanel tenantId={tenantId} campaignId={campaignId} /></Tabs.Content>
@@ -1121,7 +1490,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   <div>
                     <p className="micro-label mb-3">Images</p>
                     {pkgLoading ? <Loader2 size={14} className="animate-spin" style={{ color: C.textMuted }} /> : (pkg?.images ?? []).length > 0 ? (
-                      <div className="grid grid-cols-3 gap-4">{pkg!.images!.map((img, i) => { const sel = i === (pkg!.selectedCopyIndex ?? 0); const s = imgState[i] || 'idle'; return <div key={i} className="space-y-2"><div className="relative rounded-xl overflow-hidden" style={{ border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>{sel && <span className="absolute top-2 left-2 z-10 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.green, color: '#0c0a09' }}>Selected</span>}{s === 'polling' && <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: 'rgba(12,10,9,.7)' }}><Loader2 size={20} className="animate-spin" style={{ color: C.accent }} /></div>}{img.imageUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img.imageUrl} alt={`V${i+1}`} className="w-full" style={{ maxHeight: 280, objectFit: 'contain', display: 'block' }} /> : <div className="flex items-center justify-center" style={{ height: 180, background: C.surfaceMuted }}><p className="text-[10px]" style={{ color: C.textMuted }}>V{i+1}</p></div>}</div>{img.imagePrompt && <details><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-2 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{img.imagePrompt}</p></details>}<div className="flex gap-1.5"><button onClick={() => rerollImg(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={s === 'loading' ? 'animate-spin' : ''} />{s === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={() => newImgPrompt(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} />New prompt</button></div></div> })}</div>
+                      <div className="grid grid-cols-3 gap-4">{pkg!.images!.map((img, i) => { const sel = i === (pkg!.selectedCopyIndex ?? 0); const s = imgState[i] || 'idle'; return <div key={i} className="space-y-2"><div className="relative rounded-xl overflow-hidden" style={{ border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>{sel && <span className="absolute top-2 left-2 z-10 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.green, color: '#fff' }}>Selected</span>}{s === 'polling' && <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: 'rgba(23,20,15,0.55)' }}><Loader2 size={20} className="animate-spin" style={{ color: C.accent }} /></div>}{img.imageUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img.imageUrl} alt={`V${i+1}`} className="w-full" style={{ maxHeight: 280, objectFit: 'contain', display: 'block' }} /> : <div className="flex items-center justify-center" style={{ height: 180, background: C.surfaceMuted }}><p className="text-[10px]" style={{ color: C.textMuted }}>V{i+1}</p></div>}</div>{img.imagePrompt && <details><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-2 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{img.imagePrompt}</p></details>}<div className="flex gap-1.5"><button onClick={() => rerollImg(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={s === 'loading' ? 'animate-spin' : ''} />{s === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={() => newImgPrompt(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} />New prompt</button></div></div> })}</div>
                     ) : <div className="py-10 text-center rounded-xl" style={{ background: C.surfaceMuted, border: `2px dashed ${C.border}` }}><p className="text-xs" style={{ color: C.textMuted }}>No images</p></div>}
                   </div>
                   {(pkg?.video?.videoUrl || pkg?.video?.videoPrompt) && <div className="pt-5" style={{ borderTop: `1px solid ${C.borderLight}` }}><div className="flex items-center justify-between mb-3"><p className="micro-label">Video</p><div className="flex gap-1.5"><button onClick={rerollVid} disabled={vidRetry !== 'idle' || vidRewrite !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={cn('inline mr-1', vidRetry !== 'idle' && 'animate-spin')} />{vidRetry === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={rewriteVid} disabled={vidRewrite !== 'idle' || vidRetry !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} className={cn('inline mr-1', vidRewrite !== 'idle' && 'animate-spin')} />{vidRewrite === 'idle' ? 'Rewrite' : 'Working…'}</button></div></div>{pkg.video?.videoUrl ? <video controls className="rounded-xl w-full" style={{ maxHeight: 320, border: `1px solid ${C.border}` }}><source src={pkg.video.videoUrl} type="video/mp4" /></video> : <p className="text-xs font-mono p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{vidRetry === 'polling' ? 'Generating…' : pkg.video?.videoPrompt}</p>}{pkg.video?.videoPrompt && pkg.video?.videoUrl && <details className="mt-2"><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{pkg.video.videoPrompt}</p></details>}</div>}

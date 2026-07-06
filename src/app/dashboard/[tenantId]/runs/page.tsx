@@ -10,6 +10,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, cn } from '@/lib/utils'
 import type { PipelineRun } from '@/types'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
+
 interface PageProps {
   params: Promise<{ tenantId: string }>
 }
@@ -134,7 +136,7 @@ export default function RunsPage({ params }: PageProps) {
   async function fetchRuns(isRefresh = false) {
     if (isRefresh) setRefreshing(true)
     try {
-      const res = await fetch(`http://localhost:8082/api/v1/pipeline/${tenantId}/runs`, { cache: 'no-store' })
+      const res = await fetch(`${API_BASE}/pipeline/${tenantId}/runs`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setRuns(await res.json())
       setError(null)

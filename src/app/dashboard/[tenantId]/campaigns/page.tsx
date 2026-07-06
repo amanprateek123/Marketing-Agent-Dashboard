@@ -19,12 +19,21 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  Plus,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
+import { getIntelligenceDecisions } from '@/lib/api'
 
-const API_BASE = 'http://localhost:8082/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
+
+/** Per-campaign counts of open shadow_review decisions, split by target scope. */
+interface CampaignProposalCounts {
+  campaign: number
+  adset: number
+  total: number
+}
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -94,7 +103,15 @@ function InlineAdRow({ ad }: { ad: CampaignAd }) {
 }
 
 // ── Inline adset row ──────────────────────────────────────────────────────────
-function InlineAdSetRow({ adSet }: { adSet: CampaignAdSet }) {
+function InlineAdSetRow({
+  adSet,
+  tenantId,
+  proposalsCount,
+}: {
+  adSet: CampaignAdSet
+  tenantId: string
+  proposalsCount?: number
+}) {
   const [adsOpen, setAdsOpen] = useState(false)
   const ads = adSet.ads || []
 
@@ -142,7 +159,19 @@ function InlineAdSetRow({ adSet }: { adSet: CampaignAdSet }) {
           {adSet.conversions ?? '—'}
         </td>
         <td className="px-4 py-2.5">
-          {adSet.status && <StatusBadge status={adSet.status} />}
+          <div className="flex items-center gap-2">
+            {adSet.status && <StatusBadge status={adSet.status} />}
+            {proposalsCount && proposalsCount > 0 && adSet.id && (
+              <Link
+                href={`/dashboard/${tenantId}/proposed-actions?targetId=${adSet.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="chip chip-accent transition-opacity hover:opacity-80"
+                title={`${proposalsCount} proposal${proposalsCount === 1 ? '' : 's'} from the agent for this ad group`}
+              >
+                {proposalsCount} proposal{proposalsCount === 1 ? '' : 's'}
+              </Link>
+            )}
+          </div>
         </td>
       </tr>
       {adsOpen && ads.map((ad, i) => <InlineAdRow key={ad.id || i} ad={ad} />)}
@@ -155,10 +184,14 @@ function CampaignRow({
   campaign,
   tenantId,
   isPending,
+  proposals,
+  adsetProposals,
 }: {
   campaign: Campaign
   tenantId: string
   isPending: boolean
+  proposals?: CampaignProposalCounts
+  adsetProposals?: Record<string, number>
 }) {
   const [open, setOpen] = useState(false)
   const adSets = campaign.metaAdSets || []
@@ -268,6 +301,19 @@ function CampaignRow({
         {/* Action */}
         <td className="num whitespace-nowrap">
           <div className="flex items-center justify-end gap-2">
+            {/* Agent proposals — link to the campaign-scope filter on the
+                 proposed-actions page. Only render when there's at least one
+                 open shadow_review decision for this campaign. */}
+            {!isPending && proposals && proposals.campaign > 0 && (
+              <Link
+                href={`/dashboard/${tenantId}/proposed-actions?campaignId=${campaign._id}&scope=campaign`}
+                onClick={(e) => e.stopPropagation()}
+                className="chip chip-accent transition-opacity hover:opacity-80"
+                title={`${proposals.campaign} campaign-level proposal${proposals.campaign === 1 ? '' : 's'} from the agent`}
+              >
+                {proposals.campaign} campaign proposal{proposals.campaign === 1 ? '' : 's'}
+              </Link>
+            )}
             {!isPending && (() => {
               const GROWTH_TYPES = ['scale_adset', 'replace_creative', 'add_creative', 'add_adset']
               const approvalNeeded = (campaign.pendingActions || []).filter(
@@ -328,7 +374,12 @@ function CampaignRow({
                 </thead>
                 <tbody>
                   {adSets.map((adSet, i) => (
-                    <InlineAdSetRow key={adSet.id || i} adSet={adSet} />
+                    <InlineAdSetRow
+                      key={adSet.id || i}
+                      adSet={adSet}
+                      tenantId={tenantId}
+                      proposalsCount={adSet.id ? adsetProposals?.[adSet.id] : 0}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -391,8 +442,12 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   const [auditState, setAuditState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [auditResult, setAuditResult] = useState<string | null>(null)
 
+  // Open shadow_review decisions, indexed for per-row lookup.
+  const [proposalsByCampaign, setProposalsByCampaign] = useState<Record<string, CampaignProposalCounts>>({})
+  const [proposalsByAdset, setProposalsByAdset] = useState<Record<string, number>>({})
+
   const [search, setSearch]         = useState('')
-  const [statusFilter, setStatusFilter] = useState(initFilter ?? 'all')
+  const [statusFilter, setStatusFilter] = useState(initFilter ?? 'active')
   const [sortKey, setSortKey]       = useState<SortKey>('launchedAt')
   const [sortDir, setSortDir]       = useState<SortDir>('desc')
 
@@ -409,7 +464,34 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     }
   }
 
-  useEffect(() => { fetchCampaigns() }, [tenantId]) // eslint-disable-line
+  // Pulls open shadow_review decisions and groups them by campaign + adset
+  // so each row can show a "See proposals" chip without a per-row fetch.
+  async function fetchProposalCounts() {
+    try {
+      const list = await getIntelligenceDecisions(tenantId, { status: 'shadow_review', limit: 500 })
+      const byCampaign: Record<string, CampaignProposalCounts> = {}
+      const byAdset: Record<string, number> = {}
+      for (const d of list.decisions) {
+        if (!d.campaignId) continue
+        const b = (byCampaign[d.campaignId] ??= { campaign: 0, adset: 0, total: 0 })
+        b.total += 1
+        if (d.targetType === 'campaign') b.campaign += 1
+        else if (d.targetType === 'adset') b.adset += 1
+        if (d.targetType === 'adset' && d.targetId) {
+          byAdset[d.targetId] = (byAdset[d.targetId] || 0) + 1
+        }
+      }
+      setProposalsByCampaign(byCampaign)
+      setProposalsByAdset(byAdset)
+    } catch {
+      // Non-fatal — campaigns list still renders, just without the chips.
+    }
+  }
+
+  useEffect(() => {
+    fetchCampaigns()
+    fetchProposalCounts()
+  }, [tenantId]) // eslint-disable-line
 
   async function handleRunAudit() {
     setAuditState('loading')
@@ -501,6 +583,9 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
           <p className="page-subtitle">Every campaign across the account — live, pending, and archived.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap pb-1">
+          <Link href={`/dashboard/${tenantId}/campaigns/new`} className="btn btn-primary">
+            <Plus size={12} /> Create Campaign
+          </Link>
           <button
             onClick={handleRunAudit}
             disabled={auditState === 'loading'}
@@ -707,6 +792,8 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                     campaign={campaign}
                     tenantId={tenantId}
                     isPending={campaign.status === 'pending_approval'}
+                    proposals={campaign._id ? proposalsByCampaign[campaign._id] : undefined}
+                    adsetProposals={proposalsByAdset}
                   />
                 ))}
               </tbody>

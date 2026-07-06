@@ -22,8 +22,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "BriefOS — Marketing Intelligence",
-  description: "BriefOS: the autonomous marketing pipeline, observed.",
+  title: "Meridian — Marketing Intelligence",
+  description: "Meridian: the autonomous marketing pipeline, observed.",
 };
 
 export default function RootLayout({

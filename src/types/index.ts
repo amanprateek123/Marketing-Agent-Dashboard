@@ -156,6 +156,51 @@ export interface AdSetPerformance {
   capturedAtDay: number
 }
 
+// ── Intelligence shadow decisions (16-engine cascade output) ────────────────
+export type IntelligenceDecisionStatus =
+  | 'shadow_review'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+
+export interface IntelligenceDecisionEvidenceStep {
+  step: string
+  source: string
+}
+
+export interface IntelligenceDecision {
+  _id: string
+  tenantId: string
+  campaignId: string
+  metaCampaignId?: string
+  cycleId: string
+  actionId: string
+  actionType: string
+  targetType: string
+  targetId: string
+  parameters: Record<string, unknown>
+  expectedProfitDeltaINR7d: number
+  reasoning: string
+  evidenceChain: IntelligenceDecisionEvidenceStep[]
+  risk: 'low' | 'medium' | 'high'
+  score: number
+  gatedBy: string[]
+  requiresHumanApproval: boolean
+  evidenceSnapshot?: {
+    kind: string
+    reasoning: string
+    metrics: Record<string, number>
+  }
+  reviewWindowExpiresAt: string
+  status: IntelligenceDecisionStatus
+  shadowModeOnly: boolean
+  reviewedBy?: string
+  reviewedAt?: string
+  rejectionReason?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ShadowAction {
   proposedAction: string | { type?: string; targetName?: string; reason?: string; [k: string]: unknown }
   blockedReason: string | { reason?: string; [k: string]: unknown }
@@ -484,18 +529,114 @@ export interface CampaignAd {
   hookStyle?: string
   format?: string
   status?: string
+  effectiveStatus?: string
+  creativeId?: string
+  creativeName?: string
+  // Creative attributes — parsed from Meta's object_story_spec / asset_feed_spec,
+  // not inferred from the ad name. Empty on dynamic-creative ads (Meta mixes
+  // variants at delivery time — see isDynamicCreative).
+  creativeBody?: string
+  creativeTitle?: string
+  creativeCta?: string
+  creativeLinkUrl?: string
+  creativeVideoId?: string
+  creativeImageHash?: string
+  thumbnailUrl?: string
+  isDynamicCreative?: boolean
   spend?: number
   impressions?: number
+  reach?: number
+  frequency?: number
   clicks?: number
+  conversions?: number
+  revenue?: number
+  roas?: number
   ctr?: number
   cpc?: number
+  cpm?: number
+  cpa?: number
+  aov?: number
+  cvr?: number
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  // Link clicks vs all clicks (which includes non-link engagement)
+  inlineLinkClicks?: number
+  outboundClicks?: number
+  linkCtr?: number
+  // Hook rate (3-sec plays / impressions) and hold rate (thruplay / 3-sec plays)
+  video3s?: number
+  thruplay?: number
+  hookRate?: number
+  holdRate?: number
+  videoP25?: number
+  videoP50?: number
+  videoP75?: number
+  videoP100?: number
+  videoP25Pct?: number
+  videoP50Pct?: number
+  videoP75Pct?: number
+  videoP100Pct?: number
+  qualityRanking?: string
+  engagementRanking?: string
+  conversionRanking?: string
   ctrBaseline?: number
   replacementHistory?: ReplacementHistoryEntry[]
+  dateStart?: string
+  dateStop?: string
+  // Trailing 7-day window — separate from the lifetime fields above, used for
+  // fatigue/recency reads.
+  last7d?: {
+    spend?: number
+    impressions?: number
+    clicks?: number
+    ctr?: number
+    conversions?: number
+    revenue?: number
+    cpa?: number
+  }
   metrics?: {
     spend?: number
     ctr?: number
     conversions?: number
+    roas?: number
+    cpa?: number
+    cpc?: number
+    cpm?: number
+    revenue?: number
   }
+}
+
+/** Full structured targeting — everything beyond the flattened summary strings. */
+export interface TargetingDetail {
+  ageMin?: number | null
+  ageMax?: number | null
+  genders?: string
+  geo?: {
+    countries?: string[]
+    regions?: Array<{ id?: string; name?: string; key?: string }>
+    cities?: Array<{ key?: string; name?: string; radius?: number | null; distanceUnit?: string }>
+    locationTypes?: string[]
+    excludedCountries?: string[]
+    excludedRegions?: Array<{ id?: string; name?: string }>
+    excludedCities?: Array<{ id?: string; name?: string }>
+  }
+  interests?: Array<{ id?: string; name?: string }>
+  behaviors?: Array<{ id?: string; name?: string }>
+  flexibleSpec?: unknown[]
+  exclusions?: unknown
+  customAudiences?: Array<{ id?: string; name?: string }>
+  excludedCustomAudiences?: Array<{ id?: string; name?: string }>
+  locales?: number[]
+  devicePlatforms?: string[]
+  publisherPlatforms?: string[]
+  facebookPositions?: string[]
+  instagramPositions?: string[]
+  audienceNetworkPositions?: string[]
+  messengerPositions?: string[]
+  advantageAudience?: boolean
+  targetingOptimization?: string
+  brandSafety?: string[]
 }
 
 export interface CampaignAdSet {
@@ -509,11 +650,59 @@ export interface CampaignAdSet {
   optimizationGoal?: string
   spend?: number
   impressions?: number
+  reach?: number
   clicks?: number
   conversions?: number
+  revenue?: number
+  roas?: number
   ctr?: number
+  cpc?: number
+  cpm?: number
   cpa?: number
+  aov?: number
+  cvr?: number
   frequency?: number
+  // Funnel
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  // Video
+  videoP25?: number
+  videoP50?: number
+  videoP75?: number
+  videoP100?: number
+  videoP25Pct?: number
+  videoP50Pct?: number
+  videoP75Pct?: number
+  videoP100Pct?: number
+  // Rankings
+  qualityRanking?: string
+  engagementRanking?: string
+  conversionRanking?: string
+  // Delivery
+  learningStage?: string
+  effectiveStatus?: string
+  // Bidding / delivery config
+  bidAmount?: number
+  bidStrategy?: string
+  billingEvent?: string
+  attributionSpec?: unknown
+  promotedObject?: unknown
+  startTime?: string
+  endTime?: string
+  // Targeting — flattened summary strings (fast to render in tables) …
+  age?: string
+  gender?: string
+  placement?: string
+  audienceSize?: number
+  interests?: string[]
+  geo?: string
+  // … plus the full structured version (custom audiences, regions/cities,
+  // exclusions, Advantage+ audience flag).
+  targetingDetail?: TargetingDetail
+  // Time
+  dateStart?: string
+  dateStop?: string
   ads?: CampaignAd[]
   addedByAudit?: boolean
   metrics?: {
@@ -523,6 +712,10 @@ export interface CampaignAdSet {
     conversions?: number
     frequency?: number
     cpa?: number
+    cpc?: number
+    cpm?: number
+    reach?: number
+    revenue?: number
   }
 }
 
@@ -561,6 +754,100 @@ export interface CampaignAction {
 }
 
 export type PendingAction = CampaignAction
+
+/** One segment's performance within a breakdown (age×gender, region, placement, …). */
+export interface BreakdownRow {
+  keys: Record<string, string>
+  spend: number
+  impressions: number
+  reach?: number
+  clicks: number
+  ctr: number
+  conversions: number
+  revenue: number
+  cpa: number
+  roas: number
+}
+
+/** GET /campaigns/:tenantId/:campaignId/breakdowns response — keyed by breakdown type. */
+export type CampaignBreakdowns = Partial<Record<
+  'age_gender' | 'region' | 'placement' | 'hourly' | 'dow' | 'asset_body' | 'asset_title' | 'asset_video',
+  { rows: BreakdownRow[]; fetchedAt: string; window: string }
+>>
+
+/** One day's row from GET /campaigns/:tenantId/:campaignId/timeseries. */
+export interface TimeseriesPoint {
+  date: string
+  spend: number
+  impressions: number
+  reach?: number
+  frequency?: number
+  clicks: number
+  ctr: number
+  cpc?: number
+  cpm?: number
+  conversions: number
+  revenue: number
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  video3s?: number
+  thruplay?: number
+  entityId?: string
+  adsetId?: string
+}
+
+/* ─── Manual Create Campaign ─── */
+
+export interface MetaAudienceOption {
+  id: string
+  name: string
+  type: 'custom' | 'lookalike'
+  lookalikePercent?: number
+  productName?: string
+}
+
+export interface MetaInterestOption {
+  id: string
+  name: string
+  audienceSize: number
+}
+
+export interface ManualAdSetInput {
+  name: string
+  budgetPercent: number
+  audienceType: 'advantage_plus' | 'lookalike' | 'retarget' | 'custom' | 'interest'
+  metaAudienceId?: string
+  excludeAudienceIds?: string[]
+  ageMin?: number
+  ageMax?: number
+  gender?: 'male' | 'female' | 'all'
+  geoLocations?: string[]
+  interests?: Array<{ id: string; name: string }>
+  optimizationGoal?: string
+  creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
+}
+
+export interface ManualCopyVariant {
+  primaryText: string
+  headline: string
+  cta: string
+  hookStyle?: string
+}
+
+export interface CreateManualCampaignDto {
+  name: string
+  productName?: string
+  campaignType: 'advantage_plus' | 'custom'
+  budget: number
+  objective?: string
+  adSets: ManualAdSetInput[]
+  creative: {
+    copyVariants: ManualCopyVariant[]
+    images?: Array<{ variantIndex: number; imageUrl: string }>
+    video?: { variantIndex: number; videoUrl: string; videoThumbnailUrl?: string } | null
+  }
+}
 
 export interface AuditSnapshot {
   auditedAt: string
@@ -644,6 +931,16 @@ export interface Campaign {
   lastAuditedAt?: string
   budget?: number
   objective?: string
+  // Structure — which budget levers exist on this campaign.
+  // 'abo' = adset budgets (shift_budget_between_adsets works); 'cbo' = campaign
+  // owns the budget; 'asc' = Advantage+ Shopping (campaign budget + creative only).
+  budgetModel?: 'abo' | 'cbo' | 'asc' | ''
+  bidStrategy?: string
+  buyingType?: string
+  smartPromotionType?: string
+  specialAdCategories?: string[]
+  spendCap?: number
+  stopTime?: string
   metaCampaignId?: string
   briefId?: string
   creativePackageId?: string
