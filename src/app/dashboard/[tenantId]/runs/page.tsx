@@ -163,7 +163,7 @@ export default function RunsPage({ params }: PageProps) {
   const tabCounts: Record<TabKey, number> = { all: total, running, completed, failed }
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
+    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
       {/* Header */}
       <div className="flex items-end justify-between gap-4 mb-8">
         <div>

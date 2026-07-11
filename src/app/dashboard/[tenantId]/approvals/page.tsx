@@ -27,6 +27,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   getCampaigns,
   getCompany,
+  getWeeklySpend,
   approveCampaign,
   rejectCampaign,
   updateCampaignBudget,
@@ -49,6 +50,7 @@ export default function ApprovalsPage({ params }: PageProps) {
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [company, setCompany] = useState<Company | null>(null)
+  const [weeklySpend, setWeeklySpend] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -57,12 +59,14 @@ export default function ApprovalsPage({ params }: PageProps) {
     setLoading(true)
     setError(null)
     try {
-      const [c, list] = await Promise.all([
+      const [c, list, spend] = await Promise.all([
         getCompany(tenantId),
         getCampaigns(tenantId),
+        getWeeklySpend(tenantId),
       ])
       setCompany(c)
       setCampaigns(list)
+      setWeeklySpend(spend.weeklySpend)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -85,14 +89,12 @@ export default function ApprovalsPage({ params }: PageProps) {
     [campaigns],
   )
 
-  // Committed weekly spend = sum of budgets on currently-active campaigns
-  const committedWeekly = useMemo(
-    () =>
-      campaigns
-        .filter((c) => c.status === 'active')
-        .reduce((s, c) => s + (c.budget || 0), 0),
-    [campaigns],
-  )
+  // Rolling-7-day spend from the backend — the same figure that actually
+  // gates new campaign creation (previously this summed active campaigns'
+  // `budget` field locally, which is a per-day budget setting, not spend,
+  // and never changed with the calendar — it only moved when a campaign was
+  // created/paused/edited).
+  const committedWeekly = weeklySpend ?? 0
 
   const weeklyCap =
     company?.weeklyBudgetCap ?? company?.budgetSettings?.weeklyBudgetCap ?? 0
@@ -107,7 +109,7 @@ export default function ApprovalsPage({ params }: PageProps) {
   }, [company])
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
+    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
       {/* Header */}
       <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
         <div>

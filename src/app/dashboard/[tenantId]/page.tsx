@@ -117,7 +117,7 @@ export default function HomePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen">
-      <div className="px-8 py-8 max-w-6xl mx-auto">
+      <div className="px-8 py-8 max-w-[1600px] mx-auto">
 
         {/* ── Hero ────────────────────────────────────────────────── */}
         <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">

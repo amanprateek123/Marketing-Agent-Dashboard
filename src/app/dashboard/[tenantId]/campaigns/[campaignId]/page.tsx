@@ -9,15 +9,16 @@ import {
   ChevronRight, AlertCircle, Bot, User, Users,
   TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
   Image as ImageIcon, Shield, Clock, Activity, FlameKindling,
-  Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink,
+  Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink, Info,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
-import { getShadowActions, getIntelligenceDecisions } from '@/lib/api'
+import { getShadowActions, getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction } from '@/types'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
+import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 
 /* ─── Local types ─── */
 interface CreativePackage {
@@ -99,7 +100,7 @@ interface AllFieldsPanelProps {
   onClose?: () => void
 }
 
-function AllFieldsPanel({ kind, data }: AllFieldsPanelProps) {
+function AllFieldsPanel({ kind, data, onClose }: AllFieldsPanelProps) {
   const isAdSet = kind === 'adset'
   const d = data as CampaignAdSet & CampaignAd
   const q = fmtRanking(d.qualityRanking)
@@ -107,7 +108,7 @@ function AllFieldsPanel({ kind, data }: AllFieldsPanelProps) {
   const cv = fmtRanking(d.conversionRanking)
   return (
     <div
-      className="rounded-xl px-5 py-4 z-30 pointer-events-none"
+      className="relative rounded-xl px-5 py-4 z-30"
       style={{
         background: C.bg,
         border: `1px solid ${C.border}`,
@@ -116,7 +117,16 @@ function AllFieldsPanel({ kind, data }: AllFieldsPanelProps) {
         maxWidth: 720,
       }}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: C.textMuted }}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70"
+          style={{ color: C.textMuted }}
+        >
+          <XCircle size={16} />
+        </button>
+      )}
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-2 pr-6" style={{ color: C.textMuted }}>
         {isAdSet ? 'Ad set details' : 'Ad details'} · {d.name || '—'}
       </p>
 
@@ -253,17 +263,38 @@ function F({ label, value, color }: { label: string; value: string; color?: stri
 
 /**
  * Renders `children` in a portal to document.body, anchored to `anchorRef`.
- * Detaches the hover panel from any table `overflow` clipping.
+ * Detaches the details panel from any table `overflow` clipping. Opened by a
+ * click (not hover, which used to auto-open this on mouseenter and made it
+ * impossible to move the mouse toward the panel without it disappearing) —
+ * closes on outside click or Escape via `onClose`.
  */
-function HoverPortal({
+function AnchoredPortal({
   anchorRef,
+  onClose,
   children,
 }: {
   anchorRef: React.RefObject<HTMLElement | null>
+  onClose: () => void
   children: React.ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+
+  useEffect(() => {
+    const handlePointer = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (panelRef.current?.contains(target)) return
+      if (anchorRef.current?.contains(target)) return
+      onClose()
+    }
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', handlePointer)
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handlePointer)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [anchorRef, onClose])
 
   useLayoutEffect(() => {
     if (!anchorRef.current) return
@@ -306,7 +337,6 @@ function HoverPortal({
         // Hide while measuring so the panel doesn't flash off-screen
         visibility: pos ? 'visible' : 'hidden',
         zIndex: 1000,
-        pointerEvents: 'none',
       }}
     >
       {children}
@@ -316,11 +346,49 @@ function HoverPortal({
 }
 
 /* ═════════════════════════════════════════════════════════════════
+   AD THUMBNAIL — Meta's creative thumbnail_url; poster frame for video ads
+   ═════════════════════════════════════════════════════════════════ */
+function AdThumbnail({ thumbnailUrl, isVideo }: { thumbnailUrl?: string; isVideo?: boolean }) {
+  const [errored, setErrored] = useState(false)
+  const showImage = !!thumbnailUrl && !errored
+  return (
+    <div
+      className="relative shrink-0 rounded-lg overflow-hidden"
+      style={{ width: 40, height: 40, background: C.surfaceMuted, border: `1px solid ${C.borderLight}` }}
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbnailUrl}
+          alt=""
+          className="w-full h-full"
+          style={{ objectFit: 'cover' }}
+          onError={() => setErrored(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <ImageIcon size={14} style={{ color: C.textFaint }} />
+        </div>
+      )}
+      {isVideo && (
+        <div
+          className="absolute bottom-0 right-0 flex items-center justify-center rounded-tl-md"
+          style={{ width: 16, height: 16, background: 'rgba(0,0,0,0.65)' }}
+        >
+          <Play size={8} fill="#fff" style={{ color: '#fff' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ═════════════════════════════════════════════════════════════════
    AD ROW
    ═════════════════════════════════════════════════════════════════ */
-function AdRow({ ad }: { ad: CampaignAd }) {
+function AdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: CampaignAd) => void }) {
+  const hasMedia = !!(ad.thumbnailUrl || ad.creativeVideoId)
   const [histOpen, setHistOpen] = useState(false)
-  const [hovered, setHovered] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
   const spend = ad.metrics?.spend ?? ad.spend
   const ctr = ad.metrics?.ctr ?? ad.ctr
@@ -334,16 +402,27 @@ function AdRow({ ad }: { ad: CampaignAd }) {
       <tr
         ref={rowRef}
         className="group relative"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
       >
         <td>
-          <p className="text-[13px] font-medium" style={{ color: C.text }}>{ad.name || '—'}</p>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {ad.hookStyle && <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.borderLight}` }}>{ad.hookStyle}</span>}
-            {ad.format && <FormatBadge format={ad.format} />}
-            {fatigued && <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.redBg, color: C.red }}><FlameKindling size={9} />Fatigue</span>}
-            {hist.length > 0 && <button onClick={e => { e.stopPropagation(); setHistOpen(h => !h) }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-opacity hover:opacity-70" style={{ color: C.accent }}><History size={9} className="inline mr-0.5" />{hist.length} swap{hist.length !== 1 ? 's' : ''}</button>}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => hasMedia && onViewAd?.(ad)}
+              disabled={!hasMedia}
+              className={hasMedia ? 'cursor-pointer' : 'cursor-default'}
+              title={hasMedia ? (ad.creativeVideoId ? 'Play video' : 'View image') : undefined}
+            >
+              <AdThumbnail thumbnailUrl={ad.thumbnailUrl} isVideo={!!ad.creativeVideoId || ad.format === 'video'} />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium truncate" style={{ color: C.text }}>{ad.name || '—'}</p>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {ad.hookStyle && <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.borderLight}` }}>{ad.hookStyle}</span>}
+                {ad.format && <FormatBadge format={ad.format} />}
+                {fatigued && <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.redBg, color: C.red }}><FlameKindling size={9} />Fatigue</span>}
+                {hist.length > 0 && <button onClick={e => { e.stopPropagation(); setHistOpen(h => !h) }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-opacity hover:opacity-70" style={{ color: C.accent }}><History size={9} className="inline mr-0.5" />{hist.length} swap{hist.length !== 1 ? 's' : ''}</button>}
+              </div>
+            </div>
           </div>
         </td>
         <td>{ad.status?.trim() ? <StatusBadge status={ad.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
@@ -355,18 +434,19 @@ function AdRow({ ad }: { ad: CampaignAd }) {
           {ctr != null ? <>{ctr.toFixed(2)}%{ad.ctrBaseline != null && <span className="ml-1 text-[10px]" style={{ color: C.textMuted }}>/{ad.ctrBaseline.toFixed(1)}%</span>}</> : '—'}
         </td>
         <td>
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
-            style={{ background: C.bg, color: C.textMuted, border: `1px solid ${C.borderLight}` }}
+          <button
+            onClick={() => setDetailsOpen(v => !v)}
+            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-70"
+            style={{ background: detailsOpen ? C.accentLight : C.bg, color: detailsOpen ? C.accent : C.textMuted, border: `1px solid ${detailsOpen ? C.accentBorder : C.borderLight}` }}
           >
-            hover
-          </span>
+            <Info size={10} /> Details
+          </button>
         </td>
       </tr>
-      {hovered && (
-        <HoverPortal anchorRef={rowRef}>
-          <AllFieldsPanel kind="ad" data={ad} />
-        </HoverPortal>
+      {detailsOpen && (
+        <AnchoredPortal anchorRef={rowRef} onClose={() => setDetailsOpen(false)}>
+          <AllFieldsPanel kind="ad" data={ad} onClose={() => setDetailsOpen(false)} />
+        </AnchoredPortal>
       )}
       {histOpen && hist.length > 0 && (
         <tr><td colSpan={8} style={{ background: C.surfaceMuted }}>
@@ -396,6 +476,7 @@ function AdSetRow({
   groupHead,
   tenantId,
   proposalsCount,
+  onViewAd,
 }: {
   adSet: CampaignAdSet
   formatTag?: 'video' | 'image'
@@ -403,9 +484,10 @@ function AdSetRow({
   groupHead?: boolean
   tenantId?: string
   proposalsCount?: number
+  onViewAd?: (ad: CampaignAd) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [hovered, setHovered] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend
@@ -420,8 +502,6 @@ function AdSetRow({
         ref={rowRef}
         className="group cursor-pointer relative"
         onClick={() => setOpen(!open)}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
       >
         <td>
           <div className="flex items-center gap-2.5">
@@ -463,13 +543,14 @@ function AdSetRow({
         <td className="num mono" style={{ color: C.textSecondary }}>{ctr != null && ctr > 0 ? `${ctr.toFixed(2)}%` : '—'}</td>
         <td>
           <div className="flex items-center gap-1.5">
-            <span
-              className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
-              style={{ background: C.surfaceMuted, color: C.textMuted, border: `1px solid ${C.borderLight}` }}
-              title="Hover the row for all 25+ fields"
+            <button
+              onClick={(e) => { e.stopPropagation(); setDetailsOpen(v => !v) }}
+              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-70"
+              style={{ background: detailsOpen ? C.accentLight : C.surfaceMuted, color: detailsOpen ? C.accent : C.textMuted, border: `1px solid ${detailsOpen ? C.accentBorder : C.borderLight}` }}
+              title="All 25+ fields for this ad set"
             >
-              hover for details
-            </span>
+              <Info size={10} /> Details
+            </button>
             {tenantId && adSet.id && proposalsCount && proposalsCount > 0 && (
               <Link
                 href={`/dashboard/${tenantId}/proposed-actions?targetId=${adSet.id}`}
@@ -484,15 +565,15 @@ function AdSetRow({
           </div>
         </td>
       </tr>
-      {hovered && (
-        <HoverPortal anchorRef={rowRef}>
-          <AllFieldsPanel kind="adset" data={adSet} />
-        </HoverPortal>
+      {detailsOpen && (
+        <AnchoredPortal anchorRef={rowRef} onClose={() => setDetailsOpen(false)}>
+          <AllFieldsPanel kind="adset" data={adSet} onClose={() => setDetailsOpen(false)} />
+        </AnchoredPortal>
       )}
       {open && ads.length > 0 && (
         <tr><td colSpan={8} style={{ background: C.surfaceMuted }}>
           <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
-          <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} />)}</tbody></table>
+          <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} onViewAd={onViewAd} />)}</tbody></table>
         </td></tr>
       )}
     </>
@@ -1069,6 +1150,8 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null)
   const [approveState, setApproveState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [pauseState, setPauseState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [syncing, setSyncing] = useState(false)
+  const [viewAd, setViewAd] = useState<CampaignAd | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectState, setRejectState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -1105,6 +1188,33 @@ export default function CampaignDetailPage({ params }: PageProps) {
       if (d.status === 'pending_approval') { fetch(`${API}/companies/${tenantId}`).then(r => r.ok ? r.json() : null).then(c => { const ids: string[] = c?.meta?.accountIds || []; setAccountIds(ids); if (ids.length && !selectedAccountId) setSelectedAccountId(ids[0]) }).catch(() => {}) }
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
+  }
+
+  /**
+   * There's no single-campaign sync endpoint — Meta sync is always
+   * tenant-wide, so this refreshes every active campaign, not just this one.
+   * Fire-and-forget on the backend, so we poll this campaign on a fixed
+   * cadence afterwards rather than waiting on one response to know it's done.
+   */
+  async function handleRefresh() {
+    setSyncing(true)
+    try {
+      await syncCampaigns(tenantId)
+    } catch (e) {
+      setSyncing(false)
+      flash(e instanceof Error ? e.message : 'Failed to start sync', 'error')
+      return
+    }
+    const POLL_MS = 5000
+    const MAX_POLLS = 12 // ~60s
+    let n = 0
+    const poll = async () => {
+      n++
+      await fetchCampaign()
+      if (n >= MAX_POLLS) { setSyncing(false); flash('Synced latest data from Meta', 'success'); return }
+      setTimeout(poll, POLL_MS)
+    }
+    setTimeout(poll, POLL_MS)
   }
   useEffect(() => {
     fetchCampaign()
@@ -1170,8 +1280,10 @@ export default function CampaignDetailPage({ params }: PageProps) {
       {/* Toast */}
       {toast && <div className="fixed top-5 right-5 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl" style={toast.type === 'success' ? { background: C.greenBg, border: `1px solid ${C.greenBorder}`, color: C.green } : { background: C.redBg, border: `1px solid ${C.redBorder}`, color: C.red }}>{toast.message}</div>}
 
+      <AdMediaModal tenantId={tenantId} ad={viewAd} onClose={() => setViewAd(null)} />
+
       {/* ─── TOP BAR ─── */}
-      <div className="px-8 pt-8 pb-0 max-w-6xl mx-auto stagger">
+      <div className="px-8 pt-8 pb-0 max-w-[1600px] mx-auto stagger">
         <Link href={`/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5 transition-opacity hover:opacity-70" style={{ color: C.textMuted }}><ArrowLeft size={14} />Campaigns</Link>
 
         {/* ─── HEADER ─── */}
@@ -1217,10 +1329,31 @@ export default function CampaignDetailPage({ params }: PageProps) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleRefresh}
+              disabled={syncing}
+              className="btn"
+              style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}
+              title="Pulls fresh data from Meta for all active campaigns (there's no single-campaign sync — this one included)"
+            >
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
+              {syncing ? 'Syncing…' : 'Refresh'}
+            </button>
             {campaign.status === 'active' && <button onClick={doPause} disabled={pauseState !== 'idle'} className="btn" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>{pauseState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Pause size={14} />}{pauseState === 'loading' ? 'Pausing…' : 'Pause'}</button>}
             {campaign.status === 'paused' && <button onClick={doResume} className="btn btn-accent"><Play size={14} fill="currentColor" />Resume</button>}
           </div>
         </div>
+
+        {/* Syncing-from-Meta banner — stays up for the whole poll window */}
+        {syncing && (
+          <div
+            className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
+            style={{ background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }}
+          >
+            <Loader2 size={14} className="animate-spin" />
+            Syncing latest data from Meta — this page will update automatically over the next ~60s.
+          </div>
+        )}
 
         {/* ─── METRICS STRIP ─── */}
         <div className="card p-5 mb-6">
@@ -1277,7 +1410,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
       {/* ─── APPROVAL PANEL ─── */}
       {isPendingApproval && (
-        <div className="px-8 max-w-6xl mx-auto mb-6">
+        <div className="px-8 max-w-[1600px] mx-auto mb-6">
           <div className="rounded-2xl overflow-hidden" style={{ border: `2px solid ${C.greenBorder}`, background: C.greenBg }}>
             <div className="px-6 py-4 flex items-center gap-3" style={{ background: C.greenBg, borderBottom: `1px solid ${C.greenBorder}` }}>
               <ThumbsUp size={16} style={{ color: C.green }} />
@@ -1313,12 +1446,12 @@ export default function CampaignDetailPage({ params }: PageProps) {
       )}
 
       {/* Debate */}
-      {debate.length > 0 && <div className="px-8 max-w-6xl mx-auto mb-6"><div className="card p-6"><p className="micro-label mb-4">Review Debate</p><DebateLog rounds={debate} /></div></div>}
+      {debate.length > 0 && <div className="px-8 max-w-[1600px] mx-auto mb-6"><div className="card p-6"><p className="micro-label mb-4">Review Debate</p><DebateLog rounds={debate} /></div></div>}
 
       {/* ═══════════════════════════════════════════════════════════
          TABS
          ═══════════════════════════════════════════════════════════ */}
-      <div className="px-8 max-w-6xl mx-auto pb-12">
+      <div className="px-8 max-w-[1600px] mx-auto pb-12">
         <Tabs.Root value={tab} onValueChange={setTab}>
           <Tabs.List className="flex gap-1 mb-6" style={{ borderBottom: `2px solid ${C.border}` }}>
             {tabs.map(t => (
@@ -1371,7 +1504,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} onViewAd={setViewAd} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>

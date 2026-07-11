@@ -20,11 +20,14 @@ import {
   AlertCircle,
   RefreshCw,
   Plus,
+  Image as ImageIcon,
+  Play,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
-import { getIntelligenceDecisions } from '@/lib/api'
+import { getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
@@ -66,20 +69,69 @@ function SourceBadge({ source }: { source?: 'agent' | 'manual' }) {
   )
 }
 
+// ── Ad thumbnail ─────────────────────────────────────────────────────────────
+// Meta's creative thumbnail_url — poster frame for video ads, the actual
+// image for image ads. Synced already; this is purely a display addition.
+function AdThumbnail({ thumbnailUrl, isVideo }: { thumbnailUrl?: string; isVideo?: boolean }) {
+  const [errored, setErrored] = useState(false)
+  const showImage = !!thumbnailUrl && !errored
+  return (
+    <div
+      className="relative shrink-0 rounded-lg overflow-hidden"
+      style={{ width: 32, height: 32, background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbnailUrl}
+          alt=""
+          className="w-full h-full"
+          style={{ objectFit: 'cover' }}
+          onError={() => setErrored(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <ImageIcon size={12} style={{ color: 'var(--ink-4)' }} />
+        </div>
+      )}
+      {isVideo && (
+        <div
+          className="absolute bottom-0 right-0 flex items-center justify-center rounded-tl-md"
+          style={{ width: 14, height: 14, background: 'rgba(0,0,0,0.65)' }}
+        >
+          <Play size={7} fill="#fff" style={{ color: '#fff' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Inline ad row ─────────────────────────────────────────────────────────────
-function InlineAdRow({ ad }: { ad: CampaignAd }) {
+function InlineAdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: CampaignAd) => void }) {
+  const hasMedia = !!(ad.thumbnailUrl || ad.creativeVideoId)
   return (
     <tr style={{ borderBottom: '1px solid var(--hairline-light)' }}>
       <td className="px-4 py-2 pl-14">
-        <div>
-          <p className="text-xs font-medium truncate" style={{ color: 'var(--ink)', maxWidth: 200 }}>{ad.name || '—'}</p>
-          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {ad.hookStyle && (
-              <span className="chip chip-neutral">{ad.hookStyle}</span>
-            )}
-            {ad.format && (
-              <span className="chip chip-accent">{ad.format}</span>
-            )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => hasMedia && onViewAd?.(ad)}
+            disabled={!hasMedia}
+            className={hasMedia ? 'cursor-pointer' : 'cursor-default'}
+            title={hasMedia ? (ad.creativeVideoId ? 'Play video' : 'View image') : undefined}
+          >
+            <AdThumbnail thumbnailUrl={ad.thumbnailUrl} isVideo={!!ad.creativeVideoId || ad.format === 'video'} />
+          </button>
+          <div className="min-w-0">
+            <p className="text-xs font-medium truncate" style={{ color: 'var(--ink)', maxWidth: 200 }}>{ad.name || '—'}</p>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              {ad.hookStyle && (
+                <span className="chip chip-neutral">{ad.hookStyle}</span>
+              )}
+              {ad.format && (
+                <span className="chip chip-accent">{ad.format}</span>
+              )}
+            </div>
           </div>
         </div>
       </td>
@@ -107,10 +159,12 @@ function InlineAdSetRow({
   adSet,
   tenantId,
   proposalsCount,
+  onViewAd,
 }: {
   adSet: CampaignAdSet
   tenantId: string
   proposalsCount?: number
+  onViewAd?: (ad: CampaignAd) => void
 }) {
   const [adsOpen, setAdsOpen] = useState(false)
   const ads = adSet.ads || []
@@ -174,7 +228,7 @@ function InlineAdSetRow({
           </div>
         </td>
       </tr>
-      {adsOpen && ads.map((ad, i) => <InlineAdRow key={ad.id || i} ad={ad} />)}
+      {adsOpen && ads.map((ad, i) => <InlineAdRow key={ad.id || i} ad={ad} onViewAd={onViewAd} />)}
     </>
   )
 }
@@ -186,12 +240,14 @@ function CampaignRow({
   isPending,
   proposals,
   adsetProposals,
+  onViewAd,
 }: {
   campaign: Campaign
   tenantId: string
   isPending: boolean
   proposals?: CampaignProposalCounts
   adsetProposals?: Record<string, number>
+  onViewAd?: (ad: CampaignAd) => void
 }) {
   const [open, setOpen] = useState(false)
   const adSets = campaign.metaAdSets || []
@@ -379,6 +435,7 @@ function CampaignRow({
                       adSet={adSet}
                       tenantId={tenantId}
                       proposalsCount={adSet.id ? adsetProposals?.[adSet.id] : 0}
+                      onViewAd={onViewAd}
                     />
                   ))}
                 </tbody>
@@ -441,6 +498,9 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   const [error, setError]         = useState<string | null>(null)
   const [auditState, setAuditState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [auditResult, setAuditResult] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [viewAd, setViewAd] = useState<CampaignAd | null>(null)
 
   // Open shadow_review decisions, indexed for per-row lookup.
   const [proposalsByCampaign, setProposalsByCampaign] = useState<Record<string, CampaignProposalCounts>>({})
@@ -462,6 +522,33 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Pulls fresh data from Meta (not just Mongo) for every active campaign,
+  // then polls the list so numbers update live as the sync lands. The sync
+  // endpoint is fire-and-forget (returns as soon as it's queued, not when
+  // it's done), so we don't know exactly when it finishes — poll on a fixed
+  // cadence for a bounded window instead of waiting on a single response.
+  async function handleSyncFromMeta() {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      await syncCampaigns(tenantId)
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Failed to start sync')
+      setSyncing(false)
+      return
+    }
+    const POLL_MS = 5000
+    const MAX_POLLS = 12 // ~60s
+    let n = 0
+    const poll = async () => {
+      n++
+      await fetchCampaigns()
+      if (n >= MAX_POLLS) { setSyncing(false); return }
+      setTimeout(poll, POLL_MS)
+    }
+    setTimeout(poll, POLL_MS)
   }
 
   // Pulls open shadow_review decisions and groups them by campaign + adset
@@ -573,7 +660,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   ]
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
+    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
 
       {/* ── Page header ─────────────────────────────────────────── */}
       <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
@@ -599,13 +686,36 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
             {auditState === 'loading' ? 'Auditing…' : auditState === 'success' ? 'Done!' : auditState === 'error' ? 'Failed' : 'Run Audit Now'}
           </button>
           <button
-            onClick={fetchCampaigns}
+            onClick={handleSyncFromMeta}
+            disabled={syncing}
             className="btn btn-ghost"
+            title="Pull fresh campaign/adset/ad data from Meta (not just reload from the database)"
           >
-            <RefreshCw size={12} /> Refresh
+            <RefreshCw size={12} className={syncing ? 'animate-spin' : undefined} />
+            {syncing ? 'Syncing…' : 'Refresh from Meta'}
           </button>
         </div>
       </div>
+
+      {/* Syncing-from-Meta banner — stays up for the whole poll window, not just the initial request */}
+      {syncing && (
+        <div
+          className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
+          style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--info)' }}
+        >
+          <Loader2 size={14} className="animate-spin" />
+          Syncing latest data from Meta — this list will update automatically over the next ~60s.
+        </div>
+      )}
+      {syncError && !syncing && (
+        <div
+          className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
+          style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
+        >
+          <AlertCircle size={14} />
+          {syncError}
+        </div>
+      )}
 
       {/* Audit result banner */}
       {auditResult && auditState !== 'idle' && (
@@ -794,12 +904,15 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                     isPending={campaign.status === 'pending_approval'}
                     proposals={campaign._id ? proposalsByCampaign[campaign._id] : undefined}
                     adsetProposals={proposalsByAdset}
+                    onViewAd={setViewAd}
                   />
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        <AdMediaModal tenantId={tenantId} ad={viewAd} onClose={() => setViewAd(null)} />
 
         {/* Footer */}
         {!loading && (

@@ -85,6 +85,14 @@ export const getCampaigns = (tenantId: string) =>
 export const getCampaign = (tenantId: string, campaignId: string) =>
   apiFetch<Campaign>(`/campaigns/${tenantId}/${campaignId}`)
 
+/**
+ * The rolling-7-day spend estimate that actually gates new campaign creation
+ * (SafetyChecks.checkWeeklyBudget) — use this for any "weekly budget in use"
+ * display so it matches what's enforced, rather than approximating it again.
+ */
+export const getWeeklySpend = (tenantId: string) =>
+  apiFetch<{ weeklySpend: number }>(`/campaigns/${tenantId}/weekly-spend`)
+
 /** Manual Create Campaign form — writes a pending_approval campaign, bypassing the AI review team. */
 export const createManualCampaign = (tenantId: string, dto: CreateManualCampaignDto) =>
   apiFetch<{ success: true; campaignId: string; status: string }>(
@@ -157,6 +165,20 @@ export const getCampaignBreakdowns = (tenantId: string, campaignId: string) =>
 export const getCampaignTimeseries = (tenantId: string, campaignId: string) =>
   apiFetch<TimeseriesPoint[]>(
     `/campaigns/${tenantId}/${campaignId}/timeseries`,
+  )
+
+/**
+ * Pulls fresh campaign/adset/ad data + lifetime metrics from Meta for every
+ * active campaign under this tenant. There's no single-campaign sync endpoint
+ * — Meta sync is always tenant-wide, so this is what both the campaigns list
+ * "Refresh" button and a single campaign page's "Refresh" button call.
+ * Fire-and-forget on the backend: resolves as soon as the sync is queued,
+ * not when it finishes — poll getCampaigns/getCampaign afterwards to see it land.
+ */
+export const syncCampaigns = (tenantId: string) =>
+  apiFetch<{ success: boolean; status: string; message: string }>(
+    `/campaigns/${tenantId}/sync`,
+    { method: 'POST' },
   )
 
 // ── Pipeline ───────────────────────────────────────────────────────────────

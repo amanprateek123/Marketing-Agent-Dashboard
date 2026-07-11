@@ -101,6 +101,25 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
         />
       )}
 
+      {/* Coarser-granularity check on the same restriction as Region above —
+          Meta sometimes preserves conversion attribution at country level
+          even when the finer region/DMA breakdown suppresses it. Shows the
+          ROAS/Conv/CPA columns only if any row actually carries conversions;
+          otherwise falls back to the same "Meta withholds this" note. */}
+      {breakdowns?.country && breakdowns.country.rows.length > 0 && (() => {
+        const hasConversions = breakdowns.country!.rows.some(r => r.conversions > 0)
+        return (
+          <SegmentTable
+            title="Country"
+            icon={<MapPin size={13} />}
+            rows={breakdowns.country!.rows}
+            segmentLabel={r => r.keys.country || '—'}
+            showRoas={hasConversions}
+            note={hasConversions ? undefined : "Meta doesn't report conversions at country granularity either — spend, clicks and CTR only. Pair with first-party order data for regional/country ROAS."}
+          />
+        )
+      })()}
+
       {breakdowns?.hourly && breakdowns.hourly.rows.length > 0 && (
         <HourBars rows={breakdowns.hourly.rows} />
       )}

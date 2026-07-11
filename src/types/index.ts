@@ -771,7 +771,7 @@ export interface BreakdownRow {
 
 /** GET /campaigns/:tenantId/:campaignId/breakdowns response — keyed by breakdown type. */
 export type CampaignBreakdowns = Partial<Record<
-  'age_gender' | 'region' | 'placement' | 'hourly' | 'dow' | 'asset_body' | 'asset_title' | 'asset_video',
+  'age_gender' | 'region' | 'country' | 'placement' | 'hourly' | 'dow' | 'asset_body' | 'asset_title' | 'asset_video',
   { rows: BreakdownRow[]; fetchedAt: string; window: string }
 >>
 

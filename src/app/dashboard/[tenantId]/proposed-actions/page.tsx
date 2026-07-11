@@ -316,7 +316,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
   )
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
+    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
       {/* Shadow mode banner */}
       <div
         className="rounded-xl px-4 py-3 mb-6 flex items-center gap-3"

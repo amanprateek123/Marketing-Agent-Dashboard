@@ -109,7 +109,7 @@ export default function IntelligencePage({ params }: PageProps) {
   }
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto stagger">
+    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
       {/* Header */}
       <div className="mb-8">
         <p className="micro-label mb-2">Feedback loops</p>
