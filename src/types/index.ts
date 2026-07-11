@@ -946,6 +946,8 @@ export interface Campaign {
   creativePackageId?: string
   runId?: string
   launchedAt?: string
+  pausedAt?: string
+  pauseReason?: string
   approvedAt?: string
   reviewNotes?: string
   reviewAdjustments?: {

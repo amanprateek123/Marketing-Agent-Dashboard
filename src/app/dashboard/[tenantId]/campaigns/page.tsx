@@ -22,10 +22,11 @@ import {
   Plus,
   Image as ImageIcon,
   Play,
+  Pause,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
-import { formatCurrency, formatDate, cn } from '@/lib/utils'
+import { formatCurrency, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
 import { getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
 
@@ -311,6 +312,11 @@ function CampaignRow({
         {/* Status */}
         <td className="whitespace-nowrap">
           <StatusBadge status={campaign.status} />
+          {campaign.status === 'paused' && campaign.pausedAt && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--ink-4)' }} title={campaign.pauseReason}>
+              <Pause size={9} className="inline mr-0.5" />{formatRelativeTime(campaign.pausedAt)}
+            </p>
+          )}
         </td>
 
         {/* Source */}

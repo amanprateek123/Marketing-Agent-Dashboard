@@ -1324,6 +1324,11 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <PromptsVersionBadge version={campaign.promptsVersion} />
               {campaign.metaCampaignId && <code className="mono text-[11px]" style={{ color: C.textMuted }}>{campaign.metaCampaignId}</code>}
               {campaign.launchedAt && <span className="mono"><Clock size={10} className="inline mr-1" />{formatDate(campaign.launchedAt)}</span>}
+              {campaign.status === 'paused' && campaign.pausedAt && (
+                <span className="mono" title={campaign.pauseReason} style={{ color: C.textMuted }}>
+                  <Pause size={10} className="inline mr-1" />Paused {formatRelativeTime(campaign.pausedAt)}
+                </span>
+              )}
               {campaign.lastAuditedAt && <span className="mono"><Shield size={10} className="inline mr-1" />{formatDateTime(campaign.lastAuditedAt)}</span>}
               {campaign.runId && <Link href={`/dashboard/${tenantId}/runs/${campaign.runId}`} className="font-semibold transition-opacity hover:opacity-70" style={{ color: C.accent }}>View Run<ExternalLink size={10} className="inline ml-0.5" /></Link>}
             </div>
