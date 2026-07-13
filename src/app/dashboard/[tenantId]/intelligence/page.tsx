@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { Loader2, Activity, ShieldAlert, GitCompareArrows, Radar } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/utils'
+import { Term, GLOSSARY } from '@/components/plain/Term'
 import {
   getActionOutcomes,
   getRegretSummary,
@@ -15,6 +16,18 @@ import type {
   PromptVersionEval,
   SignalAccuracy,
 } from '@/types'
+
+// Plain-English labels for the internal reason codes the safety system logs
+// when it blocks an action — these are code slugs, not written for display.
+const BLOCKED_REASON_LABEL: Record<string, string> = {
+  bandit_disagreement: 'Two internal checks disagreed on whether this would help',
+  oscillation_cooldown: 'This was changed too recently — waiting to avoid flip-flopping',
+  recipient_thin_evidence: 'Not enough data yet on this audience to be sure',
+  recipient_learned_poor_audience: 'Past results say this audience underperforms',
+}
+function humanizeBlockedReason(reason: string): string {
+  return BLOCKED_REASON_LABEL[reason] ?? reason.replace(/_/g, ' ')
+}
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -112,10 +125,11 @@ export default function IntelligencePage({ params }: PageProps) {
     <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
       {/* Header */}
       <div className="mb-8">
-        <p className="micro-label mb-2">Feedback loops</p>
-        <h1 className="page-title">System Intelligence</h1>
+        <p className="micro-label mb-2">Agent report card</p>
+        <h1 className="page-title">Is the agent actually getting it right?</h1>
         <p className="page-subtitle">
-          The feedback loops grading the agent&apos;s own decisions — actions, guardrails, prompts, and signals
+          Every change the agent makes — or holds back from making — gets checked again a few days later.
+          This page is that scorecard: what it changed, what it refused to touch, and whether either call was correct.
         </p>
       </div>
 
@@ -130,11 +144,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={Activity}
           color="var(--good)"
-          title="Action Outcomes"
-          hint="Every optimizer action is re-measured at +72h: did the metric it targeted actually move the right way?"
+          title="Changes the agent made"
+          hint="Every change gets checked again 3 days later — did it actually move things in the right direction, or not?"
         />
         {!outcomes || (outcomes.trackRecord.total === 0 && outcomes.recent.length === 0) ? (
-          <EmptyState message="No executed actions yet — outcomes appear ~72h after the audit loop takes its first action." />
+          <EmptyState message="Nothing here yet — once the agent makes its first change, you'll see how it turned out about 3 days later." />
         ) : (
           <div className="flex flex-col gap-4">
             {outcomes.trackRecord.byActionType.length > 0 && (
@@ -197,29 +211,29 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={ShieldAlert}
           color="var(--warn)"
-          title="Guardrail Regret"
-          hint="Actions the safety guards blocked, graded +72h later: correct block (problem resolved itself) vs missed signal (the agent was right). High regret = guard too conservative."
+          title="Changes the agent held back from making"
+          hint="The safety system sometimes stops the agent from acting, just to be cautious. This checks each block 3 days later — was holding back the right call, or should it have gone ahead? A high 'missed it' rate means the safety checks are being too cautious."
         />
         {!regret || regret.total === 0 ? (
-          <EmptyState message="No finalized blocked-action evaluations yet — regret labels accumulate ~72h after guards block their first actions." />
+          <EmptyState message="Nothing to show yet — this fills in once the safety system has blocked a few actions and had 3 days to see how they would have played out." />
         ) : (
           <div className="card overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Action</th>
-                  <th>Blocked by</th>
-                  <th className="num">Blocked</th>
-                  <th className="num">Correct</th>
-                  <th className="num">Missed</th>
-                  <th className="num">Regret</th>
+                  <th>Change type</th>
+                  <th>Why it held back</th>
+                  <th className="num">Times held back</th>
+                  <th className="num">Right to wait</th>
+                  <th className="num">Should&rsquo;ve acted</th>
+                  <th className="num">Miss rate</th>
                 </tr>
               </thead>
               <tbody>
                 {regret.byActionAndReason.map((r) => (
                   <tr key={`${r.actionType}-${r.blockedReason}`}>
                     <td className="font-medium" style={{ color: 'var(--ink)' }}>{r.actionType.replace(/_/g, ' ')}</td>
-                    <td className="text-[11px]">{r.blockedReason.replace(/_/g, ' ')}</td>
+                    <td className="text-[11px]">{humanizeBlockedReason(r.blockedReason)}</td>
                     <td className="num mono">{r.total}</td>
                     <td className="num mono" style={{ color: 'var(--good)' }}>{r.correct}</td>
                     <td className="num mono" style={{ color: r.missed > 0 ? 'var(--bad)' : 'var(--ink-4)' }}>{r.missed}</td>
@@ -239,11 +253,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={GitCompareArrows}
           color="var(--accent)"
-          title="Prompt Version Evals"
-          hint="Each Day-30 learning cycle is graded before regenerating prompts: did campaigns under the new prompt version beat the previous one (spend-weighted ROAS)?"
+          title="Upgrades to how the agent writes ads"
+          hint="Roughly every 30 days the agent updates its own instructions for writing ad copy, based on what's worked. Each update is graded here: did campaigns written under the new instructions actually out-earn the old ones?"
         />
         {evals.length === 0 ? (
-          <EmptyState message="No evals yet — the first comparison runs at the next Day-30 deep learning cycle, once two prompt versions have campaign data." />
+          <EmptyState message="No comparisons yet — the first one runs after the agent's next monthly self-review, once two versions of its instructions have real campaign data to compare." />
         ) : (
           <div className="flex flex-col gap-3">
             {evals.map((e, i) => {
@@ -258,14 +272,14 @@ export default function IntelligencePage({ params }: PageProps) {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold mono tabular-nums" style={{ color: 'var(--ink)' }}>
-                        v{e.newerVersion} <span style={{ color: 'var(--ink-3)' }}>vs</span> v{e.olderVersion}
+                        Version {e.newerVersion} <span style={{ color: 'var(--ink-3)' }}>vs</span> Version {e.olderVersion}
                       </span>
                       <span className={`chip uppercase ${verdictClass[e.verdict]}`}>
                         {e.verdict}
                       </span>
                     </div>
                     <span className="text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
-                      {e.newer.weightedROAS.toFixed(2)}x <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
+                      <Term help={GLOSSARY.roas}>{`${e.newer.weightedROAS.toFixed(2)}x`}</Term> <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
                       <span className="ml-2" style={{ color: 'var(--ink-3)' }}>
                         ({e.newer.campaigns}/{e.older.campaigns} campaigns)
                       </span>
@@ -284,16 +298,16 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={Radar}
           color="var(--info)"
-          title="Signal Accuracy"
-          hint="Which intelligence sources and platforms produce briefs that actually convert — joined from brief performance writebacks over the last 90 days."
+          title="Where the agent's best ad ideas come from"
+          hint="The agent pulls ad ideas from a few different sources and platforms. This shows which ones actually turn into ads that sell, based on the last 90 days."
         />
         {!signals || signals.briefsWithOutcomes === 0 ? (
-          <EmptyState message="No measured briefs yet — accuracy appears once launched briefs reach day-7 performance writeback." />
+          <EmptyState message="Not enough data yet — this fills in once ad ideas the agent has launched have had about a week to show results." />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {([
-              { title: 'By idea source', rows: signals.bySource.map((s) => ({ label: s.source, ...s })) },
-              { title: 'By signal platform', rows: signals.byPlatform.map((p) => ({ label: p.platform, ...p })) },
+              { title: 'By where the idea came from', rows: signals.bySource.map((s) => ({ label: s.source, ...s })) },
+              { title: 'By ad platform', rows: signals.byPlatform.map((p) => ({ label: p.platform, ...p })) },
             ] as const).map(({ title, rows }) => (
               <div key={title} className="card overflow-x-auto">
                 <p className="micro-label px-4 pt-3 pb-1">{title}</p>
@@ -302,8 +316,8 @@ export default function IntelligencePage({ params }: PageProps) {
                     <tr>
                       <th>Source</th>
                       <th className="num">Launched</th>
-                      <th className="num">Converted</th>
-                      <th className="num">Avg ROAS</th>
+                      <th className="num">Sold something</th>
+                      <th className="num"><Term help={GLOSSARY.roas}>Avg ROAS</Term></th>
                     </tr>
                   </thead>
                   <tbody>

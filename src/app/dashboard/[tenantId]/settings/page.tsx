@@ -10,6 +10,7 @@ import {
 import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm } from '@/types'
 import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
+import { Term, GLOSSARY } from '@/components/plain/Term'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 interface PageProps { params: Promise<{ tenantId: string }> }
@@ -136,14 +137,15 @@ function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange
   )
 }
 
-function RuleGroup({ icon: Icon, iconColor, iconBg, title, children }: { icon: React.ElementType; iconColor: string; iconBg: string; title: string; children: React.ReactNode }) {
+function RuleGroup({ icon: Icon, iconColor, iconBg, title, hint, children }: { icon: React.ElementType; iconColor: string; iconBg: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="card-inset p-4">
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-1">
         <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: iconBg }}><Icon size={11} style={{ color: iconColor }} /></div>
         <p className="micro-label">{title}</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{children}</div>
+      {hint && <p className="text-[11.5px] mb-3 leading-relaxed" style={{ color: 'var(--ink-3)' }}>{hint}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">{children}</div>
     </div>
   )
 }
@@ -717,22 +719,22 @@ export default function SettingsPage({ params }: PageProps) {
         <SectionCard>
           <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget & Rules" subtitle="Caps, targets, and auto-pause / auto-scale thresholds" />
           <div className="space-y-3">
-            <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget Caps">
-              <div><FieldLabel>Weekly Cap</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
-              <div><FieldLabel>Max per Campaign</FieldLabel><NumericInput value={budgetFields.maxBudgetPerCampaign ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetPerCampaign: v }))} prefix="₹" /></div>
-              <div><FieldLabel>Max Scale %</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
+            <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget Caps" hint="Hard limits the agent will never spend past, no matter how well things are going.">
+              <div><FieldLabel>Weekly cap — most you'll spend in 7 days</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
+              <div><FieldLabel>Most any single campaign can spend per day</FieldLabel><NumericInput value={budgetFields.maxBudgetPerCampaign ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetPerCampaign: v }))} prefix="₹" /></div>
+              <div><FieldLabel>Biggest single budget increase the agent can make</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets">
-              <div><FieldLabel>Target ROAS</FieldLabel><NumericInput value={budgetFields.targetROAS ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetROAS: v }))} suffix="x" step={0.1} /></div>
-              <div><FieldLabel>Target CPA</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
+            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets" hint="What 'doing well' means for this business — the agent measures every campaign against these.">
+              <div><FieldLabel><Term help={GLOSSARY.targetRoas}>Target ROAS</Term> — the return you want once healthy</FieldLabel><NumericInput value={budgetFields.targetROAS ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetROAS: v }))} suffix="x" step={0.1} /></div>
+              <div><FieldLabel><Term help={GLOSSARY.cpa}>Target CPA</Term> — what you're willing to pay per sale</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Auto-Pause Triggers">
-              <div><FieldLabel>ROAS below</FieldLabel><NumericInput value={budgetFields.pauseIfROASBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfROASBelow: v }))} suffix="x" step={0.1} /></div>
-              <div><FieldLabel>CTR below</FieldLabel><NumericInput value={budgetFields.pauseIfCTRBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfCTRBelow: v }))} suffix="%" step={0.1} /></div>
-              <div><FieldLabel>Frequency above</FieldLabel><NumericInput value={budgetFields.pauseIfFrequencyAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfFrequencyAbove: v }))} step={0.1} /></div>
+            <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Auto-Pause Triggers" hint="If a campaign crosses any of these lines, the agent pauses it automatically instead of waiting for you to notice.">
+              <div><FieldLabel>Pause if <Term help={GLOSSARY.roas}>ROAS</Term> drops below</FieldLabel><NumericInput value={budgetFields.pauseIfROASBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfROASBelow: v }))} suffix="x" step={0.1} /></div>
+              <div><FieldLabel>Pause if <Term help={GLOSSARY.ctr}>CTR</Term> drops below</FieldLabel><NumericInput value={budgetFields.pauseIfCTRBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfCTRBelow: v }))} suffix="%" step={0.1} /></div>
+              <div><FieldLabel>Pause if <Term help={GLOSSARY.freq}>frequency</Term> goes above</FieldLabel><NumericInput value={budgetFields.pauseIfFrequencyAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfFrequencyAbove: v }))} step={0.1} /></div>
             </RuleGroup>
-            <RuleGroup icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Auto-Scale Trigger">
-              <div><FieldLabel>Scale if ROAS above</FieldLabel><NumericInput value={budgetFields.scaleIfROASAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, scaleIfROASAbove: v }))} suffix="x" step={0.1} /></div>
+            <RuleGroup icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Auto-Scale Trigger" hint="When a campaign is clearly winning, the agent can raise its budget on its own instead of waiting for approval.">
+              <div><FieldLabel>Increase budget once <Term help={GLOSSARY.roas}>ROAS</Term> is above</FieldLabel><NumericInput value={budgetFields.scaleIfROASAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, scaleIfROASAbove: v }))} suffix="x" step={0.1} /></div>
             </RuleGroup>
           </div>
           <div className="mt-5"><SaveBtn state={budgetState} onClick={() => { const body: Record<string, number> = {}; for (const [k, v] of Object.entries(budgetFields)) { if (v.trim()) body[k] = Number(v) }; saveSection(body, setBudgetState) }} label="Save Budget Rules" /></div>

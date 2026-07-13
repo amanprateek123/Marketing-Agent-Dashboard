@@ -33,14 +33,14 @@ const navItems = (
   pendingCount: number,
   proposedCount: number,
 ): NavItem[] => [
-  { href: `/dashboard/${tenantId}`,                    label: 'Home',            hint: 'Today at a glance',            icon: Home },
-  { href: `/dashboard/${tenantId}/approvals`,          label: 'Waiting for you', hint: 'Ads waiting to launch',        icon: Inbox, badge: pendingCount },
-  { href: `/dashboard/${tenantId}/proposed-actions`,   label: 'Proposed changes',hint: 'What the agent wants to tweak',icon: Brain, badge: proposedCount },
-  { href: `/dashboard/${tenantId}/campaigns`,          label: 'Your ads',        hint: 'Active ads on Meta',           icon: Megaphone },
-  { href: `/dashboard/${tenantId}/runs`,               label: 'Automations',     hint: 'What the agent is doing',      icon: Activity },
-  { href: `/dashboard/${tenantId}/learnings`,          label: 'What worked',     hint: 'Winning patterns',             icon: BookOpen },
-  { href: `/dashboard/${tenantId}/intelligence`,       label: 'System health',   hint: 'How well the agent decides',   icon: Sparkles },
-  { href: `/dashboard/${tenantId}/settings`,           label: 'Settings',        hint: 'Business + Meta setup',        icon: Settings },
+  { href: `/dashboard/${tenantId}`,                    label: 'Home',            hint: 'Today at a glance',                       icon: Home },
+  { href: `/dashboard/${tenantId}/approvals`,          label: 'Ads to approve',  hint: 'New ads waiting for your OK',            icon: Inbox, badge: pendingCount },
+  { href: `/dashboard/${tenantId}/proposed-actions`,   label: 'Suggestions',     hint: 'Changes it wants to make to your ads',   icon: Brain, badge: proposedCount },
+  { href: `/dashboard/${tenantId}/campaigns`,          label: 'Your ads',        hint: 'Ads currently running on Facebook & Instagram', icon: Megaphone },
+  { href: `/dashboard/${tenantId}/runs`,               label: 'Activity log',    hint: "See what the agent's been doing",        icon: Activity },
+  { href: `/dashboard/${tenantId}/learnings`,          label: 'What worked',     hint: 'Your best-performing ads and audiences', icon: BookOpen },
+  { href: `/dashboard/${tenantId}/intelligence`,       label: 'Report card',     hint: 'Is the agent actually getting it right?', icon: Sparkles },
+  { href: `/dashboard/${tenantId}/settings`,           label: 'Settings',        hint: 'Your business info & ad account',        icon: Settings },
 ]
 
 export function Sidebar({ tenantId }: SidebarProps) {
@@ -98,7 +98,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
         >
           <span className={cn('beacon', reachable === false && 'beacon-bad')} />
           <span className="text-[12px] font-medium" style={{ color: reachable === false ? 'var(--bad)' : 'var(--good)' }}>
-            {reachable === false ? "Can't reach system" : 'All systems working'}
+            {reachable === false ? "Can't connect right now" : 'Connected and running'}
           </span>
         </div>
       </div>

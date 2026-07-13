@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
+import { Term, GLOSSARY } from '@/components/plain/Term'
 import { formatCurrency, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
 import { getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
@@ -146,10 +147,14 @@ function InlineAdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: Campaig
         {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '—'}
       </td>
       <td className="px-4 py-2 text-xs mono tabular-nums whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
-        {ad.cpc ? formatCurrency(ad.cpc) : '—'}
+        {ad.cpa ? formatCurrency(ad.cpa) : '—'}
       </td>
-      <td className="px-4 py-2 text-xs" style={{ color: 'var(--ink-3)' }}>—</td>
-      <td className="px-4 py-2 text-xs" style={{ color: 'var(--ink-3)' }}>—</td>
+      <td className="px-4 py-2 text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
+        {ad.frequency?.toFixed(2) || '—'}
+      </td>
+      <td className="px-4 py-2 text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
+        {ad.conversions ?? '—'}
+      </td>
       <td className="px-4 py-2" />
     </tr>
   )
@@ -423,13 +428,22 @@ function CampaignRow({
               <table className="w-full" style={{ background: 'var(--accent-bg)' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--accent-border)' }}>
-                    {['Ad Set / Audience', 'Spend', 'Impressions', 'CTR', 'CPA', 'Freq.', 'Conv.', 'Status'].map((h, i) => (
+                    {[
+                      { key: 'Ad Set / Audience', node: 'Ad Set / Audience' as React.ReactNode },
+                      { key: 'Spend', node: 'Spend' },
+                      { key: 'Impressions', node: 'Impressions' },
+                      { key: 'CTR', node: <Term help={GLOSSARY.ctr}>CTR</Term> },
+                      { key: 'CPA', node: <Term help={GLOSSARY.cpa}>CPA</Term> },
+                      { key: 'Freq.', node: <Term help={GLOSSARY.freq}>Freq.</Term> },
+                      { key: 'Conv.', node: <Term help={GLOSSARY.conv}>Conv.</Term> },
+                      { key: 'Status', node: 'Status' },
+                    ].map((h, i) => (
                       <th
-                        key={h}
+                        key={h.key}
                         className={`px-4 py-2 micro-label ${i === 0 ? 'pl-12 text-left' : 'text-left'}`}
                         style={{ color: 'var(--accent)' }}
                       >
-                        {h}
+                        {h.node}
                       </th>
                     ))}
                   </tr>
@@ -472,7 +486,7 @@ function StatCard({
   accent,
 }: {
   icon: React.ElementType
-  label: string
+  label: React.ReactNode
   value: string | number
   iconColor: string
   iconBg: string
@@ -656,12 +670,12 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     })
   }, [campaigns, statusFilter, search, sortKey, sortDir])
 
-  const numericCols: { key: SortKey; label: string }[] = [
+  const numericCols: { key: SortKey; label: React.ReactNode }[] = [
     { key: 'budget',      label: 'Budget'   },
     { key: 'spend',       label: 'Spend'    },
-    { key: 'roas',        label: 'ROAS'     },
-    { key: 'ctr',         label: 'CTR'      },
-    { key: 'conversions', label: 'Conv.'    },
+    { key: 'roas',        label: <Term help={GLOSSARY.roas}>ROAS</Term> },
+    { key: 'ctr',         label: <Term help={GLOSSARY.ctr}>CTR</Term> },
+    { key: 'conversions', label: <Term help={GLOSSARY.conv}>Conv.</Term> },
     { key: 'launchedAt',  label: 'Launched' },
   ]
 
@@ -768,7 +782,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
         <StatCard icon={Megaphone}  label="Total"    value={campaigns.length}                              iconColor="var(--ink-2)" iconBg="var(--muted)" />
         <StatCard icon={Activity}   label="Active"   value={activeCampaigns}                               iconColor="var(--good)" iconBg="var(--good-bg)" accent="var(--good)" />
         <StatCard icon={DollarSign} label="Spend"    value={formatCurrency(totalSpend)}                   iconColor="var(--accent)" iconBg="var(--accent-bg)" accent="var(--accent)" />
-        <StatCard icon={TrendingUp} label="Avg ROAS" value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'} iconColor="var(--warn)" iconBg="var(--warn-bg)" accent="var(--warn)" />
+        <StatCard icon={TrendingUp} label={<Term help={GLOSSARY.roas}>Avg ROAS</Term>} value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'} iconColor="var(--warn)" iconBg="var(--warn-bg)" accent="var(--warn)" />
       </div>
 
       {/* ── Error ────────────────────────────────────────────────── */}
