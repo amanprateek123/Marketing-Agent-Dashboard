@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Play,
   Pause,
+  ExternalLink,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
@@ -58,15 +59,31 @@ const STATUS_FILTERS = [
 ]
 
 // ── Source badge ──────────────────────────────────────────────────────────────
-function SourceBadge({ source }: { source?: 'agent' | 'manual' }) {
+// 'agent' = fully autonomous pipeline launch. 'human' = someone built this
+// using this dashboard's own Create Campaign form — still tool-managed
+// (budget caps, auto-pause apply), just not AI-authored. 'manual' = synced in
+// because it was created directly in Meta Ads Manager — outside the tool
+// entirely, read-only, never safety-rail-managed. All three must render
+// distinctly or "manual create" and "synced from Meta" look identical.
+function SourceBadge({ source }: { source?: 'agent' | 'human' | 'manual' }) {
   if (!source) return <span style={{ color: 'var(--ink-4)' }}>—</span>
-  return source === 'agent' ? (
-    <span className="chip chip-accent">
-      <Bot size={9} /> Agent
-    </span>
-  ) : (
-    <span className="chip chip-neutral">
-      <User size={9} /> Manual
+  if (source === 'agent') {
+    return (
+      <span className="chip chip-accent">
+        <Bot size={9} /> Agent
+      </span>
+    )
+  }
+  if (source === 'human') {
+    return (
+      <span className="chip chip-neutral">
+        <User size={9} /> Manual create
+      </span>
+    )
+  }
+  return (
+    <span className="chip chip-neutral" title="Created directly in Meta Ads Manager — synced here for visibility only, not managed by this tool">
+      <ExternalLink size={9} /> From Meta
     </span>
   )
 }

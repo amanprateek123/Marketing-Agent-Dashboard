@@ -481,6 +481,7 @@ export interface CreativeImage {
   variantIndex?: number
   imagePrompt?: string
   imageUrl?: string
+  editInstructions?: string[]
 }
 
 export interface CreativeVideo {
@@ -490,7 +491,26 @@ export interface CreativeVideo {
   videoPrompt?: string
 }
 
+/** One slide of a carousel-format creative — a "grid/story" sequence of 3-10 cards. */
+export interface CarouselCard {
+  slotIndex: number
+  headline: string
+  description?: string
+  imagePrompt?: string
+  imageUrl?: string
+  imageHash?: string
+  cardLink?: string
+}
+
 export interface CreativePackage {
+  _id?: string
+  tenantId?: string
+  runId?: string
+  briefId?: string
+  /** Which product this was generated for — set for library creatives, empty for older/one-off packages. */
+  productName?: string
+  /** Canonical language the copy/creative was generated in (e.g. "hinglish", "marathi"). */
+  targetLanguage?: string
   status?: string
   copyVariants?: CopyVariant[]
   selectedCopyIndex?: number
@@ -499,9 +519,12 @@ export interface CreativePackage {
   images?: CreativeImage[]
   video?: CreativeVideo
   videoPrompt?: string
+  /** Only populated for format='carousel' — images[] stays empty in that case. */
+  carouselCards?: CarouselCard[]
   complianceNotes?: string
   debateRounds?: number
   debateLog?: Array<{ round: number; from: string; summary: string }>
+  createdAt?: string
 }
 
 export interface AdSetConfig {
@@ -842,11 +865,14 @@ export interface CreateManualCampaignDto {
   budget: number
   objective?: string
   adSets: ManualAdSetInput[]
-  creative: {
+  /** Exactly one of creative / creativePackageId must be set. */
+  creative?: {
     copyVariants: ManualCopyVariant[]
     images?: Array<{ variantIndex: number; imageUrl: string }>
     video?: { variantIndex: number; videoUrl: string; videoThumbnailUrl?: string } | null
   }
+  /** Reuse an existing, already-produced creative from the creative library. */
+  creativePackageId?: string
 }
 
 export interface AuditSnapshot {
@@ -925,7 +951,7 @@ export interface AuditSnapshot {
 export interface Campaign {
   _id: string
   status: 'pending_approval' | 'active' | 'paused' | 'completed' | 'failed'
-  source?: 'agent' | 'manual'
+  source?: 'agent' | 'human' | 'manual'
   syncedAt?: string
   metaAccountId?: string
   lastAuditedAt?: string

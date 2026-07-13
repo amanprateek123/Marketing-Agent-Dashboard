@@ -7,11 +7,11 @@ import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle2, Plus, Trash2,
   Target, Zap, Info, Image as ImageIcon, Video as VideoIcon, X,
 } from 'lucide-react'
-import { getCompany, getMetaAudiences, searchMetaInterests, createManualCampaign } from '@/lib/api'
+import { getCompany, getMetaAudiences, searchMetaInterests, createManualCampaign, listCreativePackages } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CampaignFieldGuide } from '@/components/campaign/CampaignFieldGuide'
 import type {
-  Company, MetaAudienceOption, MetaInterestOption, ManualAdSetInput, ManualCopyVariant,
+  Company, MetaAudienceOption, MetaInterestOption, ManualAdSetInput, ManualCopyVariant, CreativePackage,
 } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
@@ -46,6 +46,13 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   const [videoUrl, setVideoUrl] = useState('')
   const [videoThumbnailUrl, setVideoThumbnailUrl] = useState('')
 
+  // Creative source — paste URLs by hand (default, unchanged behavior) or
+  // pick an already-produced creative from the library instead.
+  const [creativeSource, setCreativeSource] = useState<'paste' | 'library'>('paste')
+  const [libraryPackages, setLibraryPackages] = useState<CreativePackage[]>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [selectedPackageId, setSelectedPackageId] = useState('')
+
   useEffect(() => {
     let cancelled = false
     Promise.all([getCompany(tenantId), getMetaAudiences(tenantId)])
@@ -65,6 +72,24 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
     () => audiences.filter(a => !productName || a.productName === productName),
     [audiences, productName],
   )
+
+  useEffect(() => {
+    if (creativeSource !== 'library') return
+    let cancelled = false
+    async function load() {
+      setLibraryLoading(true)
+      try {
+        const list = await listCreativePackages(tenantId, { productName: productName || undefined, status: 'completed' })
+        if (!cancelled) setLibraryPackages(list)
+      } catch {
+        if (!cancelled) setLibraryPackages([])
+      } finally {
+        if (!cancelled) setLibraryLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [creativeSource, productName, tenantId])
 
   const totalPct = adSets.reduce((s, a) => s + (a.budgetPercent || 0), 0)
   const pctValid = campaignType === 'advantage_plus' || adSets.length === 1 || Math.abs(totalPct - 100) < 1
@@ -113,7 +138,6 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
     setError('')
     setSubmitting(true)
     try {
-      const cleanImages = images.filter(img => img.imageUrl.trim())
       const dto = {
         name: name.trim(),
         productName: productName || undefined,
@@ -121,11 +145,15 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
         budget,
         objective,
         adSets: campaignType === 'advantage_plus' ? [adSets[0]] : adSets,
-        creative: {
-          copyVariants,
-          images: cleanImages.length ? cleanImages : undefined,
-          video: videoUrl.trim() ? { variantIndex: 0, videoUrl: videoUrl.trim(), videoThumbnailUrl: videoThumbnailUrl.trim() || undefined } : null,
-        },
+        ...(creativeSource === 'library'
+          ? { creativePackageId: selectedPackageId }
+          : {
+              creative: {
+                copyVariants,
+                images: images.filter(img => img.imageUrl.trim()).length ? images.filter(img => img.imageUrl.trim()) : undefined,
+                video: videoUrl.trim() ? { variantIndex: 0, videoUrl: videoUrl.trim(), videoThumbnailUrl: videoThumbnailUrl.trim() || undefined } : null,
+              },
+            }),
       }
       const res = await createManualCampaign(tenantId, dto)
       router.push(`/dashboard/${tenantId}/campaigns/${res.campaignId}`)
@@ -134,6 +162,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
       setSubmitting(false)
     }
   }
+
+  const librarySelectionValid = creativeSource === 'paste' || !!selectedPackageId
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
 
@@ -243,8 +273,37 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
 
           {/* ── Creative ── */}
           <section className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="micro-label mb-0">Creative ({copyVariants.length} variant{copyVariants.length !== 1 ? 's' : ''})</p>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <p className="micro-label mb-0">Creative</p>
+              <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+                <button
+                  onClick={() => setCreativeSource('paste')}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md"
+                  style={creativeSource === 'paste' ? { background: 'var(--paper)', color: 'var(--ink)', boxShadow: 'var(--shadow-raised)' } : { color: 'var(--ink-3)' }}
+                >
+                  Paste URLs manually
+                </button>
+                <button
+                  onClick={() => setCreativeSource('library')}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md"
+                  style={creativeSource === 'library' ? { background: 'var(--paper)', color: 'var(--ink)', boxShadow: 'var(--shadow-raised)' } : { color: 'var(--ink-3)' }}
+                >
+                  Pick from library
+                </button>
+              </div>
+            </div>
+
+            {creativeSource === 'library' ? (
+              <LibraryPicker
+                tenantId={tenantId}
+                loading={libraryLoading}
+                packages={libraryPackages}
+                selectedId={selectedPackageId}
+                onSelect={setSelectedPackageId}
+              />
+            ) : (
+            <>
+            <div className="flex items-center justify-end mb-4">
               <button onClick={addCopyVariant} className="btn btn-ghost text-xs"><Plus size={11} /> Add variant</button>
             </div>
             <div className="space-y-4">
@@ -284,11 +343,13 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 </div>
               </div>
             </div>
+            </>
+            )}
           </section>
 
           <button
             onClick={handleSubmit}
-            disabled={submitting || !name.trim() || !pctValid}
+            disabled={submitting || !name.trim() || !pctValid || !librarySelectionValid}
             className="btn btn-primary w-full justify-center py-3"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -537,6 +598,90 @@ function InterestPicker({ tenantId, selected, onChange }: { tenantId: string; se
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function LibraryPicker({
+  tenantId, loading, packages, selectedId, onSelect,
+}: {
+  tenantId: string
+  loading: boolean
+  packages: CreativePackage[]
+  selectedId: string
+  onSelect: (id: string) => void
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+      </div>
+    )
+  }
+
+  if (packages.length === 0) {
+    return (
+      <div className="rounded-xl px-4 py-8 text-center" style={{ background: 'var(--surface-warm)', border: '1px dashed var(--hairline)' }}>
+        <p className="text-[13px]" style={{ color: 'var(--ink-3)' }}>No ready-to-use creative for this product yet.</p>
+        <Link
+          href={`/dashboard/${tenantId}/creatives`}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold mt-2"
+          style={{ color: 'var(--accent-strong)' }}
+        >
+          Generate one in the Creative library →
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {packages.map(pkg => {
+        const selected = pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
+        const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
+        const thumb = pkg.images?.[pkg.selectedCopyIndex ?? 0]?.imageUrl
+          || pkg.carouselCards?.[0]?.imageUrl
+          || pkg.video?.videoThumbnailUrl
+        const isActive = selectedId === pkg._id
+        return (
+          <button
+            key={pkg._id}
+            onClick={() => !isCarousel && onSelect(pkg._id ?? '')}
+            disabled={isCarousel}
+            title={isCarousel ? "Carousel creatives can't be attached to a campaign yet" : undefined}
+            className="text-left rounded-xl overflow-hidden transition-all"
+            style={{
+              ...(isActive ? { border: '2px solid var(--accent)' } : { border: '2px solid var(--hairline-light)' }),
+              ...(isCarousel ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+            }}
+          >
+            <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+              {thumb ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={thumb} alt={selected?.headline ?? ''} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  {pkg.video?.videoUrl ? <VideoIcon size={18} style={{ color: 'var(--ink-4)' }} /> : <ImageIcon size={18} style={{ color: 'var(--ink-4)' }} />}
+                </div>
+              )}
+              {isCarousel && (
+                <span className="chip chip-neutral" style={{ position: 'absolute', top: 6, left: 6, fontSize: '10px', padding: '2px 6px' }}>
+                  Carousel — can&rsquo;t attach yet
+                </span>
+              )}
+              {isActive && (
+                <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--accent)', borderRadius: '999px', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CheckCircle2 size={14} color="#fff" />
+                </div>
+              )}
+            </div>
+            <div className="px-2 py-1.5">
+              <p className="text-[11.5px] font-semibold truncate" style={{ color: 'var(--ink)' }}>{selected?.headline || 'Untitled'}</p>
+              {pkg.targetLanguage && <p className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>{pkg.targetLanguage}</p>}
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }

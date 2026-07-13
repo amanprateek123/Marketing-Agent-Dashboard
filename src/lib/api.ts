@@ -18,6 +18,7 @@ import type {
   MetaAudienceOption,
   MetaInterestOption,
   CreateManualCampaignDto,
+  CreativePackage,
 } from '@/types'
 
 export const API_BASE =
@@ -108,6 +109,99 @@ export const getMetaAudiences = (tenantId: string, productName?: string) =>
 export const searchMetaInterests = (tenantId: string, q: string) =>
   apiFetch<MetaInterestOption[]>(
     `/campaigns/${tenantId}/meta-interest-search?q=${encodeURIComponent(q)}`,
+  )
+
+// ── Creative library ─────────────────────────────────────────────────────
+export const getCreativeLanguages = () =>
+  apiFetch<string[]>('/creative/languages')
+
+export interface CreativeFormatOption {
+  value: string
+  label: string
+  hint: string
+  group: 'image' | 'carousel' | 'native' | 'video'
+}
+
+export const getCreativeFormats = () =>
+  apiFetch<CreativeFormatOption[]>('/creative/formats')
+
+export const listCreativePackages = (
+  tenantId: string,
+  filters?: { productName?: string; targetLanguage?: string; status?: string; briefId?: string },
+) => {
+  const q = new URLSearchParams()
+  if (filters?.productName) q.set('productName', filters.productName)
+  if (filters?.targetLanguage) q.set('targetLanguage', filters.targetLanguage)
+  if (filters?.status) q.set('status', filters.status)
+  if (filters?.briefId) q.set('briefId', filters.briefId)
+  const qs = q.toString()
+  return apiFetch<CreativePackage[]>(`/creative/${tenantId}/packages${qs ? `?${qs}` : ''}`)
+}
+
+export const generateProductCreative = (
+  tenantId: string,
+  body: {
+    product: string
+    targetLanguage?: string
+    targetSegment?: string
+    angle?: string
+    topic?: string
+    platform?: string
+    format?: string
+    audience?: string
+    hook?: string
+    keyMessage?: string
+    conversionBridge?: string
+    audienceStage?: 'cold' | 'warm' | 'hot'
+    carouselPattern?: 'auto' | 'sequential' | 'tier_reveal' | 'story_arc' | 'differentiator_stack' | 'qa' | 'catalog_grid'
+  },
+) =>
+  apiFetch<{ status: string; briefId: string; product: string }>(
+    `/creative/${tenantId}/product-creative`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+export const getCreativePackage = (tenantId: string, packageId: string) =>
+  apiFetch<CreativePackage>(`/creative/${tenantId}/packages/${packageId}`)
+
+export const updateCreativePackage = (
+  tenantId: string,
+  packageId: string,
+  body: { variantIndex?: number; imageUrl?: string; videoUrl?: string; selectedCopyIndex?: number },
+) =>
+  apiFetch<{ status: string; creativePackageId: string }>(
+    `/creative/${tenantId}/packages/${packageId}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  )
+
+export const regenerateCreativeImage = (tenantId: string, packageId: string, variantIndex?: number) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/regenerate-image`,
+    { method: 'POST', body: JSON.stringify({ variantIndex }) },
+  )
+
+export const rewriteCreativeImagePrompt = (tenantId: string, packageId: string, variantIndex?: number) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/regenerate-image-prompt`,
+    { method: 'POST', body: JSON.stringify({ variantIndex }) },
+  )
+
+export const editCreativeImage = (tenantId: string, packageId: string, instruction: string, variantIndex?: number) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/edit-image`,
+    { method: 'POST', body: JSON.stringify({ variantIndex, instruction }) },
+  )
+
+export const regenerateCreativeVideo = (tenantId: string, packageId: string) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/regenerate-video`,
+    { method: 'POST' },
+  )
+
+export const rewriteCreativeVideoPrompt = (tenantId: string, packageId: string) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/regenerate-video-prompt`,
+    { method: 'POST' },
   )
 
 export const approveCampaign = (

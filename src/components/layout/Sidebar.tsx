@@ -12,6 +12,7 @@ import {
   Settings,
   Inbox,
   Brain,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
@@ -37,6 +38,7 @@ const navItems = (
   { href: `/dashboard/${tenantId}/approvals`,          label: 'Ads to approve',  hint: 'New ads waiting for your OK',            icon: Inbox, badge: pendingCount },
   { href: `/dashboard/${tenantId}/proposed-actions`,   label: 'Suggestions',     hint: 'Changes it wants to make to your ads',   icon: Brain, badge: proposedCount },
   { href: `/dashboard/${tenantId}/campaigns`,          label: 'Your ads',        hint: 'Ads currently running on Facebook & Instagram', icon: Megaphone },
+  { href: `/dashboard/${tenantId}/creatives`,          label: 'Creatives',       hint: 'Product ad creative library',            icon: ImageIcon },
   { href: `/dashboard/${tenantId}/runs`,               label: 'Activity log',    hint: "See what the agent's been doing",        icon: Activity },
   { href: `/dashboard/${tenantId}/learnings`,          label: 'What worked',     hint: 'Your best-performing ads and audiences', icon: BookOpen },
   { href: `/dashboard/${tenantId}/intelligence`,       label: 'Report card',     hint: 'Is the agent actually getting it right?', icon: Sparkles },
