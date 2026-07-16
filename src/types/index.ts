@@ -482,6 +482,8 @@ export interface CreativeImage {
   imagePrompt?: string
   imageUrl?: string
   editInstructions?: string[]
+  aspectRatio?: string
+  resolution?: string
 }
 
 export interface CreativeVideo {
@@ -489,6 +491,8 @@ export interface CreativeVideo {
   videoThumbnailUrl?: string
   variantIndex?: number
   videoPrompt?: string
+  aspectRatio?: string
+  resolution?: string
 }
 
 /** One slide of a carousel-format creative — a "grid/story" sequence of 3-10 cards. */
@@ -518,6 +522,8 @@ export interface CreativePackage {
   imagePrompt?: string
   images?: CreativeImage[]
   video?: CreativeVideo
+  /** Additive to `video` — multiple pre-made sizes of the same video, each tagged with aspectRatio. */
+  videos?: CreativeVideo[]
   videoPrompt?: string
   /** Only populated for format='carousel' — images[] stays empty in that case. */
   carouselCards?: CarouselCard[]
@@ -532,10 +538,16 @@ export interface AdSetConfig {
   budgetPercent: number
   audienceType: 'lookalike' | 'advantage_plus' | 'retarget' | 'interest' | 'custom'
   metaAudienceId?: string
+  excludeAudienceIds?: string[]
   ageMin?: number
   ageMax?: number
+  gender?: string
   geoLocations?: string[]
+  /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — see getMetaLocales() for the verified table. */
+  locales?: number[]
+  interests?: string[]
   optimizationGoal?: string
+  creativeFormat?: 'video' | 'image' | 'both' | 'mixed' | 'carousel'
   ads?: number[]
 }
 
@@ -836,6 +848,44 @@ export interface MetaInterestOption {
   audienceSize: number
 }
 
+/**
+ * Live custom/lookalike audience from ONE specific ad account (not the
+ * saved product.metaAudiences snapshot) — Custom Audiences are account-
+ * scoped Meta objects, so this list always matches whichever account the
+ * Create Campaign form is currently targeting.
+ */
+export interface MetaCustomAudience {
+  id: string
+  name: string
+  type: 'custom' | 'lookalike'
+  subtype?: string
+  approxSizeLower?: number
+  approxSizeUpper?: number
+  deliveryStatus?: string
+}
+
+/* ─── Meta Ad Accounts (settings — account picker) ─── */
+
+export interface MetaAdAccount {
+  id: string // "act_123456"
+  name: string
+  status: 'active' | 'disabled' | 'unsettled' | 'pending_review' | 'in_grace_period' | 'pending_closure' | 'other'
+  currency: string
+  timezoneName: string
+  currentlySynced: boolean
+}
+
+export interface MetaAdAccountsResponse {
+  accounts: MetaAdAccount[]
+  total: number
+  active: number
+}
+
+export interface MetaBusiness {
+  id: string
+  name: string
+}
+
 export interface ManualAdSetInput {
   name: string
   budgetPercent: number
@@ -846,9 +896,13 @@ export interface ManualAdSetInput {
   ageMax?: number
   gender?: 'male' | 'female' | 'all'
   geoLocations?: string[]
+  /** Meta locale IDs (e.g. 84 = Marathi, 53 = Hindi) — filters delivery to users whose platform language matches. */
+  locales?: number[]
   interests?: Array<{ id: string; name: string }>
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
+  /** Which copy-variant indices this ad set ships as ads. Omit/empty = all variants (default, unchanged behavior). Every variant must be covered by at least one ad set across the campaign. */
+  ads?: number[]
 }
 
 export interface ManualCopyVariant {
@@ -868,11 +922,35 @@ export interface CreateManualCampaignDto {
   /** Exactly one of creative / creativePackageId must be set. */
   creative?: {
     copyVariants: ManualCopyVariant[]
-    images?: Array<{ variantIndex: number; imageUrl: string }>
+    /**
+     * Usually one image per variantIndex. Give the same variantIndex a
+     * second (or third) entry tagged with a different aspectRatio to
+     * supply a human creative team's pre-made sizes — launch() then routes
+     * each size to the placement it was composed for (Stories/Reels vs.
+     * Feed/everything else) instead of auto-cropping one image.
+     */
+    images?: Array<{ variantIndex: number; imageUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }>
     video?: { variantIndex: number; videoUrl: string; videoThumbnailUrl?: string } | null
+    /** Additive to `video` — multiple pre-made sizes of the same video. Set instead of `video`, not alongside it. */
+    videos?: Array<{ variantIndex: number; videoUrl: string; videoThumbnailUrl?: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }>
   }
   /** Reuse an existing, already-produced creative from the creative library. */
   creativePackageId?: string
+}
+
+/**
+ * Edit a still-pending campaign's structure/targeting/budget — everything
+ * optional, unset fields keep their current value. Only valid while status
+ * is pending_approval with no metaCampaignId yet. Creative content itself
+ * (copy text, image/video) is edited via updateCreativePackage instead.
+ */
+export interface UpdateManualCampaignConfigDto {
+  name?: string
+  accountId?: string
+  campaignType?: 'advantage_plus' | 'custom'
+  budget?: number
+  objective?: string
+  adSets?: ManualAdSetInput[]
 }
 
 export interface AuditSnapshot {

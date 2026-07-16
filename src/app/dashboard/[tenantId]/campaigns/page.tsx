@@ -30,7 +30,7 @@ import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 import { formatCurrency, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
-import { getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
+import { getIntelligenceDecisions, syncCampaigns, getMetaAccounts } from '@/lib/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
@@ -43,7 +43,7 @@ interface CampaignProposalCounts {
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
-  searchParams: Promise<{ filter?: string }>
+  searchParams: Promise<{ filter?: string; accountId?: string }>
 }
 
 type SortKey = 'topic' | 'status' | 'budget' | 'spend' | 'roas' | 'ctr' | 'conversions' | 'launchedAt'
@@ -528,7 +528,7 @@ function StatCard({
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CampaignsPage({ params, searchParams }: PageProps) {
   const { tenantId }       = use(params)
-  const { filter: initFilter } = use(searchParams)
+  const { filter: initFilter, accountId: initAccountId } = use(searchParams)
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading]     = useState(true)
@@ -543,8 +543,13 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   const [proposalsByCampaign, setProposalsByCampaign] = useState<Record<string, CampaignProposalCounts>>({})
   const [proposalsByAdset, setProposalsByAdset] = useState<Record<string, number>>({})
 
+  // Ad account id → display name, best-effort (only populated if a Meta
+  // access token is on file) — falls back to showing the raw account id.
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({})
+
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter] = useState(initFilter ?? 'active')
+  const [accountFilter, setAccountFilter] = useState(initAccountId ?? 'all')
   const [sortKey, setSortKey]       = useState<SortKey>('launchedAt')
   const [sortDir, setSortDir]       = useState<SortDir>('desc')
 
@@ -612,9 +617,24 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     }
   }
 
+  // Best-effort — the account-name lookup calls Meta live and needs an access
+  // token on file, so a failure here just means the filter falls back to
+  // showing raw account ids instead of names. Never blocks the campaign list.
+  async function fetchAccountNames() {
+    try {
+      const res = await getMetaAccounts(tenantId, true)
+      const names: Record<string, string> = {}
+      for (const acc of res.accounts) names[acc.id] = acc.name || acc.id
+      setAccountNames(names)
+    } catch {
+      // no-op — filter dropdown falls back to raw ids
+    }
+  }
+
   useEffect(() => {
     fetchCampaigns()
     fetchProposalCounts()
+    fetchAccountNames()
   }, [tenantId]) // eslint-disable-line
 
   async function handleRunAudit() {
@@ -657,9 +677,18 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     return m
   }, [campaigns])
 
+  // Ad accounts actually present in this tenant's campaigns — always
+  // selectable even if the Meta name lookup above never resolved.
+  const accountOptions = useMemo(() => {
+    const ids = new Set<string>()
+    campaigns.forEach((c) => { if (c.metaAccountId) ids.add(c.metaAccountId) })
+    return Array.from(ids).map((id) => ({ id, label: accountNames[id] ?? id }))
+  }, [campaigns, accountNames])
+
   const filtered = useMemo(() => {
     let list = campaigns
     if (statusFilter !== 'all') list = list.filter((c) => c.status === statusFilter)
+    if (accountFilter !== 'all') list = list.filter((c) => c.metaAccountId === accountFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -685,7 +714,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [campaigns, statusFilter, search, sortKey, sortDir])
+  }, [campaigns, statusFilter, accountFilter, search, sortKey, sortDir])
 
   const numericCols: { key: SortKey; label: React.ReactNode }[] = [
     { key: 'budget',      label: 'Budget'   },
@@ -850,17 +879,34 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
             })}
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-3)' }} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search campaigns…"
-              className="input pl-8 text-xs"
-              style={{ width: 200 }}
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Ad account filter */}
+            {accountOptions.length > 0 && (
+              <select
+                value={accountFilter}
+                onChange={(e) => setAccountFilter(e.target.value)}
+                className="input text-xs"
+                style={{ width: 180 }}
+              >
+                <option value="all">All ad accounts</option>
+                {accountOptions.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Search */}
+            <div className="relative">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-3)' }} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search campaigns…"
+                className="input pl-8 text-xs"
+                style={{ width: 200 }}
+              />
+            </div>
           </div>
         </div>
 

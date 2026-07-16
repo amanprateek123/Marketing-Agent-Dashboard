@@ -10,13 +10,14 @@ import {
   TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
   Image as ImageIcon, Shield, Clock, Activity, FlameKindling,
   Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink, Info,
+  Pencil,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
-import { getShadowActions, getIntelligenceDecisions, syncCampaigns } from '@/lib/api'
+import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
-import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction } from '@/types'
+import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience } from '@/types'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 
@@ -26,9 +27,11 @@ interface CreativePackage {
   copyVariants: Array<{ primaryText: string; headline?: string; cta?: string; hookStyle?: string }>
   selectedCopyIndex?: number; copySelectionReason?: string
   imagePrompt?: string; imageUrl?: string
-  images?: Array<{ variantIndex?: number; imagePrompt?: string; imageUrl?: string }>
+  images?: Array<{ variantIndex?: number; imagePrompt?: string; imageUrl?: string; aspectRatio?: string }>
   videoPrompt?: string; videoUrl?: string
-  video?: { videoUrl?: string; videoThumbnailUrl?: string; videoPrompt?: string }
+  video?: { variantIndex?: number; videoUrl?: string; videoThumbnailUrl?: string; videoPrompt?: string }
+  /** Additive to `video` — multiple videos and/or multiple sizes of the same video, each tagged by variantIndex + aspectRatio. */
+  videos?: Array<{ variantIndex?: number; videoUrl?: string; videoThumbnailUrl?: string; videoPrompt?: string; aspectRatio?: string }>
   complianceNotes?: string
 }
 
@@ -1158,6 +1161,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [accountIds, setAccountIds] = useState<string[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
+  // Bare account id -> friendly name, best-effort (needs a Meta access token
+  // on file) — the picker falls back to raw act_XXXX ids when this is empty.
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({})
+  // Custom/lookalike audiences are account-scoped Meta objects — resolve
+  // metaAudienceId -> name against whichever account is currently selected
+  // in the picker above, live, since audiences created for one account
+  // aren't valid (or even visible) under another.
+  const [audienceNames, setAudienceNames] = useState<Record<string, MetaCustomAudience>>({})
   const [pkg, setPkg] = useState<CreativePackage | null>(null)
   const [pkgLoading, setPkgLoading] = useState(false)
   const [imgState, setImgState] = useState<Record<number, string>>({})
@@ -1185,7 +1196,24 @@ export default function CampaignDetailPage({ params }: PageProps) {
       const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}`); if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const d: Campaign = await r.json(); setCampaign(d); setError(null)
       if (d.creativePackageId) { setPkgLoading(true); fetch(`${API}/creative/${tenantId}/packages/${d.creativePackageId}`).then(r => r.ok ? r.json() : null).then(p => { if (p) setPkg(p) }).catch(() => {}).finally(() => setPkgLoading(false)) }
-      if (d.status === 'pending_approval') { fetch(`${API}/companies/${tenantId}`).then(r => r.ok ? r.json() : null).then(c => { const ids: string[] = c?.meta?.accountIds || []; setAccountIds(ids); if (ids.length && !selectedAccountId) setSelectedAccountId(ids[0]) }).catch(() => {}) }
+      if (d.status === 'pending_approval') {
+        fetch(`${API}/companies/${tenantId}`).then(r => r.ok ? r.json() : null).then(c => {
+          const ids: string[] = c?.meta?.accountIds || []
+          setAccountIds(ids)
+          if (!ids.length || selectedAccountId) return
+          // Prefer the account the Create Campaign form was built for
+          // (audiences picked there are only valid on that same account) —
+          // fall back to the first configured account if it wasn't set or
+          // isn't in the tenant's current allowed list.
+          const preferred = d.metaAccountId?.replace(/^act_/, '')
+          setSelectedAccountId(preferred && ids.includes(preferred) ? preferred : ids[0])
+        }).catch(() => {})
+        getMetaAccounts(tenantId, true).then(res => {
+          const names: Record<string, string> = {}
+          for (const acc of res.accounts) names[acc.id.replace(/^act_/, '')] = acc.name || acc.id
+          setAccountNames(names)
+        }).catch(() => {})
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
   }
@@ -1239,6 +1267,20 @@ export default function CampaignDetailPage({ params }: PageProps) {
       })
       .catch(() => {})
   }, [tenantId, campaignId]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!selectedAccountId) return
+    let cancelled = false
+    getMetaAccountAudiences(tenantId, selectedAccountId.startsWith('act_') ? selectedAccountId : `act_${selectedAccountId}`)
+      .then(list => {
+        if (cancelled) return
+        const byId: Record<string, MetaCustomAudience> = {}
+        for (const a of list) byId[a.id] = a
+        setAudienceNames(byId)
+      })
+      .catch(() => { if (!cancelled) setAudienceNames({}) })
+    return () => { cancelled = true }
+  }, [tenantId, selectedAccountId])
 
   /* ─── Campaign actions ─── */
   async function doPause() { const reason = window.prompt('Reason for pausing?', 'Manual pause'); if (!reason?.trim()) return; setPauseState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) }); if (!r.ok) throw new Error(); setPauseState('success'); flash('Campaign paused', 'success'); fetchCampaign() } catch (e) { setPauseState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setPauseState('idle'), 3000) } }
@@ -1419,25 +1461,115 @@ export default function CampaignDetailPage({ params }: PageProps) {
           <div className="rounded-2xl overflow-hidden" style={{ border: `2px solid ${C.greenBorder}`, background: C.greenBg }}>
             <div className="px-6 py-4 flex items-center gap-3" style={{ background: C.greenBg, borderBottom: `1px solid ${C.greenBorder}` }}>
               <ThumbsUp size={16} style={{ color: C.green }} />
-              <div><h2 className="section-title text-[17px]" style={{ color: C.green }}>Awaiting Approval</h2><p className="text-xs mt-0.5" style={{ color: C.green }}>Review creative, then select a Meta account to launch.</p></div>
+              <div className="flex-1"><h2 className="section-title text-[17px]" style={{ color: C.green }}>Awaiting Approval</h2><p className="text-xs mt-0.5" style={{ color: C.green }}>Review creative, then select a Meta account to launch.</p></div>
+              <Link href={`/dashboard/${tenantId}/campaigns/new?edit=${campaignId}`} className="btn text-xs shrink-0" style={{ background: C.surface, border: `1px solid ${C.greenBorder}`, color: C.green }}>
+                <Pencil size={12} /> Edit
+              </Link>
             </div>
             <div className="p-6 space-y-6">
               {pkgLoading ? <div className="flex items-center gap-2 py-6" style={{ color: C.textMuted }}><Loader2 size={14} className="animate-spin" />Loading creative…</div> : pkg?.copyVariants?.length ? (
-                <div><p className="micro-label mb-3">Copy Variants</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => {
-                  const sel = i === (pkg.selectedCopyIndex ?? -1)
-                  return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
-                    <div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}</div>
-                    {v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}
-                    <p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>
-                    {v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}
+                <div className="flex gap-4 flex-wrap md:flex-nowrap">
+                  {(() => {
+                    const selIdx = pkg.selectedCopyIndex ?? 0
+                    const selectedImage = pkg.images?.find(img => img.variantIndex === selIdx) ?? pkg.images?.[0]
+                    // `videos[]` (per-variant, possibly several sizes) takes
+                    // priority over the legacy singular `video` field — most
+                    // packages only ever populate one or the other.
+                    const videoUrl = pkg.videos?.find(v => v.variantIndex === selIdx)?.videoUrl
+                      ?? (pkg.video?.variantIndex === undefined || pkg.video?.variantIndex === selIdx ? pkg.video?.videoUrl : undefined)
+                    return (
+                      <div className="shrink-0 space-y-2" style={{ width: 200 }}>
+                        <div className="aspect-square w-full rounded-xl overflow-hidden flex items-center justify-center" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}` }}>
+                          {selectedImage?.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={selectedImage.imageUrl} alt="Selected ad creative" className="w-full h-full object-cover" />
+                          ) : videoUrl ? (
+                            <video src={videoUrl} className="w-full h-full object-cover" muted playsInline />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1.5 text-center px-2" style={{ color: C.textMuted }}>
+                              <ImageIcon size={18} />
+                              <span className="text-[11px]">No image yet</span>
+                            </div>
+                          )}
+                        </div>
+                        {videoUrl && (
+                          <a href={videoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium" style={{ background: C.accentLight, border: `1px solid ${C.accentBorder}`, color: C.accent }}>
+                            <Play size={11} /> Watch video variant <ExternalLink size={10} className="ml-auto" />
+                          </a>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  <div className="min-w-0 flex-1">
+                    <p className="micro-label mb-3">Copy Variants</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => {
+                      const sel = i === (pkg.selectedCopyIndex ?? -1)
+                      const sizeCount = pkg.images?.filter(img => img.variantIndex === i).length ?? 0
+                      const variantVideos = pkg.videos?.filter(vid => vid.variantIndex === i) ?? []
+                      const legacyVideoUrl = pkg.video?.variantIndex === i || (pkg.video?.variantIndex === undefined && i === 0) ? pkg.video?.videoUrl : undefined
+                      const videoUrl = variantVideos[0]?.videoUrl ?? legacyVideoUrl
+                      const videoSizeCount = variantVideos.length || (legacyVideoUrl ? 1 : 0)
+                      return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
+                        <div className="flex gap-2 flex-wrap items-center">
+                          {sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}
+                          {v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}
+                          {sizeCount > 1 && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }} title="Multiple image sizes uploaded — Meta will serve the matching one per placement">{sizeCount} sizes</span>}
+                          {videoUrl && (
+                            <a href={videoUrl} target="_blank" rel="noreferrer" className="text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1" style={{ background: C.greenBg, color: C.green }} title={videoSizeCount > 1 ? `Video ad — ${videoSizeCount} sizes` : 'Video ad'}>
+                              <Play size={10} /> {videoSizeCount > 1 ? `Video · ${videoSizeCount} sizes` : 'Video'}
+                            </a>
+                          )}
+                        </div>
+                        {v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}
+                        <p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>
+                        {v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}
+                      </div>
+                    })}</div>
                   </div>
-                })}</div></div>
+                </div>
               ) : null}
+              {(campaign.campaignConfig?.adSets?.length ?? 0) > 0 && (
+                <div>
+                  <p className="micro-label mb-3 flex items-center gap-1.5"><Target size={11} /> Targeting ({campaign.campaignConfig!.adSets!.length} ad set{campaign.campaignConfig!.adSets!.length === 1 ? '' : 's'})</p>
+                  <div className="space-y-2">
+                    {campaign.campaignConfig!.adSets!.map((a: AdSetConfig, i: number) => {
+                      const resolved = a.metaAudienceId ? audienceNames[a.metaAudienceId] : undefined
+                      const typeLabel: Record<string, string> = { custom: 'Custom audience', retarget: 'Retarget (custom audience)', lookalike: 'Lookalike audience', interest: 'Interest-based (prospecting)', advantage_plus: 'Advantage+ (automatic)' }
+                      return (
+                        <div key={i} className="rounded-xl p-3 space-y-1.5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {campaign.campaignConfig!.adSets!.length > 1 && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{a.budgetPercent}% of budget</span>}
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}>{typeLabel[a.audienceType] ?? a.audienceType}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: C.textSecondary }}>
+                            {a.metaAudienceId && resolved && (
+                              <span><span className="micro-label mr-1">Audience</span>{resolved.name}{resolved.approxSizeLower != null && resolved.approxSizeLower >= 0 ? ` (~${resolved.approxSizeLower.toLocaleString()})` : ''}</span>
+                            )}
+                            {a.metaAudienceId && !resolved && (
+                              <span><span className="micro-label mr-1">Audience</span><span className="mono">{a.metaAudienceId}</span>{' '}<span style={{ color: C.amber }}>— not found on the selected account. It may belong to a different ad account and fail at launch.</span></span>
+                            )}
+                            {(a.ageMin != null || a.ageMax != null) && <span><span className="micro-label mr-1">Age</span>{a.ageMin ?? 18}–{a.ageMax ?? 65}</span>}
+                            {a.gender && a.gender !== 'all' && <span className="capitalize"><span className="micro-label mr-1">Gender</span>{a.gender}</span>}
+                            {a.geoLocations?.length ? <span><span className="micro-label mr-1">Geo</span>{a.geoLocations.join(', ')}</span> : null}
+                            {a.interests?.length ? <span><span className="micro-label mr-1">Interests</span>{a.interests.length} selected</span> : null}
+                            {a.optimizationGoal && <span className="capitalize"><span className="micro-label mr-1">Optimizing for</span>{a.optimizationGoal.replace(/_/g, ' ').toLowerCase()}</span>}
+                            {a.ads?.length && pkg?.copyVariants?.length && a.ads.length < pkg.copyVariants.length ? (
+                              <span><span className="micro-label mr-1">Creatives</span>{a.ads.map(vi => pkg.copyVariants[vi]?.headline || `Variant ${vi + 1}`).join(', ')}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="rounded-xl p-5" style={{ background: C.surface, border: `1px solid ${C.greenBorder}` }}>
                 <label className="micro-label block mb-2" style={{ color: C.green }}>Meta Ad Account</label>
                 {accountIds.length === 0 ? <p className="text-xs" style={{ color: C.textMuted }}>No accounts found.</p> : (
-                  <div className="relative mb-4"><select value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm appearance-none pr-10" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.text }}>{accountIds.map(id => <option key={id} value={id}>act_{id}</option>)}</select><ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.textMuted }} /></div>
+                  <div className="relative mb-4"><select value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm appearance-none pr-10" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.text }}>{accountIds.map(id => <option key={id} value={id}>{accountNames[id] ? `${accountNames[id]} (act_${id})` : `act_${id}`}</option>)}</select><ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.textMuted }} /></div>
                 )}
                 <div className="flex gap-3">
                   <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="btn flex-1" style={{ background: C.green, color: '#fff' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
@@ -1624,14 +1756,100 @@ export default function CampaignDetailPage({ params }: PageProps) {
             <Tabs.Content value="creative">
               <div className="card overflow-hidden">
                 <div className="p-6 space-y-6">
-                  {pkg?.copyVariants?.length ? <div><p className="micro-label mb-3">Copy Variants</p><div className="grid md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => { const sel = i === (pkg.selectedCopyIndex ?? -1); return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}><div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}</div>{v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}<p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>{v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}</div> })}</div></div> : null}
+                  {pkg?.copyVariants?.length ? <div><p className="micro-label mb-3">Copy Variants</p><div className="grid md:grid-cols-3 gap-3">{pkg.copyVariants.map((v, i) => { const sel = i === (pkg.selectedCopyIndex ?? -1); const vidCount = pkg.videos?.filter(vid => vid.variantIndex === i).length ?? 0; return <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: sel ? C.surface : C.surfaceMuted, border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}><div className="flex gap-2 flex-wrap">{sel && <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}>Selected</span>}{v.hookStyle && <span className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{v.hookStyle}</span>}{vidCount > 0 && <span className="text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1" style={{ background: C.greenBg, color: C.green }}><Play size={10} /> Video</span>}</div>{v.headline && <p className="text-sm font-semibold" style={{ color: C.text }}>{v.headline}</p>}<p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>{v.primaryText}</p>{v.cta && <span className="inline-block text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: C.accentLight, color: C.accent }}>CTA: {v.cta}</span>}</div> })}</div></div> : null}
                   <div>
-                    <p className="micro-label mb-3">Images</p>
-                    {pkgLoading ? <Loader2 size={14} className="animate-spin" style={{ color: C.textMuted }} /> : (pkg?.images ?? []).length > 0 ? (
-                      <div className="grid grid-cols-3 gap-4">{pkg!.images!.map((img, i) => { const sel = i === (pkg!.selectedCopyIndex ?? 0); const s = imgState[i] || 'idle'; return <div key={i} className="space-y-2"><div className="relative rounded-xl overflow-hidden" style={{ border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>{sel && <span className="absolute top-2 left-2 z-10 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.green, color: '#fff' }}>Selected</span>}{s === 'polling' && <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: 'rgba(23,20,15,0.55)' }}><Loader2 size={20} className="animate-spin" style={{ color: C.accent }} /></div>}{img.imageUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img.imageUrl} alt={`V${i+1}`} className="w-full" style={{ maxHeight: 280, objectFit: 'contain', display: 'block' }} /> : <div className="flex items-center justify-center" style={{ height: 180, background: C.surfaceMuted }}><p className="text-[10px]" style={{ color: C.textMuted }}>V{i+1}</p></div>}</div>{img.imagePrompt && <details><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-2 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{img.imagePrompt}</p></details>}<div className="flex gap-1.5"><button onClick={() => rerollImg(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={s === 'loading' ? 'animate-spin' : ''} />{s === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={() => newImgPrompt(i)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} />New prompt</button></div></div> })}</div>
-                    ) : <div className="py-10 text-center rounded-xl" style={{ background: C.surfaceMuted, border: `2px dashed ${C.border}` }}><p className="text-xs" style={{ color: C.textMuted }}>No images</p></div>}
+                    {(() => {
+                      const ASPECT_ORDER = ['9:16', '4:5', '1:1', '16:9']
+                      const byVariant = new Map<number, NonNullable<typeof pkg>['images']>()
+                      for (const img of pkg?.images ?? []) {
+                        const vi = img.variantIndex ?? 0
+                        if (!byVariant.has(vi)) byVariant.set(vi, [])
+                        byVariant.get(vi)!.push(img)
+                      }
+                      return (
+                        <>
+                          <p className="micro-label mb-3">Images ({byVariant.size})</p>
+                          {pkgLoading ? <Loader2 size={14} className="animate-spin" style={{ color: C.textMuted }} /> : byVariant.size > 0 ? (
+                            <div className="grid grid-cols-3 gap-4">
+                              {[...byVariant.entries()].map(([variantIndex, sizes]) => {
+                                const sorted = [...(sizes ?? [])].sort((a, b) => ASPECT_ORDER.indexOf(a.aspectRatio ?? '') - ASPECT_ORDER.indexOf(b.aspectRatio ?? ''))
+                                const primary = sorted[0]
+                                const sel = variantIndex === (pkg?.selectedCopyIndex ?? 0)
+                                const s = imgState[variantIndex] || 'idle'
+                                const headline = pkg?.copyVariants?.[variantIndex]?.headline ?? `Variant ${variantIndex + 1}`
+                                return (
+                                  <div key={variantIndex} className="space-y-2">
+                                    <div className="relative rounded-xl overflow-hidden" style={{ border: sel ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
+                                      {sel && <span className="absolute top-2 left-2 z-10 text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: C.green, color: '#fff' }}>Selected</span>}
+                                      {s === 'polling' && <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: 'rgba(23,20,15,0.55)' }}><Loader2 size={20} className="animate-spin" style={{ color: C.accent }} /></div>}
+                                      {primary?.imageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={primary.imageUrl} alt={`V${variantIndex + 1}`} className="w-full" style={{ maxHeight: 280, objectFit: 'contain', display: 'block' }} />
+                                      ) : (
+                                        <div className="flex items-center justify-center" style={{ height: 180, background: C.surfaceMuted }}><p className="text-[10px]" style={{ color: C.textMuted }}>V{variantIndex + 1}</p></div>
+                                      )}
+                                    </div>
+                                    <p className="text-xs font-semibold truncate" style={{ color: C.text }} title={headline}>{headline}</p>
+                                    {sorted.length > 1 && (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {sorted.map((sz, szi) => sz.imageUrl && (
+                                          <a key={szi} href={sz.imageUrl} target="_blank" rel="noreferrer" className="text-[10px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+                                            {sz.aspectRatio ?? 'default'}
+                                          </a>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {primary?.imagePrompt && <details><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-2 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{primary.imagePrompt}</p></details>}
+                                    <div className="flex gap-1.5">
+                                      <button onClick={() => rerollImg(variantIndex)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={s === 'loading' ? 'animate-spin' : ''} />{s === 'idle' ? 'Re-roll' : 'Working…'}</button>
+                                      <button onClick={() => newImgPrompt(variantIndex)} disabled={s !== 'idle'} className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} />New prompt</button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : <div className="py-10 text-center rounded-xl" style={{ background: C.surfaceMuted, border: `2px dashed ${C.border}` }}><p className="text-xs" style={{ color: C.textMuted }}>No images</p></div>}
+                        </>
+                      )
+                    })()}
                   </div>
                   {(pkg?.video?.videoUrl || pkg?.video?.videoPrompt) && <div className="pt-5" style={{ borderTop: `1px solid ${C.borderLight}` }}><div className="flex items-center justify-between mb-3"><p className="micro-label">Video</p><div className="flex gap-1.5"><button onClick={rerollVid} disabled={vidRetry !== 'idle' || vidRewrite !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><RefreshCw size={10} className={cn('inline mr-1', vidRetry !== 'idle' && 'animate-spin')} />{vidRetry === 'idle' ? 'Re-roll' : 'Working…'}</button><button onClick={rewriteVid} disabled={vidRewrite !== 'idle' || vidRetry !== 'idle'} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40" style={{ background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}` }}><Sparkles size={10} className={cn('inline mr-1', vidRewrite !== 'idle' && 'animate-spin')} />{vidRewrite === 'idle' ? 'Rewrite' : 'Working…'}</button></div></div>{pkg.video?.videoUrl ? <video controls className="rounded-xl w-full" style={{ maxHeight: 320, border: `1px solid ${C.border}` }}><source src={pkg.video.videoUrl} type="video/mp4" /></video> : <p className="text-xs font-mono p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{vidRetry === 'polling' ? 'Generating…' : pkg.video?.videoPrompt}</p>}{pkg.video?.videoPrompt && pkg.video?.videoUrl && <details className="mt-2"><summary className="text-[10px] cursor-pointer" style={{ color: C.textMuted }}>Prompt</summary><p className="text-[10px] font-mono mt-1 p-3 rounded-lg" style={{ background: C.surfaceMuted, color: C.textSecondary }}>{pkg.video.videoPrompt}</p></details>}</div>}
+                  {(pkg?.videos?.length ?? 0) > 0 && (() => {
+                    const byVariant = new Map<number, NonNullable<typeof pkg>['videos']>()
+                    for (const v of pkg!.videos!) {
+                      const vi = v.variantIndex ?? 0
+                      if (!byVariant.has(vi)) byVariant.set(vi, [])
+                      byVariant.get(vi)!.push(v)
+                    }
+                    const ASPECT_ORDER = ['9:16', '4:5', '1:1', '16:9']
+                    return (
+                      <div className="pt-5" style={{ borderTop: `1px solid ${C.borderLight}` }}>
+                        <p className="micro-label mb-3">Videos ({byVariant.size})</p>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          {[...byVariant.entries()].map(([variantIndex, sizes]) => {
+                            const sorted = [...(sizes ?? [])].sort((a, b) => ASPECT_ORDER.indexOf(a.aspectRatio ?? '') - ASPECT_ORDER.indexOf(b.aspectRatio ?? ''))
+                            const primary = sorted[0]
+                            const headline = pkg?.copyVariants?.[variantIndex]?.headline ?? `Variant ${variantIndex + 1}`
+                            return (
+                              <div key={variantIndex} className="space-y-2">
+                                {primary?.videoUrl && <video controls className="rounded-xl w-full" style={{ maxHeight: 280, border: `1px solid ${C.border}` }}><source src={primary.videoUrl} type="video/mp4" /></video>}
+                                <p className="text-xs font-semibold truncate" style={{ color: C.text }} title={headline}>{headline}</p>
+                                {sorted.length > 1 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {sorted.map((s, si) => s.videoUrl && (
+                                      <a key={si} href={s.videoUrl} target="_blank" rel="noreferrer" className="text-[10px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+                                        {s.aspectRatio ?? 'default'}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
                   {pkg?.complianceNotes && <div className="rounded-xl px-4 py-3" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}` }}><p className="text-xs font-bold mb-1" style={{ color: C.amber }}>Compliance</p><p className="text-xs leading-relaxed" style={{ color: C.amber }}>{pkg.complianceNotes}</p></div>}
                 </div>
               </div>

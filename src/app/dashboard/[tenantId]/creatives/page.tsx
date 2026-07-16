@@ -27,6 +27,27 @@ const CAROUSEL_PATTERNS: { value: string; label: string }[] = [
   { value: 'differentiator_stack', label: 'Listicle / feature breakdown' },
 ]
 
+const ASPECT_RATIOS: { value: '9:16' | '16:9' | '1:1' | '4:5'; label: string }[] = [
+  { value: '9:16', label: '9:16 (Stories/Reels)' },
+  { value: '16:9', label: '16:9 (Landscape)' },
+  { value: '1:1', label: '1:1 (Square)' },
+  { value: '4:5', label: '4:5 (Portrait)' },
+]
+
+const IMAGE_RESOLUTIONS: { value: '1K' | '2K' | '4K'; label: string }[] = [
+  { value: '1K', label: 'Standard (1K)' },
+  { value: '2K', label: 'High (2K)' },
+  { value: '4K', label: 'Ultra (4K)' },
+]
+
+const VIDEO_ASPECT_RATIOS = ASPECT_RATIOS
+
+const VIDEO_RESOLUTIONS: { value: '720p' | '1080p' | '4k'; label: string }[] = [
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+  { value: '4k', label: '4K' },
+]
+
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Producing…',
   completed: 'Ready',
@@ -62,6 +83,10 @@ export default function CreativesPage({ params }: PageProps) {
   const [angle, setAngle] = useState('')
   const [hook, setHook] = useState('')
   const [audience, setAudience] = useState('')
+  const [aspectRatio, setAspectRatio] = useState<'' | '9:16' | '16:9' | '1:1' | '4:5'>('')
+  const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K')
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5'>('9:16')
+  const [videoResolution, setVideoResolution] = useState<'720p' | '1080p' | '4k'>('1080p')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [pendingBriefId, setPendingBriefId] = useState<string | null>(null)
@@ -148,6 +173,9 @@ export default function CreativesPage({ params }: PageProps) {
         angle: angle || undefined,
         hook: hook || undefined,
         audience: audience || undefined,
+        aspectRatio: aspectRatio || undefined,
+        imageResolution,
+        ...(!selectedFormatSkipsVideo ? { videoAspectRatio, videoResolution } : {}),
       })
       setPendingBriefId(res.briefId)
       setShowForm(false)
@@ -172,6 +200,7 @@ export default function CreativesPage({ params }: PageProps) {
   }
 
   const products = company?.products ?? []
+  const selectedFormatSkipsVideo = formats.find(f => f.value === format)?.skipVideo ?? false
 
   return (
     <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
@@ -300,6 +329,38 @@ export default function CreativesPage({ params }: PageProps) {
               This format&rsquo;s copy structure is always correct, even if the multi-agent Creative Team times out and falls back to the single-agent writer. The distinct visual/video treatment only applies when the full Creative Team completes — a fallback run still uses generic image styling.
             </p>
           )}
+
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <label className="block">
+              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image aspect ratio</span>
+              <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value as typeof aspectRatio)} className="input">
+                <option value="">Use format default</option>
+                {ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image quality</span>
+              <select value={imageResolution} onChange={e => setImageResolution(e.target.value as typeof imageResolution)} className="input">
+                {IMAGE_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </label>
+            {!selectedFormatSkipsVideo && (
+              <>
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video aspect ratio</span>
+                  <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value as typeof videoAspectRatio)} className="input">
+                    {VIDEO_ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video resolution</span>
+                  <select value={videoResolution} onChange={e => setVideoResolution(e.target.value as typeof videoResolution)} className="input">
+                    {VIDEO_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </label>
+              </>
+            )}
+          </div>
 
           <button
             onClick={() => setShowAdvanced(s => !s)}

@@ -5,7 +5,8 @@ import Link from 'next/link'
 import {
   ArrowLeft, Loader2, RefreshCw, Wand2, CheckCircle2, Image as ImageIcon, Video as VideoIcon,
 } from 'lucide-react'
-import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, regenerateCreativeVideo, rewriteCreativeVideoPrompt } from '@/lib/api'
+import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia } from '@/lib/api'
+import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution } from '@/lib/api'
 import type { CreativePackage } from '@/types'
 
 interface PageProps {
@@ -13,6 +14,23 @@ interface PageProps {
 }
 
 type BusyState = null | 'loading' | 'polling'
+
+const ASPECT_RATIO_OPTIONS: { value: CreativeAspectRatio; label: string }[] = [
+  { value: '9:16', label: '9:16' },
+  { value: '16:9', label: '16:9' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:5', label: '4:5' },
+]
+const IMAGE_RESOLUTION_OPTIONS: { value: CreativeImageResolution; label: string }[] = [
+  { value: '1K', label: 'Standard (1K)' },
+  { value: '2K', label: 'High (2K)' },
+  { value: '4K', label: 'Ultra (4K)' },
+]
+const VIDEO_RESOLUTION_OPTIONS: { value: CreativeVideoResolution; label: string }[] = [
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+  { value: '4k', label: '4K' },
+]
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Producing…',
@@ -37,8 +55,14 @@ export default function CreativeDetailPage({ params }: PageProps) {
   const [videoBusy, setVideoBusy] = useState<BusyState>(null)
   const [imageUrlDrafts, setImageUrlDrafts] = useState<Record<number, string>>({})
   const [videoUrlDraft, setVideoUrlDraft] = useState('')
+  const [videoImportUrl, setVideoImportUrl] = useState('')
+  const [videoImportBusy, setVideoImportBusy] = useState(false)
   const [savingSelected, setSavingSelected] = useState(false)
   const [editDrafts, setEditDrafts] = useState<Record<number, string>>({})
+  const [imageAspectDrafts, setImageAspectDrafts] = useState<Record<number, CreativeAspectRatio>>({})
+  const [imageResolutionDrafts, setImageResolutionDrafts] = useState<Record<number, CreativeImageResolution>>({})
+  const [videoAspectDraft, setVideoAspectDraft] = useState<CreativeAspectRatio | null>(null)
+  const [videoResolutionDraft, setVideoResolutionDraft] = useState<CreativeVideoResolution | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +81,21 @@ export default function CreativeDetailPage({ params }: PageProps) {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
   }, [])
+
+  // Draft picks win once the user touches a dropdown; otherwise fall back to
+  // whatever this image/video was actually generated with, else a sane default.
+  function getImageAspect(i: number): CreativeAspectRatio {
+    return imageAspectDrafts[i] ?? (pkg?.images?.find(im => im.variantIndex === i)?.aspectRatio as CreativeAspectRatio) ?? '9:16'
+  }
+  function getImageResolution(i: number): CreativeImageResolution {
+    return imageResolutionDrafts[i] ?? (pkg?.images?.find(im => im.variantIndex === i)?.resolution as CreativeImageResolution) ?? '1K'
+  }
+  function getVideoAspect(): CreativeAspectRatio {
+    return videoAspectDraft ?? (pkg?.video?.aspectRatio as CreativeAspectRatio) ?? '9:16'
+  }
+  function getVideoResolution(): CreativeVideoResolution {
+    return videoResolutionDraft ?? (pkg?.video?.resolution as CreativeVideoResolution) ?? '1080p'
+  }
 
   // Poll until `check(pkg)` is true, or we give up after ~3 minutes — same
   // 10s-interval pattern used elsewhere in this app for creative production.
@@ -86,7 +125,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
   async function handleRegenImage(variantIndex: number) {
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
-      await regenerateCreativeImage(tenantId, packageId, variantIndex)
+      await regenerateCreativeImage(tenantId, packageId, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
       setImageBusy(b => ({ ...b, [variantIndex]: 'polling' }))
       const before = pkg?.images?.find(i => i.variantIndex === variantIndex)?.imageUrl
       pollUntil(
@@ -102,7 +141,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
   async function handleRewriteImage(variantIndex: number) {
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
-      await rewriteCreativeImagePrompt(tenantId, packageId, variantIndex)
+      await rewriteCreativeImagePrompt(tenantId, packageId, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
       setImageBusy(b => ({ ...b, [variantIndex]: 'polling' }))
       const before = pkg?.images?.find(i => i.variantIndex === variantIndex)?.imageUrl
       pollUntil(
@@ -120,7 +159,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
     if (!instruction) return
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
-      await editCreativeImage(tenantId, packageId, instruction, variantIndex)
+      await editCreativeImage(tenantId, packageId, instruction, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
       setImageBusy(b => ({ ...b, [variantIndex]: 'polling' }))
       const before = pkg?.images?.find(i => i.variantIndex === variantIndex)?.imageUrl
       pollUntil(
@@ -137,7 +176,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
   async function handleRegenVideo() {
     setVideoBusy('loading')
     try {
-      await regenerateCreativeVideo(tenantId, packageId)
+      await regenerateCreativeVideo(tenantId, packageId, { aspectRatio: getVideoAspect(), resolution: getVideoResolution() })
       setVideoBusy('polling')
       const before = pkg?.video?.videoUrl
       pollUntil(p => p.video?.videoUrl !== before, () => setVideoBusy(null))
@@ -150,7 +189,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
   async function handleRewriteVideo() {
     setVideoBusy('loading')
     try {
-      await rewriteCreativeVideoPrompt(tenantId, packageId)
+      await rewriteCreativeVideoPrompt(tenantId, packageId, { aspectRatio: getVideoAspect(), resolution: getVideoResolution() })
       setVideoBusy('polling')
       const before = pkg?.video?.videoUrl
       pollUntil(p => p.video?.videoUrl !== before, () => setVideoBusy(null))
@@ -183,6 +222,23 @@ export default function CreativeDetailPage({ params }: PageProps) {
       load()
     } catch {
       flash('Failed to update video URL')
+    }
+  }
+
+  async function handleImportVideo() {
+    const url = videoImportUrl.trim()
+    if (!url) return
+    setVideoImportBusy(true)
+    try {
+      const { url: s3Url } = await rehostCreativeMedia(tenantId, url, 'video')
+      await updateCreativePackage(tenantId, packageId, { videoUrl: s3Url })
+      flash('Video imported and re-hosted')
+      setVideoImportUrl('')
+      await load()
+    } catch {
+      flash('Failed to import video — check the URL is publicly reachable')
+    } finally {
+      setVideoImportBusy(false)
     }
   }
 
@@ -313,6 +369,26 @@ export default function CreativeDetailPage({ params }: PageProps) {
                             </div>
                           )}
                         </div>
+                        <div className="flex gap-1 mb-2">
+                          <select
+                            value={getImageAspect(i)}
+                            onChange={e => setImageAspectDrafts(d => ({ ...d, [i]: e.target.value as CreativeAspectRatio }))}
+                            disabled={!!busy}
+                            className="input"
+                            style={{ fontSize: '11px', padding: '4px 6px', flex: 1 }}
+                          >
+                            {ASPECT_RATIO_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                          <select
+                            value={getImageResolution(i)}
+                            onChange={e => setImageResolutionDrafts(d => ({ ...d, [i]: e.target.value as CreativeImageResolution }))}
+                            disabled={!!busy}
+                            className="input"
+                            style={{ fontSize: '11px', padding: '4px 6px', flex: 1 }}
+                          >
+                            {IMAGE_RESOLUTION_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                        </div>
                         <div className="flex gap-1.5 mb-2">
                           <button onClick={() => handleRegenImage(i)} disabled={!!busy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
                             <RefreshCw size={11} /> Retry
@@ -361,52 +437,90 @@ export default function CreativeDetailPage({ params }: PageProps) {
           {/* ── Video ── */}
           <section className="card p-6">
             <p className="micro-label mb-4">Video</p>
-            {!pkg.video?.videoPrompt && !pkg.video?.videoUrl ? (
-              <p className="text-[13px]" style={{ color: 'var(--ink-3)' }}>No video for this creative (image-only or meme format).</p>
-            ) : (
-              <div className="grid md:grid-cols-[240px_1fr] gap-4">
-                <div>
-                  <div className="relative rounded-lg overflow-hidden mb-2" style={{ aspectRatio: '9/16', background: 'var(--surface-warm)' }}>
-                    {pkg.video?.videoUrl ? (
-                      <video src={pkg.video.videoUrl} poster={pkg.video.videoThumbnailUrl} controls className="w-full h-full object-cover" />
-                    ) : pkg.video?.videoThumbnailUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={pkg.video.videoThumbnailUrl} alt="Video thumbnail" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center"><VideoIcon size={18} style={{ color: 'var(--ink-4)' }} /></div>
-                    )}
-                    {(videoBusy === 'loading' || videoBusy === 'polling') && (
-                      <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
-                        <Loader2 size={18} className="animate-spin" color="#fff" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button onClick={handleRegenVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
-                      <RefreshCw size={11} /> Retry
-                    </button>
-                    <button onClick={handleRewriteVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
-                      <Wand2 size={11} /> Rewrite
-                    </button>
-                  </div>
+            {!pkg.video?.videoPrompt && !pkg.video?.videoUrl && (
+              <p className="text-[13px] mb-4" style={{ color: 'var(--ink-3)' }}>No AI-generated video for this creative yet (image-only or meme format) — but you can still import an externally-made video below.</p>
+            )}
+            <div className="grid md:grid-cols-[240px_1fr] gap-4">
+              <div>
+                <div className="relative rounded-lg overflow-hidden mb-2" style={{ aspectRatio: '9/16', background: 'var(--surface-warm)' }}>
+                  {pkg.video?.videoUrl ? (
+                    <video src={pkg.video.videoUrl} poster={pkg.video.videoThumbnailUrl} controls className="w-full h-full object-cover" />
+                  ) : pkg.video?.videoThumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={pkg.video.videoThumbnailUrl} alt="Video thumbnail" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><VideoIcon size={18} style={{ color: 'var(--ink-4)' }} /></div>
+                  )}
+                  {(videoBusy === 'loading' || videoBusy === 'polling') && (
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
+                      <Loader2 size={18} className="animate-spin" color="#fff" />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Video prompt</p>
-                  <p className="text-[12px] leading-relaxed mb-3" style={{ color: 'var(--ink-2)' }}>{pkg.video?.videoPrompt || '—'}</p>
-                  <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Manual override</p>
-                  <div className="flex gap-1.5">
-                    <input
-                      value={videoUrlDraft}
-                      onChange={e => setVideoUrlDraft(e.target.value)}
-                      className="input"
-                      style={{ fontSize: '12px' }}
-                      placeholder="Paste video URL"
-                    />
-                    <button onClick={handleSaveVideoUrl} className="btn btn-ghost" style={{ fontSize: '12px' }}>Save</button>
-                  </div>
+                <div className="flex gap-1 mb-1.5">
+                  <select
+                    value={getVideoAspect()}
+                    onChange={e => setVideoAspectDraft(e.target.value as CreativeAspectRatio)}
+                    disabled={!!videoBusy}
+                    className="input"
+                    style={{ fontSize: '11px', padding: '4px 6px', flex: 1 }}
+                  >
+                    {ASPECT_RATIO_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                  <select
+                    value={getVideoResolution()}
+                    onChange={e => setVideoResolutionDraft(e.target.value as CreativeVideoResolution)}
+                    disabled={!!videoBusy}
+                    className="input"
+                    style={{ fontSize: '11px', padding: '4px 6px', flex: 1 }}
+                  >
+                    {VIDEO_RESOLUTION_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex gap-1.5">
+                  <button onClick={handleRegenVideo} disabled={!!videoBusy || !pkg.video?.videoPrompt} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
+                    <RefreshCw size={11} /> Retry
+                  </button>
+                  <button onClick={handleRewriteVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
+                    <Wand2 size={11} /> Rewrite
+                  </button>
                 </div>
               </div>
-            )}
+              <div>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Video prompt</p>
+                <p className="text-[12px] leading-relaxed mb-3" style={{ color: 'var(--ink-2)' }}>{pkg.video?.videoPrompt || '—'}</p>
+
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Import from external URL (e.g. Higgsfield)</p>
+                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Downloads the file and re-hosts it permanently on our own S3, then saves it as this creative&rsquo;s video.</p>
+                <div className="flex gap-1.5 mb-3">
+                  <input
+                    value={videoImportUrl}
+                    onChange={e => setVideoImportUrl(e.target.value)}
+                    disabled={videoImportBusy}
+                    className="input"
+                    style={{ fontSize: '12px' }}
+                    placeholder="https://... (publicly reachable video URL)"
+                  />
+                  <button onClick={handleImportVideo} disabled={videoImportBusy || !videoImportUrl.trim()} className="btn btn-primary" style={{ fontSize: '12px' }}>
+                    {videoImportBusy ? <Loader2 size={12} className="animate-spin" /> : null}
+                    {videoImportBusy ? 'Importing…' : 'Import'}
+                  </button>
+                </div>
+
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Manual override</p>
+                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Already have a permanent URL? Set it directly, no re-hosting.</p>
+                <div className="flex gap-1.5">
+                  <input
+                    value={videoUrlDraft}
+                    onChange={e => setVideoUrlDraft(e.target.value)}
+                    className="input"
+                    style={{ fontSize: '12px' }}
+                    placeholder="Paste video URL"
+                  />
+                  <button onClick={handleSaveVideoUrl} className="btn btn-ghost" style={{ fontSize: '12px' }}>Save</button>
+                </div>
+              </div>
+            </div>
           </section>
         </>
       )}

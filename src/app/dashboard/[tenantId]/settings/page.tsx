@@ -7,8 +7,8 @@ import {
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
   ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X, FlaskConical, Trophy,
 } from 'lucide-react'
-import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm } from '@/types'
-import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest } from '@/lib/api'
+import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness } from '@/types'
+import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 
@@ -469,7 +469,7 @@ interface SettingsData {
   activePromotions: Array<{ name: string; details?: string; expiresAt?: string }>
   competitors: { competitors?: string[]; competitorNotes?: string; calendarContext?: string }
   delivery: { slackWebhook?: string; whatsappNumber?: string; email?: string; notionDatabaseId?: string }
-  meta: { accessToken?: string; accountId?: string; accountIds?: string[]; pixelId?: string; pageId?: string }
+  meta: { accessToken?: string; accountId?: string; accountIds?: string[]; businessId?: string; pixelId?: string; pageId?: string }
   budget: { weeklyBudgetCap?: number; maxBudgetPerCampaign?: number; maxBudgetScalePercent?: number; primaryObjective?: string; targetROAS?: number; targetCPA?: number; pauseIfROASBelow?: number; pauseIfCTRBelow?: number; pauseIfFrequencyAbove?: number; pauseAfterDaysInLearning?: number; scaleIfROASAbove?: number }
   marketing: { platforms?: string[]; preferredFormats?: string[]; forbiddenTopics?: string[]; campaignsPerRun?: number; runFrequency?: string }
   pipeline: { mode?: string; ideasPerRun?: number; autoSwitch?: boolean; coldStartDays?: number; campaignStrategy?: string; pauseGracePeriodHours?: number; scaleRequiresApproval?: boolean }
@@ -508,7 +508,17 @@ export default function SettingsPage({ params }: PageProps) {
   const [marketing, setMarketing] = useState({ platforms: [] as string[], preferredFormats: [] as string[], forbiddenTopics: [] as string[], campaignsPerRun: '', runFrequency: '' })
   const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false, teamMode: '' as string })
   const [delivery, setDelivery] = useState({ slackWebhook: '', whatsappNumber: '', email: '', notionDatabaseId: '' })
-  const [meta, setMeta] = useState({ pixelId: '', accountIdsRaw: '' })
+  const [meta, setMeta] = useState({ pixelId: '', businessId: '' })
+  const [metaAccounts, setMetaAccounts] = useState<MetaAdAccount[]>([])
+  const [metaAccountsState, setMetaAccountsState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null)
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
+  const [metaSyncState, setMetaSyncState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [metaBusinesses, setMetaBusinesses] = useState<MetaBusiness[]>([])
+  // The token's Business Manager spans multiple unrelated brands (e.g. an
+  // agency-shared portfolio) — default to showing only the accounts already
+  // selected for this tenant instead of dumping all discovered accounts.
+  const [showAllAccounts, setShowAllAccounts] = useState(false)
   const [competitors, setCompetitors] = useState({ competitors: [] as string[], competitorNotes: '', calendarContext: '' })
 
   function showToast(msg: string, type: 'success' | 'error') { setToast({ msg, type }); setTimeout(() => setToast(null), 4000) }
@@ -554,7 +564,8 @@ export default function SettingsPage({ params }: PageProps) {
       setMarketing({ platforms: data.marketing?.platforms || [], preferredFormats: data.marketing?.preferredFormats || [], forbiddenTopics: data.marketing?.forbiddenTopics || [], campaignsPerRun: data.marketing?.campaignsPerRun != null ? String(data.marketing.campaignsPerRun) : '', runFrequency: data.marketing?.runFrequency || '' })
       setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
       setDelivery({ slackWebhook: data.delivery?.slackWebhook || '', whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
-      setMeta({ pixelId: data.meta?.pixelId || '', accountIdsRaw: (data.meta?.accountIds || []).join(', ') })
+      setMeta({ pixelId: data.meta?.pixelId || '', businessId: data.meta?.businessId || '' })
+      setSelectedAccountIds(data.meta?.accountIds?.length ? data.meta.accountIds : data.meta?.accountId ? [data.meta.accountId] : [])
       // Handle competitors as either string[] (old) or object (new)
       const comp = data.competitors
       if (Array.isArray(comp)) {
@@ -580,6 +591,60 @@ export default function SettingsPage({ params }: PageProps) {
   }
 
   useEffect(() => { fetchPromptsHistory() }, [tenantId]) // eslint-disable-line
+
+  async function fetchMetaAccounts() {
+    setMetaAccountsState('loading')
+    setMetaAccountsError(null)
+    try {
+      const res = await getMetaAccounts(tenantId, true)
+      setMetaAccounts(res.accounts)
+      setMetaAccountsState('idle')
+    } catch (err) {
+      setMetaAccounts([])
+      setMetaAccountsState('error')
+      setMetaAccountsError(err instanceof Error ? err.message : 'Failed to load ad accounts')
+    }
+  }
+
+  async function fetchMetaBusinesses() {
+    try {
+      const res = await getMetaBusinesses(tenantId)
+      setMetaBusinesses(res.businesses)
+    } catch {
+      setMetaBusinesses([])
+    }
+  }
+
+  // Only discoverable once an access token is on file — the endpoint calls
+  // Meta live and 400s without one. Re-runs when businessId changes (saving
+  // a new scope should immediately re-narrow the account list) — settings
+  // is only refetched after a save, so this fires right after that lands.
+  useEffect(() => {
+    if (settings?.meta?.accessToken) {
+      fetchMetaAccounts()
+      fetchMetaBusinesses()
+    }
+  }, [tenantId, settings?.meta?.accessToken, settings?.meta?.businessId]) // eslint-disable-line
+
+  function toggleAccountSelected(id: string) {
+    setSelectedAccountIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  }
+
+  async function handleSyncMetaAccounts() {
+    setMetaSyncState('loading')
+    try {
+      await syncMetaAccounts(tenantId, selectedAccountIds)
+      setMetaSyncState('success')
+      showToast(`Syncing campaigns for ${selectedAccountIds.length} account(s)…`, 'success')
+      fetchSettings()
+      fetchMetaAccounts()
+    } catch (err) {
+      setMetaSyncState('error')
+      showToast(err instanceof Error ? err.message : 'Sync failed', 'error')
+    } finally {
+      setTimeout(() => setMetaSyncState('idle'), 3000)
+    }
+  }
 
   async function handleRollback(version: number) {
     setRollbackState((s) => ({ ...s, [version]: 'loading' }))
@@ -847,9 +912,81 @@ export default function SettingsPage({ params }: PageProps) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mb-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div><FieldLabel>Pixel ID</FieldLabel><TextInput value={meta.pixelId} onChange={v => setMeta(s => ({ ...s, pixelId: v }))} placeholder="123456789" mono /></div>
-            <div><FieldLabel>Account IDs <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(comma-separated)</span></FieldLabel><TextInput value={meta.accountIdsRaw} onChange={v => setMeta(s => ({ ...s, accountIdsRaw: v }))} placeholder="123456, 789012" mono /></div>
+            <div>
+              <FieldLabel>Business Manager <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(scopes ad-account discovery below)</span></FieldLabel>
+              {metaBusinesses.length > 0 ? (
+                <select value={meta.businessId} onChange={e => setMeta(s => ({ ...s, businessId: e.target.value }))} className="input">
+                  <option value="">All businesses (unscoped — may show other brands&apos; accounts)</option>
+                  {metaBusinesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              ) : (
+                <TextInput value={meta.businessId} onChange={v => setMeta(s => ({ ...s, businessId: v }))} placeholder="No businesses found — paste Business ID" mono />
+              )}
+            </div>
           </div>
-          <SaveBtn state={metaState} onClick={() => { const accountIds = meta.accountIdsRaw.split(',').map(s => s.trim()).filter(Boolean); saveSection({ meta: { accountIds, pixelId: meta.pixelId.trim() || undefined } }, setMetaState) }} label="Save Meta Settings" />
+          <div className="mb-5"><SaveBtn state={metaState} onClick={() => saveSection({ meta: { pixelId: meta.pixelId.trim() || undefined, businessId: meta.businessId.trim() || undefined } }, setMetaState)} label="Save Meta Settings" /></div>
+
+          <div className="pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <FieldLabel>
+                Ad Accounts{metaAccounts.length > 0 && (
+                  <span className="font-normal normal-case ml-1" style={{ color: 'var(--ink-3)' }}>
+                    ({selectedAccountIds.length} selected{showAllAccounts ? ` · ${metaAccounts.length} discovered` : ''})
+                  </span>
+                )}
+              </FieldLabel>
+              <button onClick={fetchMetaAccounts} disabled={!metaConnected || metaAccountsState === 'loading'} className="btn btn-ghost">
+                <RefreshCw size={11} className={metaAccountsState === 'loading' ? 'animate-spin' : ''} /> Discover from Meta
+              </button>
+            </div>
+
+            {!metaConnected && (
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Add an access token above to discover ad accounts.</p>
+            )}
+            {metaAccountsState === 'error' && (
+              <p className="text-xs mb-2" style={{ color: 'var(--bad)' }}>{metaAccountsError}</p>
+            )}
+            {metaConnected && metaAccounts.length === 0 && metaAccountsState === 'idle' && (
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>No ad accounts found for this token.</p>
+            )}
+
+            {metaAccounts.length > 0 && (
+              <div className="space-y-1.5 mb-2">
+                {(showAllAccounts ? metaAccounts : metaAccounts.filter((acc) => selectedAccountIds.includes(acc.id))).map((acc) => {
+                  const checked = selectedAccountIds.includes(acc.id)
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => toggleAccountSelected(acc.id)}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors"
+                      style={{ background: checked ? 'var(--accent-bg)' : 'var(--surface-warm)', border: `1px solid ${checked ? 'var(--accent)' : 'var(--hairline)'}` }}
+                    >
+                      {checked ? <ToggleRight size={20} className="shrink-0" style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={20} className="shrink-0" style={{ color: 'var(--ink-4)' }} />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--ink)' }}>{acc.name || acc.id}</p>
+                        <p className="text-xs mono truncate" style={{ color: 'var(--ink-3)' }}>{acc.id} · {acc.currency || '—'} · {acc.timezoneName || '—'}</p>
+                      </div>
+                      <span className={acc.status === 'active' ? 'chip chip-good' : 'chip chip-neutral'}>{acc.status}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {metaAccounts.length > selectedAccountIds.length && (
+              <button type="button" onClick={() => setShowAllAccounts((s) => !s)} className="text-xs font-medium mb-4" style={{ color: 'var(--accent)' }}>
+                {showAllAccounts ? 'Show only selected accounts' : `Show all ${metaAccounts.length} discovered accounts…`}
+              </button>
+            )}
+            {!(metaAccounts.length > selectedAccountIds.length) && <div className="mb-4" />}
+
+            <SaveBtn
+              state={metaSyncState}
+              onClick={handleSyncMetaAccounts}
+              label={selectedAccountIds.length > 0 ? `Sync ${selectedAccountIds.length} Selected Account${selectedAccountIds.length === 1 ? '' : 's'}` : 'Sync All Active Accounts'}
+            />
+          </div>
         </SectionCard>
 
         {/* ── AI Prompts ── */}

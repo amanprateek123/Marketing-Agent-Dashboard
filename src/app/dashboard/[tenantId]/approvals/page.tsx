@@ -16,6 +16,10 @@ import {
   Megaphone,
   Check,
   ChevronRight,
+  Target,
+  Bot,
+  User,
+  Trash2,
 } from 'lucide-react'
 import {
   FormatBadge,
@@ -30,9 +34,12 @@ import {
   getWeeklySpend,
   approveCampaign,
   rejectCampaign,
+  deleteCampaign,
   updateCampaignBudget,
+  getMetaAccounts,
+  getMetaAccountAudiences,
 } from '@/lib/api'
-import type { Campaign, Company, CopyVariant, CreativeImage } from '@/types'
+import type { Campaign, Company, CopyVariant, CreativeImage, MetaAdAccount, MetaCustomAudience, AdSetConfig } from '@/types'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -54,6 +61,9 @@ export default function ApprovalsPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+  // Friendly account names — best-effort (needs a Meta access token on
+  // file), falls back to raw act_XXXX ids everywhere below when empty.
+  const [accountOptions, setAccountOptions] = useState<MetaAdAccount[]>([])
 
   async function load() {
     setLoading(true)
@@ -67,6 +77,7 @@ export default function ApprovalsPage({ params }: PageProps) {
       setCompany(c)
       setCampaigns(list)
       setWeeklySpend(spend.weeklySpend)
+      getMetaAccounts(tenantId, true).then((res) => setAccountOptions(res.accounts)).catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -187,6 +198,7 @@ export default function ApprovalsPage({ params }: PageProps) {
               committedWeekly={committedWeekly}
               weeklyCap={weeklyCap}
               accountIds={accountIds}
+              accountOptions={accountOptions}
               onChanged={load}
               flash={flash}
             />
@@ -242,6 +254,7 @@ function ApprovalCard({
   committedWeekly,
   weeklyCap,
   accountIds,
+  accountOptions,
   onChanged,
   flash,
 }: {
@@ -251,6 +264,7 @@ function ApprovalCard({
   committedWeekly: number
   weeklyCap: number
   accountIds: string[]
+  accountOptions: MetaAdAccount[]
   onChanged: () => void
   flash: (kind: Toast['kind'], text: string) => void
 }) {
@@ -265,8 +279,12 @@ function ApprovalCard({
   const [budgetDraft, setBudgetDraft] = useState(String(campaign.budget ?? 0))
   const [budgetState, setBudgetState] = useState<ActionState>('idle')
 
+  // Prefer the account the campaign was built for (Create Campaign form, or
+  // a prior manual pick) — audiences below are only valid on that same
+  // account. Falls back to the tenant's first configured account.
+  const preferredAccountId = campaign.metaAccountId?.replace(/^act_/, '')
   const [accountId, setAccountId] = useState<string | null>(
-    accountIds[0] ?? null,
+    (preferredAccountId && accountIds.includes(preferredAccountId) ? preferredAccountId : accountIds[0]) ?? null,
   )
   const [approveState, setApproveState] = useState<ActionState>('idle')
   const [approveOpen, setApproveOpen] = useState(false)
@@ -274,6 +292,36 @@ function ApprovalCard({
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectState, setRejectState] = useState<ActionState>('idle')
+
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteState, setDeleteState] = useState<ActionState>('idle')
+
+  function accountLabel(id: string) {
+    const bare = id.replace(/^act_/, '')
+    const found = accountOptions.find((a) => a.id === id || a.id === `act_${bare}`)
+    return found ? found.name : id
+  }
+
+  // Custom/lookalike audiences are account-scoped Meta objects — resolve
+  // metaAudienceId -> name against whichever account is currently selected,
+  // live, since audiences created for one account aren't valid (or even
+  // visible) under another.
+  const [audienceNames, setAudienceNames] = useState<Record<string, MetaCustomAudience>>({})
+  useEffect(() => {
+    if (!accountId) return
+    let cancelled = false
+    getMetaAccountAudiences(tenantId, accountId.startsWith('act_') ? accountId : `act_${accountId}`)
+      .then((list) => {
+        if (cancelled) return
+        const byId: Record<string, MetaCustomAudience> = {}
+        for (const a of list) byId[a.id] = a
+        setAudienceNames(byId)
+      })
+      .catch(() => { if (!cancelled) setAudienceNames({}) })
+    return () => { cancelled = true }
+  }, [tenantId, accountId])
+
+  const adSets: AdSetConfig[] = campaign.campaignConfig?.adSets ?? []
 
   const budget = campaign.budget ?? 0
   const projectedCommitted = committedWeekly + budget
@@ -355,6 +403,21 @@ function ApprovalCard({
     }
   }
 
+  async function doDelete() {
+    setDeleteState('loading')
+    try {
+      await deleteCampaign(tenantId, campaign._id)
+      setDeleteState('success')
+      flash('success', 'Campaign deleted')
+      setDeleteOpen(false)
+      onChanged()
+    } catch (err) {
+      setDeleteState('error')
+      flash('error', err instanceof Error ? err.message : 'Delete failed')
+      setTimeout(() => setDeleteState('idle'), 3000)
+    }
+  }
+
   return (
     <div className="card overflow-hidden">
       {/* Header strip */}
@@ -380,6 +443,10 @@ function ApprovalCard({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+          <span className="chip chip-neutral" title={campaign.source === 'agent' ? 'Built by the AI pipeline' : campaign.source === 'human' ? 'Built via Create Campaign form' : 'Source unknown'}>
+            {campaign.source === 'agent' ? <Bot size={11} /> : <User size={11} />}
+            {campaign.source === 'agent' ? 'AI-built' : campaign.source === 'human' ? 'Manual' : campaign.source || 'Unknown'}
+          </span>
           <FormatBadge format={campaign.creativeFormat} />
           <PromptsVersionBadge version={campaign.promptsVersion} />
           {campaign.runId && (
@@ -393,7 +460,7 @@ function ApprovalCard({
         </div>
       </div>
 
-      <div className="p-5 grid gap-5 lg:grid-cols-[260px,1fr]">
+      <div className="p-5 grid gap-5 lg:grid-cols-[260px_1fr]">
         {/* Left: Creative preview */}
         <div className="space-y-2">
           <div
@@ -587,8 +654,9 @@ function ApprovalCard({
             )}
           </div>
 
-          {/* Account picker if multiple */}
-          {accountIds.length > 1 && (
+          {/* Account picker — always shown, even with one account, so it's
+              always clear where this will actually launch. */}
+          {accountIds.length > 0 && (
             <div className="space-y-1">
               <p className="micro-label">
                 Launch on Meta account
@@ -598,10 +666,26 @@ function ApprovalCard({
                   <button
                     key={id}
                     onClick={() => setAccountId(id)}
+                    disabled={accountIds.length === 1}
                     className={`chip transition-all ${accountId === id ? 'chip-accent' : 'chip-neutral'}`}
+                    title={`act_${id}`}
                   >
-                    {id}
+                    {accountLabel(id)}
                   </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Targeting — who this will actually reach, per ad set. */}
+          {adSets.length > 0 && (
+            <div className="space-y-2">
+              <p className="micro-label flex items-center gap-1.5">
+                <Target size={11} /> Targeting ({adSets.length} ad set{adSets.length === 1 ? '' : 's'})
+              </p>
+              <div className="space-y-2">
+                {adSets.map((a, i) => (
+                  <AdSetTargetingRow key={i} adSet={a} showBudgetSplit={adSets.length > 1} audienceNames={audienceNames} copyVariants={variants} />
                 ))}
               </div>
             </div>
@@ -631,6 +715,16 @@ function ApprovalCard({
               No, reject this
             </button>
 
+            <button
+              onClick={() => setDeleteOpen(true)}
+              disabled={deleteState === 'loading'}
+              className="btn btn-ghost"
+              title="Remove this pending campaign entirely — different from Reject, which keeps a record with a reason"
+            >
+              {deleteState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Delete
+            </button>
+
             <Link
               href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
               className="ml-auto inline-flex items-center gap-1 font-medium hover:underline"
@@ -652,13 +746,24 @@ function ApprovalCard({
       <ConfirmModal
         open={approveOpen}
         title="Launch this ad on Meta?"
-        description={`We'll create the live ad on your ${accountId} account, spending up to ${formatCurrency(budget)} per day.${
+        description={`We'll create the live ad on your ${accountId ? accountLabel(accountId) : 'selected'} account, spending up to ${formatCurrency(budget)} per day.${
           overCap ? ' Heads up: this will push you over your weekly budget.' : ''
         }`}
         confirmLabel="Yes, launch it"
         loading={approveState === 'loading'}
         onCancel={() => setApproveOpen(false)}
         onConfirm={doApprove}
+      />
+
+      {/* Delete confirmation */}
+      <ConfirmModal
+        open={deleteOpen}
+        title="Delete this pending campaign?"
+        description="This removes the campaign and its creative entirely — it never launched to Meta, so there's nothing to clean up there. This can't be undone; use Reject instead if you want to keep a record with a reason."
+        confirmLabel="Yes, delete it"
+        loading={deleteState === 'loading'}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={doDelete}
       />
 
       {/* Reject inline drawer */}
@@ -700,6 +805,84 @@ function ApprovalCard({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Ad set targeting row ────────────────────────────────────────────────────
+function audienceTypeLabel(type: string) {
+  switch (type) {
+    case 'custom': return 'Custom audience'
+    case 'retarget': return 'Retarget (custom audience)'
+    case 'lookalike': return 'Lookalike audience'
+    case 'interest': return 'Interest-based (prospecting)'
+    case 'advantage_plus': return 'Advantage+ (automatic)'
+    default: return type
+  }
+}
+
+function AdSetTargetingRow({
+  adSet,
+  showBudgetSplit,
+  audienceNames,
+  copyVariants,
+}: {
+  adSet: AdSetConfig
+  showBudgetSplit: boolean
+  audienceNames: Record<string, MetaCustomAudience>
+  copyVariants: CopyVariant[]
+}) {
+  const resolvedAudience = adSet.metaAudienceId ? audienceNames[adSet.metaAudienceId] : undefined
+  // Only worth calling out when it's a genuine subset — every ad set gets
+  // every variant by default, so showing this for the common case is noise.
+  const isCreativeSubset = !!adSet.ads?.length && adSet.ads.length < copyVariants.length
+
+  return (
+    <div className="card-inset p-3 space-y-1.5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{adSet.name}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {showBudgetSplit && <span className="chip chip-neutral">{adSet.budgetPercent}% of budget</span>}
+          <span className="chip chip-accent">{audienceTypeLabel(adSet.audienceType)}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--ink-2)' }}>
+        {adSet.metaAudienceId && resolvedAudience && (
+          <span>
+            <span className="micro-label mr-1">Audience</span>
+            {resolvedAudience.name}
+            {resolvedAudience.approxSizeLower != null && resolvedAudience.approxSizeLower >= 0 ? ` (~${resolvedAudience.approxSizeLower.toLocaleString()})` : ''}
+          </span>
+        )}
+        {adSet.metaAudienceId && !resolvedAudience && (
+          <span>
+            <span className="micro-label mr-1">Audience</span>
+            <span className="mono">{adSet.metaAudienceId}</span>{' '}
+            <span style={{ color: 'var(--warn)' }}>— not found on the selected account. It may belong to a different ad account and fail at launch.</span>
+          </span>
+        )}
+        {(adSet.ageMin != null || adSet.ageMax != null) && (
+          <span><span className="micro-label mr-1">Age</span>{adSet.ageMin ?? 18}–{adSet.ageMax ?? 65}</span>
+        )}
+        {adSet.gender && adSet.gender !== 'all' && (
+          <span className="capitalize"><span className="micro-label mr-1">Gender</span>{adSet.gender}</span>
+        )}
+        {adSet.geoLocations?.length ? (
+          <span><span className="micro-label mr-1">Geo</span>{adSet.geoLocations.join(', ')}</span>
+        ) : null}
+        {adSet.interests?.length ? (
+          <span><span className="micro-label mr-1">Interests</span>{adSet.interests.length} selected</span>
+        ) : null}
+        {adSet.optimizationGoal && (
+          <span className="capitalize"><span className="micro-label mr-1">Optimizing for</span>{adSet.optimizationGoal.replace(/_/g, ' ').toLowerCase()}</span>
+        )}
+        {isCreativeSubset && (
+          <span>
+            <span className="micro-label mr-1">Creatives</span>
+            {adSet.ads!.map(i => copyVariants[i]?.headline || `Variant ${i + 1}`).join(', ')}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

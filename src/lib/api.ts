@@ -17,7 +17,11 @@ import type {
   TimeseriesPoint,
   MetaAudienceOption,
   MetaInterestOption,
+  MetaAdAccountsResponse,
+  MetaBusiness,
+  MetaCustomAudience,
   CreateManualCampaignDto,
+  UpdateManualCampaignConfigDto,
   CreativePackage,
 } from '@/types'
 
@@ -79,6 +83,27 @@ export const rollbackPrompts = (tenantId: string, version: number) =>
     { method: 'POST' },
   )
 
+/** Discovers ad accounts visible to the tenant's stored Meta access token. Active-only unless `all`. */
+export const getMetaAccounts = (tenantId: string, all = false) =>
+  apiFetch<MetaAdAccountsResponse>(
+    `/companies/${tenantId}/meta-accounts${all ? '?all=true' : ''}`,
+  )
+
+/**
+ * Sets which ad accounts CampaignSyncService pulls from (company.meta.accountIds)
+ * and kicks off a background sync. Omit accountIds to auto-select every
+ * currently-active Meta account.
+ */
+export const syncMetaAccounts = (tenantId: string, accountIds?: string[]) =>
+  apiFetch<{ success: boolean; status: string; accountIds: string[]; message: string }>(
+    `/companies/${tenantId}/meta-accounts/sync`,
+    { method: 'POST', body: JSON.stringify({ accountIds }) },
+  )
+
+/** Business Managers the tenant's access token belongs to — for scoping the ad-account picker to one portfolio. */
+export const getMetaBusinesses = (tenantId: string) =>
+  apiFetch<{ businesses: MetaBusiness[] }>(`/companies/${tenantId}/meta-businesses`)
+
 // ── Campaigns ──────────────────────────────────────────────────────────────
 export const getCampaigns = (tenantId: string) =>
   apiFetch<Campaign[]>(`/campaigns/${tenantId}`)
@@ -101,15 +126,36 @@ export const createManualCampaign = (tenantId: string, dto: CreateManualCampaign
     { method: 'POST', body: JSON.stringify(dto) },
   )
 
+/** Edits a still-pending campaign's name/budget/objective/ad sets in place — the alternative to delete+recreate. */
+export const updateManualCampaignConfig = (
+  tenantId: string,
+  campaignId: string,
+  dto: UpdateManualCampaignConfigDto,
+) =>
+  apiFetch<{ success: true; campaignId: string; campaignConfig: Campaign['campaignConfig'] }>(
+    `/campaigns/${tenantId}/${campaignId}/config`,
+    { method: 'PATCH', body: JSON.stringify(dto) },
+  )
+
 export const getMetaAudiences = (tenantId: string, productName?: string) =>
   apiFetch<MetaAudienceOption[]>(
     `/campaigns/${tenantId}/meta-audiences${productName ? `?productName=${encodeURIComponent(productName)}` : ''}`,
+  )
+
+/** Live custom + lookalike audiences for ONE ad account, fetched from Meta directly (not the saved per-product snapshot above). */
+export const getMetaAccountAudiences = (tenantId: string, accountId: string) =>
+  apiFetch<MetaCustomAudience[]>(
+    `/campaigns/${tenantId}/meta-account-audiences?accountId=${encodeURIComponent(accountId)}`,
   )
 
 export const searchMetaInterests = (tenantId: string, q: string) =>
   apiFetch<MetaInterestOption[]>(
     `/campaigns/${tenantId}/meta-interest-search?q=${encodeURIComponent(q)}`,
   )
+
+/** Verified Meta locale IDs for language targeting — only entries confirmed against Meta's live adlocale search, never guessed. */
+export const getMetaLocales = (tenantId: string) =>
+  apiFetch<{ name: string; id: number }[]>(`/campaigns/${tenantId}/meta-locales`)
 
 // ── Creative library ─────────────────────────────────────────────────────
 export const getCreativeLanguages = () =>
@@ -120,6 +166,7 @@ export interface CreativeFormatOption {
   label: string
   hint: string
   group: 'image' | 'carousel' | 'native' | 'video'
+  skipVideo: boolean
 }
 
 export const getCreativeFormats = () =>
@@ -138,6 +185,11 @@ export const listCreativePackages = (
   return apiFetch<CreativePackage[]>(`/creative/${tenantId}/packages${qs ? `?${qs}` : ''}`)
 }
 
+/** Shared aspect-ratio set — same 4 options for both images and video. */
+export type CreativeAspectRatio = '9:16' | '16:9' | '1:1' | '4:5'
+export type CreativeImageResolution = '1K' | '2K' | '4K'
+export type CreativeVideoResolution = '720p' | '1080p' | '4k'
+
 export const generateProductCreative = (
   tenantId: string,
   body: {
@@ -154,6 +206,10 @@ export const generateProductCreative = (
     conversionBridge?: string
     audienceStage?: 'cold' | 'warm' | 'hot'
     carouselPattern?: 'auto' | 'sequential' | 'tier_reveal' | 'story_arc' | 'differentiator_stack' | 'qa' | 'catalog_grid'
+    aspectRatio?: CreativeAspectRatio
+    imageResolution?: CreativeImageResolution
+    videoAspectRatio?: CreativeAspectRatio
+    videoResolution?: CreativeVideoResolution
   },
 ) =>
   apiFetch<{ status: string; briefId: string; product: string }>(
@@ -164,44 +220,62 @@ export const generateProductCreative = (
 export const getCreativePackage = (tenantId: string, packageId: string) =>
   apiFetch<CreativePackage>(`/creative/${tenantId}/packages/${packageId}`)
 
+/** Re-hosts an externally-generated video/image (e.g. from Higgsfield) into our own S3 bucket, returning a permanent URL to paste into imageUrl/videoUrl below. */
+export const rehostCreativeMedia = (tenantId: string, sourceUrl: string, mediaType: 'video' | 'image' = 'video') =>
+  apiFetch<{ url: string }>(
+    `/creative/${tenantId}/rehost-media`,
+    { method: 'POST', body: JSON.stringify({ sourceUrl, mediaType }) },
+  )
+
 export const updateCreativePackage = (
   tenantId: string,
   packageId: string,
-  body: { variantIndex?: number; imageUrl?: string; videoUrl?: string; selectedCopyIndex?: number },
+  body: {
+    variantIndex?: number
+    imageUrl?: string
+    /** Which size imageUrl is — tags multiple sizes onto the same variantIndex instead of overwriting. */
+    aspectRatio?: CreativeAspectRatio
+    videoUrl?: string
+    selectedCopyIndex?: number
+    copy?: { headline?: string; primaryText?: string; cta?: string; hookStyle?: string }
+  },
 ) =>
   apiFetch<{ status: string; creativePackageId: string }>(
     `/creative/${tenantId}/packages/${packageId}`,
     { method: 'PATCH', body: JSON.stringify(body) },
   )
 
-export const regenerateCreativeImage = (tenantId: string, packageId: string, variantIndex?: number) =>
+export interface ImageGenOverrides { aspectRatio?: CreativeAspectRatio; resolution?: CreativeImageResolution }
+export interface VideoGenOverrides { aspectRatio?: CreativeAspectRatio; resolution?: CreativeVideoResolution }
+
+export const regenerateCreativeImage = (tenantId: string, packageId: string, variantIndex?: number, overrides?: ImageGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-image`,
-    { method: 'POST', body: JSON.stringify({ variantIndex }) },
+    { method: 'POST', body: JSON.stringify({ variantIndex, ...overrides }) },
   )
 
-export const rewriteCreativeImagePrompt = (tenantId: string, packageId: string, variantIndex?: number) =>
+export const rewriteCreativeImagePrompt = (tenantId: string, packageId: string, variantIndex?: number, overrides?: ImageGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-image-prompt`,
-    { method: 'POST', body: JSON.stringify({ variantIndex }) },
+    { method: 'POST', body: JSON.stringify({ variantIndex, ...overrides }) },
   )
 
-export const editCreativeImage = (tenantId: string, packageId: string, instruction: string, variantIndex?: number) =>
+export const editCreativeImage = (tenantId: string, packageId: string, instruction: string, variantIndex?: number, overrides?: ImageGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/edit-image`,
-    { method: 'POST', body: JSON.stringify({ variantIndex, instruction }) },
+    { method: 'POST', body: JSON.stringify({ variantIndex, instruction, ...overrides }) },
   )
 
-export const regenerateCreativeVideo = (tenantId: string, packageId: string) =>
+export const regenerateCreativeVideo = (tenantId: string, packageId: string, overrides?: VideoGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-video`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify({ ...overrides }) },
   )
 
-export const rewriteCreativeVideoPrompt = (tenantId: string, packageId: string) =>
+export const rewriteCreativeVideoPrompt = (tenantId: string, packageId: string, overrides?: VideoGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-video-prompt`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify({ ...overrides }) },
   )
 
 export const approveCampaign = (
@@ -222,6 +296,12 @@ export const rejectCampaign = (
   apiFetch<{ ok: true }>(`/campaigns/${tenantId}/${campaignId}/reject`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
+  })
+
+/** Hard-deletes a pending_approval campaign that never launched to Meta (no metaCampaignId). Launched campaigns can't be deleted this way — use reject/pause instead. */
+export const deleteCampaign = (tenantId: string, campaignId: string) =>
+  apiFetch<{ success: true; message: string }>(`/campaigns/${tenantId}/${campaignId}`, {
+    method: 'DELETE',
   })
 
 export const updateCampaignBudget = (
