@@ -477,11 +477,19 @@ export default function ProposedActionsPage({ params }: PageProps) {
               >
                 <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--accent-strong)' }} />
                 <div className="min-w-0 flex-1">
-                  <p style={{ color: 'var(--ink-2)' }}>
-                    {c.summary?.narrative || (c.status === 'failed' ? 'This analysis run failed.' : 'Analysis is still in progress.')}
+                  <p className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+                    {c.campaignName || (c.metaCampaignId ? `Meta ID ${c.metaCampaignId}` : 'Campaign')}
+                  </p>
+                  <p className="mt-0.5" style={{ color: 'var(--ink-2)' }}>
+                    {c.summary?.narrative ||
+                      (c.status === 'failed'
+                        ? 'This analysis run failed.'
+                        : c.status === 'pending'
+                          ? 'Analysis is still in progress.'
+                          : 'Analysis completed, but no detailed reasoning was captured for this run.')}
                   </p>
                   <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-3)' }}>
-                    {c.metaCampaignId && <>Meta ID {c.metaCampaignId} · </>}
+                    {c.campaignName && c.metaCampaignId && <>Meta ID {c.metaCampaignId} · </>}
                     {c.summary
                       ? `${c.summary.decisionsProposed} suggestion${c.summary.decisionsProposed === 1 ? '' : 's'} proposed · `
                       : ''}

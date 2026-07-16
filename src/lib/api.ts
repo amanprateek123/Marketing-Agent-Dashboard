@@ -518,6 +518,7 @@ export const primeIntelligence = (
 export interface IntelligenceCycle {
   cycleId: string
   campaignId: string
+  campaignName?: string
   metaCampaignId?: string
   status: 'pending' | 'completed' | 'failed'
   startedAt: string
