@@ -510,3 +510,35 @@ export const primeIntelligence = (
     method: 'POST',
     body: JSON.stringify(body ?? {}),
   })
+
+// ── Intelligence cycles — the "why did nothing happen" trail ─────────────
+// Every cascade cycle writes one of these, whether or not it proposed a
+// decision — `summary.narrative` is the diagnosis engine's plain-English
+// read on the campaign for that run.
+export interface IntelligenceCycle {
+  cycleId: string
+  campaignId: string
+  metaCampaignId?: string
+  status: 'pending' | 'completed' | 'failed'
+  startedAt: string
+  completedAt?: string
+  summary?: {
+    narrative: string
+    leakDiagnosis: string
+    rootCauses: Array<{ hypothesis: string; confidence: number; suggestedFocus: string }>
+    decisionsProposed: number
+  }
+}
+
+export const getIntelligenceCycles = (
+  tenantId: string,
+  opts?: { campaignId?: string; limit?: number },
+) => {
+  const q = new URLSearchParams()
+  if (opts?.campaignId) q.set('campaignId', opts.campaignId)
+  if (opts?.limit) q.set('limit', String(opts.limit))
+  const qs = q.toString()
+  return apiFetch<{ cycles: IntelligenceCycle[]; count: number }>(
+    `/intelligence/${tenantId}/cycles${qs ? `?${qs}` : ''}`,
+  )
+}

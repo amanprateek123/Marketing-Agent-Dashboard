@@ -25,7 +25,9 @@ import {
   approveIntelligenceDecision,
   rejectIntelligenceDecision,
   primeIntelligence,
+  getIntelligenceCycles,
   DecisionsSummary,
+  IntelligenceCycle,
 } from '@/lib/api'
 import type {
   IntelligenceDecision,
@@ -206,6 +208,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
 
   const [decisions, setDecisions] = useState<IntelligenceDecision[]>([])
   const [summary, setSummary] = useState<DecisionsSummary | null>(null)
+  const [cycles, setCycles] = useState<IntelligenceCycle[]>([])
   const [tab, setTab] = useState<IntelligenceDecisionStatus>('shadow_review')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -225,12 +228,14 @@ export default function ProposedActionsPage({ params }: PageProps) {
     setLoading(true)
     setError(null)
     try {
-      const [list, sum] = await Promise.all([
+      const [list, sum, cyc] = await Promise.all([
         getIntelligenceDecisions(tenantId, { status: tab, limit: 200 }),
         getIntelligenceDecisionsSummary(tenantId).catch(() => null),
+        getIntelligenceCycles(tenantId, { limit: 50 }).catch(() => null),
       ])
       setDecisions(list.decisions)
       setSummary(sum)
+      setCycles(cyc?.cycles ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -309,6 +314,19 @@ export default function ProposedActionsPage({ params }: PageProps) {
   }, [decisions, filterCampaignId, filterTargetId, filterScope, isFiltered])
 
   const buckets = useMemo(() => bucketByCampaign(visibleDecisions), [visibleDecisions])
+
+  // One row per campaign — its most recent cycle only. `cycles` comes back
+  // newest-first from the API, so the first occurrence per campaignId wins.
+  const latestCycleByCampaign = useMemo(() => {
+    const seen = new Set<string>()
+    const out: IntelligenceCycle[] = []
+    for (const c of cycles) {
+      if (seen.has(c.campaignId)) continue
+      seen.add(c.campaignId)
+      out.push(c)
+    }
+    return out
+  }, [cycles])
 
   const totalAtStake = useMemo(
     () => buckets.reduce((s, b) => s + b.totalImpactINR, 0),
@@ -439,6 +457,40 @@ export default function ProposedActionsPage({ params }: PageProps) {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Latest AI analysis — the diagnosis narrative behind every cycle,
+          whether or not it produced a decision. Answers "why is there
+          nothing here" directly instead of leaving an empty list. */}
+      {latestCycleByCampaign.length > 0 && (
+        <div className="card px-5 py-4 mb-5">
+          <p className="text-[11px] uppercase tracking-wide font-semibold mb-2.5" style={{ color: 'var(--ink-3)' }}>
+            Latest AI analysis
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {latestCycleByCampaign.map((c) => (
+              <div
+                key={c.cycleId}
+                className="flex items-start gap-3 text-[13px] rounded-lg px-3 py-2.5"
+                style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
+              >
+                <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--accent-strong)' }} />
+                <div className="min-w-0 flex-1">
+                  <p style={{ color: 'var(--ink-2)' }}>
+                    {c.summary?.narrative || (c.status === 'failed' ? 'This analysis run failed.' : 'Analysis is still in progress.')}
+                  </p>
+                  <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-3)' }}>
+                    {c.metaCampaignId && <>Meta ID {c.metaCampaignId} · </>}
+                    {c.summary
+                      ? `${c.summary.decisionsProposed} suggestion${c.summary.decisionsProposed === 1 ? '' : 's'} proposed · `
+                      : ''}
+                    analyzed {relativeTime(c.completedAt ?? c.startedAt)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
