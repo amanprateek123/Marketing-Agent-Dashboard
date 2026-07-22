@@ -481,6 +481,8 @@ export interface CreativeImage {
   variantIndex?: number
   imagePrompt?: string
   imageUrl?: string
+  /** True pre-edit source — every edit-image call re-applies all editInstructions here, never to a previous edit's output. */
+  originalImageUrl?: string
   editInstructions?: string[]
   aspectRatio?: string
   resolution?: string
@@ -493,6 +495,10 @@ export interface CreativeVideo {
   videoPrompt?: string
   aspectRatio?: string
   resolution?: string
+  /** Which engine rendered this — undefined means 'heygen' (the original default). */
+  provider?: 'heygen' | 'higgsfield'
+  /** Higgsfield job_type when provider === 'higgsfield', e.g. 'seedance_2_0', 'kling3_0_turbo'. */
+  providerModel?: string
 }
 
 /** One slide of a carousel-format creative — a "grid/story" sequence of 3-10 cards. */
@@ -525,6 +531,24 @@ export interface CreativePackage {
   /** Additive to `video` — multiple pre-made sizes of the same video, each tagged with aspectRatio. */
   videos?: CreativeVideo[]
   videoPrompt?: string
+  /** Scene-by-scene Higgsfield build (plan -> generate per-scene -> merge into `video`). Empty unless that manual workflow was used. */
+  videoScenes?: Array<{
+    sceneIndex: number
+    prompt: string
+    durationSeconds: number
+    aspectRatio: string
+    resolution: string
+    videoUrl: string
+    status: 'pending' | 'completed' | 'failed'
+    providerModel: string
+    error?: string
+  }>
+  /** Total duration the scene plan was built for. */
+  videoTotalDurationSeconds?: number
+  /** Cartesia-narrated COPY of video.videoUrl — original is never overwritten. Empty until a voiceover has been added. */
+  videoWithVoiceoverUrl?: string
+  /** Devanagari narration script last used to produce videoWithVoiceoverUrl. */
+  voiceoverScript?: string
   /** Only populated for format='carousel' — images[] stays empty in that case. */
   carouselCards?: CarouselCard[]
   complianceNotes?: string

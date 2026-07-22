@@ -5,9 +5,17 @@ import Link from 'next/link'
 import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel } from '@/lib/api'
 import type { Company, CreativePackage } from '@/types'
-import type { CreativeFormatOption } from '@/lib/api'
+import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary } from '@/lib/api'
+
+// Which hookStyle group applies to a given format id — matches format-specs.ts's group assignments.
+function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
+  if (format === 'meme') return 'meme'
+  if (format === 'screenshot') return 'screenshot'
+  if (format === 'poll_quiz') return 'poll'
+  return 'dr'
+}
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -17,7 +25,7 @@ const GROUP_ORDER = ['image', 'carousel', 'native', 'video'] as const
 const GROUP_META: Record<string, { label: string; icon: typeof ImageIcon }> = {
   image: { label: 'Image', icon: ImageIcon },
   carousel: { label: 'Carousel', icon: LayoutGrid },
-  native: { label: 'High-engagement native styles', icon: Zap },
+  native: { label: 'Special formats', icon: Zap },
   video: { label: 'Video', icon: VideoIcon },
 }
 
@@ -40,13 +48,41 @@ const IMAGE_RESOLUTIONS: { value: '1K' | '2K' | '4K'; label: string }[] = [
   { value: '4K', label: 'Ultra (4K)' },
 ]
 
+// Human-friendly label + one-line explanation per hookStyle — the backend's own
+// descriptions are prompt-engineering instructions (BANNED phrases, sensory cues),
+// not end-user copy, so this is a separate display-only map.
+const HOOK_STYLE_INFO: Record<string, { label: string; blurb: string }> = {
+  pain_point: { label: 'Pain point', blurb: 'Opens with the exact problem your audience feels right now' },
+  bold_claim: { label: 'Bold claim', blurb: 'Leads with a specific, provable promise' },
+  price_shock: { label: 'Price-led', blurb: 'Leads with the price itself as the hook' },
+  social_proof: { label: 'Social proof', blurb: 'Opens with a real customer result' },
+  curiosity_gap: { label: 'Curiosity', blurb: 'Teases something the viewer needs to know' },
+  before_after: { label: 'Before / after', blurb: 'Shows a transformation over time' },
+  urgency: { label: 'Urgency', blurb: 'Leads with a real deadline or limited slots' },
+  meme_relatable: { label: 'Relatable meme', blurb: 'A shared moment your audience has lived' },
+  meme_punchline: { label: 'Punchline meme', blurb: 'Setup, then a joke that turns into the offer' },
+  meme_self_aware: { label: 'Self-aware meme', blurb: "The ad admits it's an ad, then earns the tap" },
+  chat_advice_ask: { label: 'Advice chat', blurb: 'Fake chat thread asking a friend for advice' },
+  chat_price_objection: { label: 'Price-objection chat', blurb: 'A chat that resolves the price objection' },
+  review_screenshot: { label: 'Review card', blurb: 'A star-rating review screenshot' },
+  dm_testimonial: { label: 'DM testimonial', blurb: 'A customer DM screenshot' },
+  poll_would_you_rather: { label: 'Would you rather', blurb: 'A binary-choice poll' },
+  poll_which_are_you: { label: 'Which are you', blurb: 'An identity-split poll' },
+}
+
 const VIDEO_ASPECT_RATIOS = ASPECT_RATIOS
 
-const VIDEO_RESOLUTIONS: { value: '720p' | '1080p' | '4k'; label: string }[] = [
+// Heygen only accepts 720p/1080p/4k — '480p' is Higgsfield-only (its cheapest
+// tier on several models). Never render the 480p option while Heygen is selected.
+const VIDEO_RESOLUTIONS: { value: '480p' | '720p' | '1080p' | '4k'; label: string }[] = [
+  { value: '480p', label: '480p (Higgsfield only — cheapest)' },
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' },
   { value: '4k', label: '4K' },
 ]
+
+// Cheapest-first — used to auto-pick the lowest resolution a given Higgsfield model actually supports.
+const RESOLUTION_ORDER = ['480p', '720p', '1080p', '4k'] as const
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Producing…',
@@ -67,6 +103,7 @@ export default function CreativesPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true)
   const [languages, setLanguages] = useState<string[]>([])
   const [formats, setFormats] = useState<CreativeFormatOption[]>([])
+  const [hookStyles, setHookStyles] = useState<HookStyleGroups | null>(null)
 
   // Library filters
   const [filterProduct, setFilterProduct] = useState('')
@@ -77,7 +114,12 @@ export default function CreativesPage({ params }: PageProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [product, setProduct] = useState('')
   const [language, setLanguage] = useState('')
+  // Image and video creatives need different inputs (image quality vs video
+  // duration/model settings) — this picks which set of formats/fields the
+  // rest of the form shows, before the user ever sees a format list.
+  const [creativeType, setCreativeType] = useState<'image' | 'video'>('image')
   const [format, setFormat] = useState('image')
+  const [selectedHookStyles, setSelectedHookStyles] = useState<string[]>([])
   const [carouselPattern, setCarouselPattern] = useState('auto')
   const [topic, setTopic] = useState('')
   const [angle, setAngle] = useState('')
@@ -86,7 +128,10 @@ export default function CreativesPage({ params }: PageProps) {
   const [aspectRatio, setAspectRatio] = useState<'' | '9:16' | '16:9' | '1:1' | '4:5'>('')
   const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K')
   const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5'>('9:16')
-  const [videoResolution, setVideoResolution] = useState<'720p' | '1080p' | '4k'>('1080p')
+  const [videoResolution, setVideoResolution] = useState<'480p' | '720p' | '1080p' | '4k'>('1080p')
+  const [videoProvider, setVideoProvider] = useState<'heygen' | 'higgsfield'>('heygen')
+  const [higgsfieldModels, setHiggsfieldModels] = useState<HiggsfieldModelSummary[]>([])
+  const [higgsfieldJobType, setHiggsfieldJobType] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [pendingBriefId, setPendingBriefId] = useState<string | null>(null)
@@ -108,15 +153,20 @@ export default function CreativesPage({ params }: PageProps) {
     async function load() {
       setLoading(true)
       try {
-        const [c, langs, fmts] = await Promise.all([
+        const [c, langs, fmts, hooks, hfModels] = await Promise.all([
           getCompany(tenantId),
           getCreativeLanguages().catch(() => []),
           getCreativeFormats().catch(() => []),
+          getHookStyles().catch(() => null),
+          getHiggsfieldModels().catch(() => []),
         ])
         if (cancelled) return
+        setHiggsfieldModels(hfModels)
+        if (hfModels[0]) setHiggsfieldJobType(hfModels[0].job_type)
         setCompany(c)
         setLanguages(langs)
         setFormats(fmts)
+        setHookStyles(hooks)
         const active = c.products?.find(p => p.active !== false) ?? c.products?.[0]
         if (active) setProduct(active.name)
       } catch {
@@ -130,6 +180,25 @@ export default function CreativesPage({ params }: PageProps) {
   }, [tenantId])
 
   useEffect(() => { loadPackages() }, [loadPackages])
+
+  // Auto-pick the cheapest resolution the selected engine/model actually
+  // supports, instead of always defaulting to 1080p — this is the whole
+  // point of exposing 480p at all (least-cost testing). Heygen never gets
+  // 480p (unsupported), so switching back to it falls to 720p if needed.
+  useEffect(() => {
+    if (videoProvider !== 'higgsfield' || !higgsfieldJobType) {
+      setVideoResolution(r => (r === '480p' ? '720p' : r))
+      return
+    }
+    let cancelled = false
+    getHiggsfieldModel(higgsfieldJobType).then(spec => {
+      if (cancelled) return
+      const resParam = spec.params.find(p => p.name === 'resolution')
+      const cheapest = RESOLUTION_ORDER.find(r => resParam?.enum?.includes(r))
+      if (cheapest) setVideoResolution(cheapest)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [videoProvider, higgsfieldJobType])
 
   // Poll while a generation is in flight — same 10s-interval, ~3min-cap
   // pattern already used elsewhere in this codebase for creative production
@@ -159,6 +228,21 @@ export default function CreativesPage({ params }: PageProps) {
     return () => clearInterval(poll)
   }, [pendingBriefId, tenantId, loadPackages])
 
+  // Toggling a hookStyle adds/removes it from the ordered plan — order matters
+  // (variant i is locked to selectedHookStyles[i]), and the plan's length
+  // becomes the variant count, replacing the format default.
+  // Video only ever produces ONE video regardless of variant count (the
+  // pipeline generates a single video for whichever variant the Creative Team
+  // picks as strongest) — so for video creatives this is single-select, not
+  // multi-select, to avoid implying "pick 3 angles = 3 videos".
+  function toggleHookStyle(value: string) {
+    if (creativeType === 'video') {
+      setSelectedHookStyles(prev => prev[0] === value ? [] : [value])
+      return
+    }
+    setSelectedHookStyles(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
+  }
+
   async function handleGenerate() {
     if (!product) { setError('Pick a product'); return }
     setError('')
@@ -175,7 +259,11 @@ export default function CreativesPage({ params }: PageProps) {
         audience: audience || undefined,
         aspectRatio: aspectRatio || undefined,
         imageResolution,
-        ...(!selectedFormatSkipsVideo ? { videoAspectRatio, videoResolution } : {}),
+        ...(!selectedFormatSkipsVideo ? {
+          videoAspectRatio, videoResolution, videoProvider,
+          ...(videoProvider === 'higgsfield' ? { higgsfieldJobType } : {}),
+        } : {}),
+        hookStyles: selectedHookStyles.length ? selectedHookStyles : undefined,
       })
       setPendingBriefId(res.briefId)
       setShowForm(false)
@@ -183,6 +271,7 @@ export default function CreativesPage({ params }: PageProps) {
       setAngle('')
       setHook('')
       setAudience('')
+      setSelectedHookStyles([])
       await loadPackages()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start generation')
@@ -201,6 +290,16 @@ export default function CreativesPage({ params }: PageProps) {
 
   const products = company?.products ?? []
   const selectedFormatSkipsVideo = formats.find(f => f.value === format)?.skipVideo ?? false
+  // Image formats (skipVideo=true) vs video formats (skipVideo=false) — same
+  // split the pipeline already uses internally, just surfaced as the type toggle.
+  const formatsForType = formats.filter(f => (creativeType === 'image') === f.skipVideo)
+
+  function selectCreativeType(type: 'image' | 'video') {
+    setCreativeType(type)
+    setSelectedHookStyles([])
+    const firstMatch = formats.find(f => (type === 'image') === f.skipVideo)
+    if (firstMatch) setFormat(firstMatch.value)
+  }
 
   return (
     <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
@@ -236,35 +335,74 @@ export default function CreativesPage({ params }: PageProps) {
 
       {showForm && (
         <div className="card p-6 mb-6">
-          <p className="micro-label mb-4">Generate new creative</p>
-          {error && <p className="text-[12.5px] mb-3" style={{ color: 'var(--bad)' }}>{error}</p>}
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <label className="block">
-              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Product</span>
-              <select value={product} onChange={e => setProduct(e.target.value)} className="input">
-                <option value="">Select a product…</option>
-                {products.map(p => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}{p.price ? ` — ${p.currency ?? '₹'}${p.price}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Language</span>
-              <select value={language} onChange={e => setLanguage(e.target.value)} className="input">
-                <option value="">Auto (from product settings)</option>
-                {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
-              </select>
-            </label>
+          <p className="micro-label mb-1">Generate new creative</p>
+          <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>A few quick choices, then generate.</p>
+          {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
+
+          {/* ── 1. Image or video ── */}
+          <div className="mb-5">
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>1. What are you making?</p>
+            <p className="text-[12px] mb-2" style={{ color: 'var(--ink-3)' }}>Image and video creatives need different inputs, so pick one to start.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => selectCreativeType('image')}
+                className="flex items-center gap-2 justify-center px-4 py-3 rounded-lg border font-semibold text-[13px] transition-colors"
+                style={{
+                  borderColor: creativeType === 'image' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: creativeType === 'image' ? 'var(--accent-bg)' : 'var(--surface)',
+                  color: creativeType === 'image' ? 'var(--accent-strong)' : 'var(--ink)',
+                }}
+              >
+                <ImageIcon size={15} /> Image
+              </button>
+              <button
+                type="button"
+                onClick={() => selectCreativeType('video')}
+                className="flex items-center gap-2 justify-center px-4 py-3 rounded-lg border font-semibold text-[13px] transition-colors"
+                style={{
+                  borderColor: creativeType === 'video' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: creativeType === 'video' ? 'var(--accent-bg)' : 'var(--surface)',
+                  color: creativeType === 'video' ? 'var(--accent-strong)' : 'var(--ink)',
+                }}
+              >
+                <VideoIcon size={15} /> Video
+              </button>
+            </div>
           </div>
 
-          <div className="block mb-4">
-            <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Creative category</span>
+          {/* ── 2. Product & language ── */}
+          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>2. Product</p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Which product is this for?</span>
+                <select value={product} onChange={e => setProduct(e.target.value)} className="input">
+                  <option value="">Select a product…</option>
+                  {products.map(p => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}{p.price ? ` — ${p.currency ?? '₹'}${p.price}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Language</span>
+                <select value={language} onChange={e => setLanguage(e.target.value)} className="input">
+                  <option value="">Auto (from product settings)</option>
+                  {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {/* ── 3. Format ── */}
+          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>3. Format</p>
             <div className="space-y-3">
-              {GROUP_ORDER.filter(g => formats.some(f => f.group === g)).map(group => {
+              {GROUP_ORDER.filter(g => formatsForType.some(f => f.group === g)).map(group => {
                 const { label, icon: GroupIcon } = GROUP_META[group]
-                const items = formats.filter(f => f.group === group)
+                const items = formatsForType.filter(f => f.group === group)
                 return (
                   <div key={group}>
                     <p className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--ink-4)' }}>
@@ -277,7 +415,7 @@ export default function CreativesPage({ params }: PageProps) {
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => setFormat(opt.value)}
+                            onClick={() => { setFormat(opt.value); setSelectedHookStyles([]) }}
                             className="text-left px-3 py-2.5 rounded-lg border transition-colors"
                             style={{
                               borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
@@ -319,83 +457,218 @@ export default function CreativesPage({ params }: PageProps) {
                 )
               })}
             </div>
-          </div>
-
-          {format !== 'image' && format !== 'video' && (
-            <p className="text-[11.5px] mb-4 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-              {format === 'carousel'
-                ? "Carousel creatives can be generated here, but can't be attached to a campaign yet — that's coming in a future update. "
-                : ''}
-              This format&rsquo;s copy structure is always correct, even if the multi-agent Creative Team times out and falls back to the single-agent writer. The distinct visual/video treatment only applies when the full Creative Team completes — a fallback run still uses generic image styling.
-            </p>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <label className="block">
-              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image aspect ratio</span>
-              <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value as typeof aspectRatio)} className="input">
-                <option value="">Use format default</option>
-                {ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image quality</span>
-              <select value={imageResolution} onChange={e => setImageResolution(e.target.value as typeof imageResolution)} className="input">
-                {IMAGE_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </label>
-            {!selectedFormatSkipsVideo && (
-              <>
-                <label className="block">
-                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video aspect ratio</span>
-                  <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value as typeof videoAspectRatio)} className="input">
-                    {VIDEO_ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video resolution</span>
-                  <select value={videoResolution} onChange={e => setVideoResolution(e.target.value as typeof videoResolution)} className="input">
-                    {VIDEO_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                </label>
-              </>
+            {format === 'carousel' && (
+              <p className="text-[11.5px] mt-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                Carousels can be generated here, but can&rsquo;t be attached to a campaign yet — that&rsquo;s coming in a future update.
+              </p>
             )}
           </div>
 
-          <button
-            onClick={() => setShowAdvanced(s => !s)}
-            className="inline-flex items-center gap-1 text-[12px] font-semibold mb-3"
-            style={{ color: 'var(--accent-strong)' }}
-          >
-            <ChevronDown size={12} style={{ transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-            {showAdvanced ? 'Hide' : 'Show'} advanced options
-          </button>
-
-          {showAdvanced && (
-            <div className="grid md:grid-cols-2 gap-4 mb-4">
-              <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Topic (optional)</span>
-                <input value={topic} onChange={e => setTopic(e.target.value)} className="input" placeholder="Defaults to a generic product creative" />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Angle (optional)</span>
-                <input value={angle} onChange={e => setAngle(e.target.value)} className="input" placeholder="Defaults to a direct-response angle" />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Hook (optional)</span>
-                <input value={hook} onChange={e => setHook(e.target.value)} className="input" placeholder="Defaults to the product's top differentiator" />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Audience (optional)</span>
-                <input value={audience} onChange={e => setAudience(e.target.value)} className="input" placeholder="Defaults to the product's first audience segment" />
-              </label>
+          {/* ── 4. Angles to test ── */}
+          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>4. Angles to test</p>
+            <p className="text-[12px] mb-3" style={{ color: 'var(--ink-3)' }}>
+              {creativeType === 'video'
+                ? <>Pick <b>one</b> angle for the video below — a creative only ever produces a single video, so this just decides its style. Leave unpicked to let the AI choose.</>
+                : <>Pick 1 or more angles below — <b>each one becomes a separate ad version</b>. Pick several to A/B test, or leave all unpicked to let the AI choose a good spread for you.</>}
+            </p>
+            <div className="grid sm:grid-cols-2 gap-2 mb-3">
+              {(hookStyles?.[hookStyleGroupForFormat(format)] ?? []).map(h => {
+                const info = HOOK_STYLE_INFO[h.value] ?? { label: h.value.replace(/_/g, ' '), blurb: '' }
+                const order = selectedHookStyles.indexOf(h.value)
+                const active = order >= 0
+                return (
+                  <button
+                    key={h.value}
+                    type="button"
+                    onClick={() => toggleHookStyle(h.value)}
+                    className="flex items-start gap-2.5 text-left px-3 py-2.5 rounded-lg border transition-colors"
+                    style={{
+                      borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                      background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                    }}
+                  >
+                    <span
+                      className="flex items-center justify-center shrink-0 rounded-full text-[10.5px] font-bold"
+                      style={{
+                        width: 20, height: 20, marginTop: 1,
+                        background: active ? 'var(--accent-strong)' : 'var(--surface-warm)',
+                        color: active ? 'var(--surface)' : 'var(--ink-4)',
+                        border: active ? 'none' : '1px solid var(--hairline)',
+                      }}
+                    >
+                      {active ? order + 1 : ''}
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{info.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{info.blurb}</span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-          )}
+            <p className="text-[12.5px] font-semibold px-3 py-2 rounded-lg inline-block" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
+              {creativeType === 'video'
+                ? (selectedHookStyles.length === 0
+                    ? '→ Will create 1 video, style chosen automatically.'
+                    : `→ Will create 1 video in the "${HOOK_STYLE_INFO[selectedHookStyles[0]]?.label ?? selectedHookStyles[0]}" style.`)
+                : (selectedHookStyles.length === 0
+                    ? '→ Will create the format’s default number of ad versions, each a different angle chosen automatically.'
+                    : `→ Will create exactly ${selectedHookStyles.length} ad version${selectedHookStyles.length > 1 ? 's' : ''}: ${selectedHookStyles.map(h => HOOK_STYLE_INFO[h]?.label ?? h).join(', ')}.`)}
+            </p>
+          </div>
 
-          <button onClick={handleGenerate} disabled={submitting || !product} className="btn btn-primary">
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {submitting ? 'Starting…' : 'Generate'}
-          </button>
+          {/* ── 5. Quality (type-specific) ── */}
+          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>
+              5. {creativeType === 'video' ? 'Video settings' : 'Image settings'}
+            </p>
+            {creativeType === 'video' ? (
+              <div className="space-y-4">
+                <div>
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video engine</span>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setVideoProvider('heygen')}
+                      className="px-3 py-2 rounded-lg border text-[13px] font-semibold transition-colors"
+                      style={{
+                        borderColor: videoProvider === 'heygen' ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: videoProvider === 'heygen' ? 'var(--accent-bg)' : 'var(--surface)',
+                        color: videoProvider === 'heygen' ? 'var(--accent-strong)' : 'var(--ink)',
+                      }}
+                    >
+                      Heygen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVideoProvider('higgsfield')}
+                      disabled={higgsfieldModels.length === 0}
+                      className="px-3 py-2 rounded-lg border text-[13px] font-semibold transition-colors disabled:opacity-40"
+                      style={{
+                        borderColor: videoProvider === 'higgsfield' ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: videoProvider === 'higgsfield' ? 'var(--accent-bg)' : 'var(--surface)',
+                        color: videoProvider === 'higgsfield' ? 'var(--accent-strong)' : 'var(--ink)',
+                      }}
+                    >
+                      Higgsfield
+                    </button>
+                  </div>
+                  <p className="text-[11px]" style={{ color: 'var(--ink-4)' }}>
+                    {videoProvider === 'heygen'
+                      ? 'Text-overlay conversion ad style — the default, well-tested path.'
+                      : 'Cinematic b-roll via Seedance/Kling/Veo/etc. — no text overlays baked in, real cost per generation shown at the package level after creation.'}
+                  </p>
+                  {videoProvider === 'higgsfield' && (
+                    <label className="block mt-2">
+                      <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Model</span>
+                      <select value={higgsfieldJobType} onChange={e => setHiggsfieldJobType(e.target.value)} className="input">
+                        {higgsfieldModels.map(m => <option key={m.job_type} value={m.job_type}>{m.display_name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video aspect ratio</span>
+                    <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value as typeof videoAspectRatio)} className="input">
+                      {VIDEO_ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Video resolution</span>
+                    <select value={videoResolution} onChange={e => setVideoResolution(e.target.value as typeof videoResolution)} className="input">
+                      {VIDEO_RESOLUTIONS.filter(r => videoProvider === 'higgsfield' || r.value !== '480p').map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image aspect ratio</span>
+                  <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value as typeof aspectRatio)} className="input">
+                    <option value="">Use format default</option>
+                    {ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image quality</span>
+                  <select value={imageResolution} onChange={e => setImageResolution(e.target.value as typeof imageResolution)} className="input">
+                    {IMAGE_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* ── 6. Advanced ── */}
+          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <button
+              onClick={() => setShowAdvanced(s => !s)}
+              className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide"
+              style={{ color: 'var(--accent-strong)' }}
+            >
+              <ChevronDown size={12} style={{ transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+              6. Advanced — custom brief {showAdvanced ? '(hide)' : '(optional, defaults are fine)'}
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-3 space-y-4">
+                {creativeType === 'video' && (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image aspect ratio <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}>(this format also generates per-variant images)</span></span>
+                      <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value as typeof aspectRatio)} className="input">
+                        <option value="">Use format default</option>
+                        {ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Image quality</span>
+                      <select value={imageResolution} onChange={e => setImageResolution(e.target.value as typeof imageResolution)} className="input">
+                        {IMAGE_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Topic (optional)</span>
+                    <input value={topic} onChange={e => setTopic(e.target.value)} className="input" placeholder="Defaults to a generic product creative" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Angle (optional)</span>
+                    <input value={angle} onChange={e => setAngle(e.target.value)} className="input" placeholder="Defaults to a direct-response angle" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Hook (optional)</span>
+                    <input value={hook} onChange={e => setHook(e.target.value)} className="input" placeholder="Defaults to the product's top differentiator" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Audience (optional)</span>
+                    <input value={audience} onChange={e => setAudience(e.target.value)} className="input" placeholder="Defaults to the product's first audience segment" />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Summary + Generate ── */}
+          <div className="flex items-center justify-between flex-wrap gap-3 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+              {product
+                ? creativeType === 'video'
+                  ? <>Ready: <b>1 video</b> ({videoProvider === 'higgsfield' ? higgsfieldModels.find(m => m.job_type === higgsfieldJobType)?.display_name ?? 'Higgsfield' : 'Heygen'}) for <b>{product}</b>{language ? <> in <b>{language}</b></> : ''}.</>
+                  : <>Ready: <b>{selectedHookStyles.length || 'a few'}</b> {formats.find(f => f.value === format)?.label.toLowerCase() ?? format} ad{selectedHookStyles.length === 1 ? '' : 's'} for <b>{product}</b>{language ? <> in <b>{language}</b></> : ''}.</>
+                : 'Pick a product above to get started.'}
+            </p>
+            <button onClick={handleGenerate} disabled={submitting || !product} className="btn btn-primary">
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {submitting ? 'Starting…' : 'Generate'}
+            </button>
+          </div>
         </div>
       )}
 

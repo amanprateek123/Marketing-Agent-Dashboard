@@ -188,7 +188,8 @@ export const listCreativePackages = (
 /** Shared aspect-ratio set — same 4 options for both images and video. */
 export type CreativeAspectRatio = '9:16' | '16:9' | '1:1' | '4:5'
 export type CreativeImageResolution = '1K' | '2K' | '4K'
-export type CreativeVideoResolution = '720p' | '1080p' | '4k'
+/** '480p' is Higgsfield-only — Heygen's API doesn't support it. Never offer it in a Heygen-selected UI path. */
+export type CreativeVideoResolution = '480p' | '720p' | '1080p' | '4k'
 
 export const generateProductCreative = (
   tenantId: string,
@@ -210,12 +211,36 @@ export const generateProductCreative = (
     imageResolution?: CreativeImageResolution
     videoAspectRatio?: CreativeAspectRatio
     videoResolution?: CreativeVideoResolution
+    /** Forces every copy variant (and its matching image prompt) to this one hookStyle instead of letting the Creative Team auto-pick one per variant. Ignored when hookStyles[] is also set. */
+    forcedHookStyle?: string
+    /** Explicit per-variant hookStyle plan — its length becomes the variant count, and variant i is locked to hookStyles[i]. Overrides forcedHookStyle when both are set. */
+    hookStyles?: string[]
+    /** Which engine renders the video — defaults to 'heygen' when omitted. */
+    videoProvider?: 'heygen' | 'higgsfield'
+    /** Higgsfield model job_type (e.g. 'seedance_2_0') — only used when videoProvider === 'higgsfield'. */
+    higgsfieldJobType?: string
   },
 ) =>
   apiFetch<{ status: string; briefId: string; product: string }>(
     `/creative/${tenantId}/product-creative`,
     { method: 'POST', body: JSON.stringify(body) },
   )
+
+export interface HookStyleOption {
+  value: string
+  description: string
+}
+
+export interface HookStyleGroups {
+  dr: HookStyleOption[]
+  meme: HookStyleOption[]
+  screenshot: HookStyleOption[]
+  poll: HookStyleOption[]
+}
+
+/** Every hookStyle the pipeline supports, grouped by which format they apply to — lets a picker force a specific hookStyle instead of auto-pick. */
+export const getHookStyles = () =>
+  apiFetch<HookStyleGroups>('/creative/hook-styles')
 
 export const getCreativePackage = (tenantId: string, packageId: string) =>
   apiFetch<CreativePackage>(`/creative/${tenantId}/packages/${packageId}`)
@@ -276,6 +301,107 @@ export const rewriteCreativeVideoPrompt = (tenantId: string, packageId: string, 
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-video-prompt`,
     { method: 'POST', body: JSON.stringify({ ...overrides }) },
+  )
+
+/** One accepted param on a Higgsfield model — drives the dynamic generation form (enum -> dropdown, integer -> number input, etc). */
+export interface HiggsfieldModelParam {
+  name: string
+  type: string
+  default: unknown
+  required: boolean
+  enum?: string[]
+}
+
+export interface HiggsfieldModelSummary {
+  display_name: string
+  job_type: string
+  type: string
+}
+
+export interface HiggsfieldModelSpec extends HiggsfieldModelSummary {
+  params: HiggsfieldModelParam[]
+}
+
+/** Live catalog of Higgsfield video models (Seedance, Kling, Veo, Wan, Hailuo, ...) — not hardcoded, so new models show up without a redeploy. */
+export const getHiggsfieldModels = () =>
+  apiFetch<HiggsfieldModelSummary[]>('/creative/higgsfield/models')
+
+/** Full accepted-params schema for one model — call after the user picks a model, to render its real fields. */
+export const getHiggsfieldModel = (jobType: string) =>
+  apiFetch<HiggsfieldModelSpec>(`/creative/higgsfield/models/${jobType}`)
+
+/** Dry-run credit estimate — no job created, safe to call on every param change. */
+export const estimateHiggsfieldCost = (jobType: string, params: Record<string, unknown>) =>
+  apiFetch<{ credits: number }>('/creative/higgsfield/cost', {
+    method: 'POST',
+    body: JSON.stringify({ jobType, params }),
+  })
+
+export interface VideoSceneChunk {
+  sceneIndex: number
+  prompt: string
+  durationSeconds: number
+  aspectRatio: string
+  resolution: string
+  videoUrl: string
+  status: 'pending' | 'completed' | 'failed'
+  provider: 'higgsfield'
+  providerModel: string
+  higgsfieldJobId?: string | null
+  error?: string
+}
+
+/**
+ * Plans a scene-by-scene Higgsfield video build — splits totalDurationSeconds
+ * into N scenes at jobType's verified minimum chunk size (only
+ * 'seedance_2_0'/'seedance_2_0_mini' are supported) and writes N distinct,
+ * no-text-overlay cinematic prompts forming a hook->development->payoff arc.
+ * Synchronous (LLM-only, nothing generated yet) — review/edit before spending.
+ */
+export const planHiggsfieldScenes = (
+  tenantId: string,
+  packageId: string,
+  body: { topic: string; jobType: string; totalDurationSeconds: number; aspectRatio?: string; resolution?: string },
+) =>
+  apiFetch<{ videoScenes: VideoSceneChunk[] }>(
+    `/creative/${tenantId}/packages/${packageId}/higgsfield-scenes/plan`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+/** Generates every pending/failed scene, sequentially. Fire-and-forget — poll GET packages/:id and watch videoScenes[].status. */
+export const generateHiggsfieldScenes = (tenantId: string, packageId: string) =>
+  apiFetch<{ status: string; sceneCount: number }>(
+    `/creative/${tenantId}/packages/${packageId}/higgsfield-scenes/generate`,
+    { method: 'POST' },
+  )
+
+/** Regenerates one scene in place — the point of chunking is not having to redo the whole video for one bad clip. */
+export const regenerateHiggsfieldScene = (tenantId: string, packageId: string, sceneIndex: number, prompt?: string) =>
+  apiFetch<{ status: string; sceneIndex: number }>(
+    `/creative/${tenantId}/packages/${packageId}/higgsfield-scenes/${sceneIndex}/regenerate`,
+    { method: 'POST', body: JSON.stringify({ prompt }) },
+  )
+
+/** Merges every completed scene into one final video via ffmpeg and sets it as the package's video. Requires all scenes completed first. */
+export const mergeHiggsfieldScenes = (tenantId: string, packageId: string) =>
+  apiFetch<{ status: string }>(
+    `/creative/${tenantId}/packages/${packageId}/higgsfield-scenes/merge`,
+    { method: 'POST' },
+  )
+
+/**
+ * Adds a Cartesia-narrated Hindi/English voiceover to a COPY of the
+ * package's video (the original video.videoUrl is never overwritten).
+ * Pass `script` to skip LLM generation and use it verbatim. keepBackgroundAudio
+ * (default true) ducks the video's own generated ambient audio under the
+ * narration instead of discarding it. Fire-and-forget — poll GET packages/:id
+ * and watch videoWithVoiceoverUrl populate. Does not call Higgsfield's
+ * generation API.
+ */
+export const addHiggsfieldVoiceover = (tenantId: string, packageId: string, script?: string, keepBackgroundAudio?: boolean) =>
+  apiFetch<{ status: string; script: string }>(
+    `/creative/${tenantId}/packages/${packageId}/higgsfield-scenes/add-voiceover`,
+    { method: 'POST', body: JSON.stringify({ script, keepBackgroundAudio }) },
   )
 
 export const approveCampaign = (
