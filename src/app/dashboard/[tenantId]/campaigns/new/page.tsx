@@ -8,7 +8,8 @@ import {
   Target, Zap, Info, Image as ImageIcon, Video as VideoIcon, X,
   ChevronUp, ChevronDown,
 } from 'lucide-react'
-import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAccountAudiences, getMetaLocales, searchMetaInterests, createManualCampaign, updateManualCampaignConfig, listCreativePackages } from '@/lib/api'
+import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAccountAudiences, getMetaLocales, searchMetaInterests, createManualCampaign, updateManualCampaignConfig, listCreativePackages, listGalleryTopics, listGallerySheets, listGalleryAssets } from '@/lib/api'
+import type { GalleryTopicSummary, GallerySheetSummary } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CampaignFieldGuide } from '@/components/campaign/CampaignFieldGuide'
 import type {
@@ -24,6 +25,16 @@ function emptyAdSet(name = ''): ManualAdSetInput {
 }
 function emptyCopy(): ManualCopyVariant {
   return { primaryText: '', headline: '', cta: 'LEARN_MORE' }
+}
+const MANUAL_ASPECT_RATIOS = ['9:16', '1:1', '4:5', '16:9'] as const
+type ManualAspectRatio = typeof MANUAL_ASPECT_RATIOS[number]
+// Gallery assets carry a loose `aspectRatio?: string` (whatever the original
+// generation/upload was tagged with); the manual-campaign DTO only accepts
+// this specific 4-value union — narrow defensively rather than assert, since
+// an unrecognized tag should just fall back to "no explicit size" (the
+// untagged/primary size) instead of a runtime type violation.
+function toManualAspectRatio(ar?: string): ManualAspectRatio | undefined {
+  return (MANUAL_ASPECT_RATIOS as readonly string[]).includes(ar ?? '') ? (ar as ManualAspectRatio) : undefined
 }
 
 export default function CreateCampaignPage({ params }: { params: Promise<{ tenantId: string }> }) {
@@ -73,12 +84,20 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   // placement asset customization instead of one auto-cropped video.
   const [extraVideos, setExtraVideos] = useState<Array<{ aspectRatio: '9:16' | '1:1' | '4:5' | '16:9'; videoUrl: string; videoThumbnailUrl: string }>>([])
 
-  // Creative source — paste URLs by hand (default, unchanged behavior) or
-  // pick an already-produced creative from the library instead.
-  const [creativeSource, setCreativeSource] = useState<'paste' | 'library'>('paste')
+  // Creative source — paste URLs by hand (default, unchanged behavior), pick
+  // an already-produced creative from the flat library list (single
+  // creativePackageId), or browse the Gallery's Topic -> Sheet organization
+  // instead — that one selects a whole SET of assets (possibly from several
+  // different source packages) which get bundled into a fresh one-off
+  // `creative` DTO at submit time, exactly like paste mode does, just
+  // auto-filled from the Gallery selection instead of typed by hand.
+  const [creativeSource, setCreativeSource] = useState<'paste' | 'library' | 'gallery'>('paste')
   const [libraryPackages, setLibraryPackages] = useState<CreativePackage[]>([])
   const [libraryLoading, setLibraryLoading] = useState(false)
   const [selectedPackageId, setSelectedPackageId] = useState('')
+  const [selectedGalleryTopicId, setSelectedGalleryTopicId] = useState('')
+  const [selectedGallerySheetId, setSelectedGallerySheetId] = useState('')
+  const [gallerySelection, setGallerySelection] = useState<GalleryPickedAsset[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -301,6 +320,29 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
         adSets: campaignType === 'advantage_plus' ? [adSets[0]] : adSets,
         ...(creativeSource === 'library'
           ? { creativePackageId: selectedPackageId }
+          : creativeSource === 'gallery'
+          ? {
+              creative: {
+                copyVariants: gallerySelection.map(a => ({
+                  headline: a.headline ?? '',
+                  primaryText: a.primaryText ?? '',
+                  cta: a.cta || 'LEARN_MORE',
+                  hookStyle: a.hookStyle,
+                })),
+                images: gallerySelection
+                  .map((a, i) => (a.assetType === 'image' ? { variantIndex: i, imageUrl: a.assetUrl, aspectRatio: toManualAspectRatio(a.aspectRatio) } : null))
+                  .filter(Boolean) as { variantIndex: number; imageUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }[],
+                // Always the PLURAL field, never singular `video` — videos[]
+                // supports several distinct variantIndex values (confirmed
+                // against campaign-creator.service.ts's videoSourcesByVariant
+                // grouping: different variantIndex = fully separate ads), so
+                // every selected video survives as its own variant, not just
+                // the first one.
+                videos: gallerySelection
+                  .map((a, i) => (a.assetType === 'video' ? { variantIndex: i, videoUrl: a.assetUrl, videoThumbnailUrl: '', aspectRatio: toManualAspectRatio(a.aspectRatio) } : null))
+                  .filter(Boolean) as { variantIndex: number; videoUrl: string; videoThumbnailUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }[],
+              },
+            }
           : {
               creative: {
                 copyVariants,
@@ -324,7 +366,9 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
     }
   }
 
-  const librarySelectionValid = isEditMode || creativeSource === 'paste' || !!selectedPackageId
+  const librarySelectionValid = isEditMode || creativeSource === 'paste'
+    || (creativeSource === 'library' && !!selectedPackageId)
+    || (creativeSource === 'gallery' && gallerySelection.length > 0)
 
   if (loading || editLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
 
@@ -486,6 +530,13 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 >
                   Pick from library
                 </button>
+                <button
+                  onClick={() => setCreativeSource('gallery')}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md"
+                  style={creativeSource === 'gallery' ? { background: 'var(--paper)', color: 'var(--ink)', boxShadow: 'var(--shadow-raised)' } : { color: 'var(--ink-3)' }}
+                >
+                  Browse by Gallery topic
+                </button>
               </div>
             </div>
 
@@ -496,6 +547,26 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 packages={libraryPackages}
                 selectedId={selectedPackageId}
                 onSelect={setSelectedPackageId}
+              />
+            ) : creativeSource === 'gallery' ? (
+              <GalleryPicker
+                tenantId={tenantId}
+                selectedTopicId={selectedGalleryTopicId}
+                onSelectTopic={setSelectedGalleryTopicId}
+                selectedSheetId={selectedGallerySheetId}
+                onSelectSheet={setSelectedGallerySheetId}
+                onSelectionChange={selection => {
+                  setGallerySelection(selection)
+                  // Mirrors the selection into the shared copyVariants form
+                  // state so the existing per-ad-set "Creatives for this ad
+                  // set" checkbox UI (keyed off copyVariants) works for
+                  // gallery-sourced creatives too, with no new UI needed.
+                  setCopyVariants(
+                    selection.length > 0
+                      ? selection.map(a => ({ headline: a.headline ?? '', primaryText: a.primaryText ?? '', cta: a.cta || 'LEARN_MORE', hookStyle: a.hookStyle }))
+                      : [emptyCopy()],
+                  )
+                }}
               />
             ) : (
             <>
@@ -1158,6 +1229,248 @@ function LibraryPicker({
           </button>
         )
       })}
+    </div>
+  )
+}
+
+interface GalleryPickedAsset {
+  key: string
+  packageId: string
+  assetType: 'image' | 'video'
+  assetUrl: string
+  aspectRatio?: string
+  headline?: string
+  primaryText?: string
+  cta?: string
+  hookStyle?: string
+  targetLanguage?: string
+}
+
+/**
+ * Attaches a Gallery SHEET's worth of assets to the campaign at once —
+ * possibly spanning several different source packages — rather than one
+ * package via LibraryPicker. Every asset in the opened sheet is selected by
+ * default (matches "use all the ads in this sheet" with zero clicks); each
+ * card can be unchecked individually. The selection is bundled into a fresh
+ * one-off `creative` DTO at submit time (same shape "paste URLs manually"
+ * builds), reindexed 0..N-1 — one copyVariant per selected asset, images and
+ * videos routed to their matching array by assetType. Multiple videos are
+ * fully supported (each gets its own variantIndex in creative.videos[],
+ * confirmed against campaign-creator.service.ts's videoSourcesByVariant
+ * grouping — different variantIndex values become fully separate ads), so
+ * nothing gets silently dropped no matter how many videos the sheet has.
+ */
+function GalleryPicker({
+  tenantId, selectedTopicId, onSelectTopic, selectedSheetId, onSelectSheet, onSelectionChange,
+}: {
+  tenantId: string
+  selectedTopicId: string
+  onSelectTopic: (id: string) => void
+  selectedSheetId: string
+  onSelectSheet: (id: string) => void
+  onSelectionChange: (selection: GalleryPickedAsset[]) => void
+}) {
+  const [topics, setTopics] = useState<GalleryTopicSummary[]>([])
+  const [topicsLoading, setTopicsLoading] = useState(true)
+  const [sheets, setSheets] = useState<GallerySheetSummary[]>([])
+  const [sheetsLoading, setSheetsLoading] = useState(false)
+  const [assets, setAssets] = useState<GalleryPickedAsset[]>([])
+  const [assetsLoading, setAssetsLoading] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    let cancelled = false
+    listGalleryTopics(tenantId).then(list => {
+      if (cancelled) return
+      setTopics(list)
+      if (!selectedTopicId && list[0]) onSelectTopic(list[0]._id)
+    }).finally(() => { if (!cancelled) setTopicsLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId])
+
+  useEffect(() => {
+    if (!selectedTopicId) { setSheets([]); return }
+    let cancelled = false
+    setSheetsLoading(true)
+    listGallerySheets(tenantId, selectedTopicId).then(list => {
+      if (cancelled) return
+      setSheets(list)
+      if (!list.some(s => s._id === selectedSheetId)) onSelectSheet(list[0]?._id ?? '')
+    }).finally(() => { if (!cancelled) setSheetsLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, selectedTopicId])
+
+  useEffect(() => {
+    if (!selectedSheetId) { setAssets([]); setSelectedKeys(new Set()); return }
+    let cancelled = false
+    setAssetsLoading(true)
+    listGalleryAssets(tenantId, selectedSheetId).then(async rawAssets => {
+      if (cancelled) return
+      const pickable = rawAssets.filter((a): a is typeof a & { assetType: 'image' | 'video' } => a.assetType !== 'carousel_card')
+      const uniquePackageIds = [...new Set(pickable.map(a => a.sourcePackageId))]
+      const packages = await Promise.all(uniquePackageIds.map(id => getCreativePackage(tenantId, id).catch(() => null)))
+      if (cancelled) return
+      const packageById = new Map(packages.filter(Boolean).map(p => [p!._id, p!]))
+      const resolved = pickable.map(a => {
+        const pkg = packageById.get(a.sourcePackageId)
+        const variant = pkg?.copyVariants?.[a.variantIndex] ?? pkg?.copyVariants?.[pkg?.selectedCopyIndex ?? 0]
+        return {
+          key: a._id,
+          packageId: a.sourcePackageId,
+          assetType: a.assetType,
+          assetUrl: a.assetUrl,
+          aspectRatio: a.aspectRatio,
+          headline: variant?.headline,
+          primaryText: variant?.primaryText,
+          cta: variant?.cta,
+          hookStyle: variant?.hookStyle,
+          targetLanguage: pkg?.targetLanguage,
+        }
+      })
+      setAssets(resolved)
+      // Every asset in a freshly-opened sheet starts selected — "use all the
+      // ads in this sheet" with zero clicks; uncheck individually to exclude one.
+      setSelectedKeys(new Set(resolved.map(a => a.key)))
+    }).finally(() => { if (!cancelled) setAssetsLoading(false) })
+    return () => { cancelled = true }
+  }, [tenantId, selectedSheetId])
+
+  useEffect(() => {
+    onSelectionChange(assets.filter(a => selectedKeys.has(a.key)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets, selectedKeys])
+
+  function toggleAsset(key: string) {
+    setSelectedKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  if (topicsLoading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+      </div>
+    )
+  }
+
+  if (topics.length === 0) {
+    return (
+      <div className="rounded-xl px-4 py-8 text-center" style={{ background: 'var(--surface-warm)', border: '1px dashed var(--hairline)' }}>
+        <p className="text-[13px]" style={{ color: 'var(--ink-3)' }}>No Gallery topics yet.</p>
+        <Link
+          href={`/dashboard/${tenantId}/gallery`}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold mt-2"
+          style={{ color: 'var(--accent-strong)' }}
+        >
+          Organize creatives in the Gallery →
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Topics */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {topics.map(topic => {
+          const active = selectedTopicId === topic._id
+          return (
+            <button
+              key={topic._id}
+              onClick={() => onSelectTopic(topic._id)}
+              className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg"
+              style={active ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)', border: '1px solid var(--accent-border)' } : { color: 'var(--ink-3)', border: '1px solid var(--hairline-light)' }}
+            >
+              {topic.name}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Sheets — underline tabs, same convention as gallery/[topicId]/page.tsx */}
+      {sheetsLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        </div>
+      ) : sheets.length > 0 && (
+        <div className="flex gap-1 mb-4 flex-wrap items-center" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
+          {sheets.map(sheet => {
+            const active = selectedSheetId === sheet._id
+            return (
+              <button
+                key={sheet._id}
+                onClick={() => onSelectSheet(sheet._id)}
+                className="px-3 py-2 text-[12px] font-semibold -mb-px"
+                style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
+              >
+                {sheet.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Assets */}
+      {assetsLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        </div>
+      ) : assets.length === 0 ? (
+        <div className="rounded-xl px-4 py-8 text-center" style={{ background: 'var(--surface-warm)', border: '1px dashed var(--hairline)' }}>
+          <p className="text-[13px]" style={{ color: 'var(--ink-3)' }}>No assets in this sheet yet.</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-[11.5px] font-medium mb-2" style={{ color: 'var(--ink-3)' }}>
+            {selectedKeys.size} of {assets.length} selected — every asset in this sheet ships as its own ad by default, uncheck any you don&rsquo;t want.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {assets.map(asset => {
+              const isSelected = selectedKeys.has(asset.key)
+              return (
+                <button
+                  key={asset.key}
+                  onClick={() => toggleAsset(asset.key)}
+                  className="text-left rounded-xl overflow-hidden transition-all"
+                  style={isSelected ? { border: '2px solid var(--accent)' } : { border: '2px solid var(--hairline-light)', opacity: 0.6 }}
+                >
+                  <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                    {asset.assetType === 'video' ? (
+                      <video src={asset.assetUrl} className="w-full h-full object-cover" muted />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={asset.assetUrl} alt={asset.headline ?? ''} className="w-full h-full object-cover" />
+                    )}
+                    <span
+                      className="flex items-center justify-center rounded-md"
+                      style={{
+                        position: 'absolute', top: 6, left: 6, width: 20, height: 20,
+                        background: isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.85)',
+                        border: isSelected ? 'none' : '1px solid var(--border)',
+                      }}
+                    >
+                      {isSelected && <CheckCircle2 size={14} color="#fff" />}
+                    </span>
+                    <span className="chip chip-neutral" style={{ position: 'absolute', top: 6, right: 6 }}>
+                      {asset.assetType === 'video' ? <VideoIcon size={10} /> : <ImageIcon size={10} />}
+                    </span>
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <p className="text-[11.5px] font-semibold truncate" style={{ color: 'var(--ink)' }}>{asset.headline || 'Untitled'}</p>
+                    {asset.targetLanguage && <p className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>{asset.targetLanguage}</p>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
