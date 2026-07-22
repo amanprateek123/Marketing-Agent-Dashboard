@@ -486,6 +486,8 @@ export interface CreativeImage {
   editInstructions?: string[]
   aspectRatio?: string
   resolution?: string
+  /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
+  rejected?: boolean
 }
 
 export interface CreativeVideo {
@@ -499,6 +501,8 @@ export interface CreativeVideo {
   provider?: 'heygen' | 'higgsfield'
   /** Higgsfield job_type when provider === 'higgsfield', e.g. 'seedance_2_0', 'kling3_0_turbo'. */
   providerModel?: string
+  /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
+  rejected?: boolean
 }
 
 /** One slide of a carousel-format creative — a "grid/story" sequence of 3-10 cards. */

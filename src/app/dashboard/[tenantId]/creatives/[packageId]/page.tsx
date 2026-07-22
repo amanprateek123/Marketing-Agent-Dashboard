@@ -3,10 +3,10 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Loader2, RefreshCw, Wand2, Sparkles, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Volume2,
+  ArrowLeft, Loader2, RefreshCw, Wand2, Sparkles, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Volume2, XCircle, RotateCcw,
 } from 'lucide-react'
-import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover } from '@/lib/api'
-import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution } from '@/lib/api'
+import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset } from '@/lib/api'
+import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution, GalleryAssetLocations } from '@/lib/api'
 import type { CreativePackage } from '@/types'
 
 interface PageProps {
@@ -59,6 +59,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
   const [videoImportBusy, setVideoImportBusy] = useState(false)
   const [savingSelected, setSavingSelected] = useState(false)
   const [editDrafts, setEditDrafts] = useState<Record<number, string>>({})
+  const [expandedEditNote, setExpandedEditNote] = useState<Record<number, boolean>>({})
   const [imageAspectDrafts, setImageAspectDrafts] = useState<Record<number, CreativeAspectRatio>>({})
   const [imageResolutionDrafts, setImageResolutionDrafts] = useState<Record<number, CreativeImageResolution>>({})
   const [videoAspectDraft, setVideoAspectDraft] = useState<CreativeAspectRatio | null>(null)
@@ -84,6 +85,13 @@ export default function CreativeDetailPage({ params }: PageProps) {
   const [voiceoverScriptDraft, setVoiceoverScriptDraft] = useState('')
   const [voiceoverKeepBg, setVoiceoverKeepBg] = useState(true)
 
+  // Where each image/video variant currently lives in the gallery (Topic /
+  // Sheet), keyed by `${assetType}-${variantIndex}` — same shape the backend
+  // returns. Best-effort only: a package with no gallery assets yet (e.g.
+  // generated before this feature, or gallery auto-populate failed) just
+  // renders nothing extra, never an error.
+  const [assetLocations, setAssetLocations] = useState<GalleryAssetLocations>({})
+
   const load = useCallback(async () => {
     try {
       const p = await getCreativePackage(tenantId, packageId)
@@ -93,6 +101,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
     } finally {
       setLoading(false)
     }
+    getPackageAssetLocations(tenantId, packageId).then(setAssetLocations).catch(() => {})
   }, [tenantId, packageId])
 
   useEffect(() => { load() }, [load])
@@ -216,6 +225,58 @@ export default function CreativeDetailPage({ params }: PageProps) {
     } catch {
       setVideoBusy(null)
       flash('Failed to start regeneration')
+    }
+  }
+
+  // Soft-delete, reversible, per-asset — never affects campaign launch (see
+  // the backend schema comment on ImageCreative.rejected). Hides the asset
+  // from its Gallery sheet until restored; restoring puts it back there
+  // automatically since the GalleryAsset pointer itself is never touched.
+  async function handleRejectImage(variantIndex: number) {
+    setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
+    try {
+      await rejectAsset(tenantId, packageId, 'image', variantIndex)
+      await load()
+    } catch {
+      flash('Failed to reject image')
+    } finally {
+      setImageBusy(b => ({ ...b, [variantIndex]: null }))
+    }
+  }
+
+  async function handleRestoreImage(variantIndex: number) {
+    setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
+    try {
+      await restoreAsset(tenantId, packageId, 'image', variantIndex)
+      await load()
+    } catch {
+      flash('Failed to restore image')
+    } finally {
+      setImageBusy(b => ({ ...b, [variantIndex]: null }))
+    }
+  }
+
+  async function handleRejectVideo() {
+    setVideoBusy('loading')
+    try {
+      await rejectAsset(tenantId, packageId, 'video', 0)
+      await load()
+    } catch {
+      flash('Failed to reject video')
+    } finally {
+      setVideoBusy(null)
+    }
+  }
+
+  async function handleRestoreVideo() {
+    setVideoBusy('loading')
+    try {
+      await restoreAsset(tenantId, packageId, 'video', 0)
+      await load()
+    } catch {
+      flash('Failed to restore video')
+    } finally {
+      setVideoBusy(null)
     }
   }
 
@@ -456,6 +517,24 @@ export default function CreativeDetailPage({ params }: PageProps) {
                             </div>
                           )}
                         </div>
+                        {assetLocations[`image-${i}`] && (
+                          <Link
+                            href={`/dashboard/${tenantId}/gallery/${assetLocations[`image-${i}`].topicId}`}
+                            className="text-[10.5px] block mb-2"
+                            style={{ color: 'var(--accent-strong)' }}
+                          >
+                            In gallery: {assetLocations[`image-${i}`].topicName} / {assetLocations[`image-${i}`].sheetName}
+                            {assetLocations[`image-${i}`].rejected ? ' (rejected)' : ''}
+                          </Link>
+                        )}
+                        {img?.rejected ? (
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="chip chip-bad">Rejected</span>
+                            <button onClick={() => handleRestoreImage(i)} disabled={!!busy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
+                              <RotateCcw size={11} /> Restore
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="flex gap-1 mb-2">
                           <select
                             value={getImageAspect(i)}
@@ -483,6 +562,11 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           <button onClick={() => handleRewriteImage(i)} disabled={!!busy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
                             <Wand2 size={11} /> Rewrite
                           </button>
+                          {!img?.rejected && (
+                            <button onClick={() => handleRejectImage(i)} disabled={!!busy} className="btn btn-ghost" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
+                              <XCircle size={11} />
+                            </button>
+                          )}
                         </div>
                         <div className="flex gap-1 mb-2">
                           <input
@@ -499,9 +583,29 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           </button>
                         </div>
                         {!!img?.editInstructions?.length && (
-                          <p className="text-[10.5px] mb-2" style={{ color: 'var(--ink-3)' }} title={img.editInstructions.join(' → ')}>
-                            Last edit: {img.editInstructions[img.editInstructions.length - 1]}
-                          </p>
+                          <div className="mb-2">
+                            <p
+                              className="text-[10.5px]"
+                              style={{
+                                color: 'var(--ink-3)',
+                                ...(expandedEditNote[i] ? {} : {
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical' as const,
+                                  overflow: 'hidden',
+                                }),
+                              }}
+                            >
+                              Last edit: {img.editInstructions[img.editInstructions.length - 1]}
+                            </p>
+                            <button
+                              onClick={() => setExpandedEditNote(m => ({ ...m, [i]: !m[i] }))}
+                              className="text-[10.5px] font-semibold"
+                              style={{ color: 'var(--accent-strong)' }}
+                            >
+                              {expandedEditNote[i] ? 'Show less' : 'Show more'}
+                            </button>
+                          </div>
                         )}
                         <div className="flex gap-1">
                           <input
@@ -544,6 +648,24 @@ export default function CreativeDetailPage({ params }: PageProps) {
                     </div>
                   )}
                 </div>
+                {assetLocations['video-0'] && (
+                  <Link
+                    href={`/dashboard/${tenantId}/gallery/${assetLocations['video-0'].topicId}`}
+                    className="text-[10.5px] block mb-1.5"
+                    style={{ color: 'var(--accent-strong)' }}
+                  >
+                    In gallery: {assetLocations['video-0'].topicName} / {assetLocations['video-0'].sheetName}
+                    {assetLocations['video-0'].rejected ? ' (rejected)' : ''}
+                  </Link>
+                )}
+                {pkg.video?.rejected ? (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="chip chip-bad">Rejected</span>
+                    <button onClick={handleRestoreVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
+                      <RotateCcw size={11} /> Restore
+                    </button>
+                  </div>
+                ) : null}
                 <div className="flex gap-1 mb-1.5">
                   <select
                     value={getVideoAspect()}
@@ -571,6 +693,11 @@ export default function CreativeDetailPage({ params }: PageProps) {
                   <button onClick={handleRewriteVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
                     <Wand2 size={11} /> Rewrite
                   </button>
+                  {pkg.video?.videoUrl && !pkg.video?.rejected && (
+                    <button onClick={handleRejectVideo} disabled={!!videoBusy} className="btn btn-ghost" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
+                      <XCircle size={11} />
+                    </button>
+                  )}
                 </div>
               </div>
               <div>

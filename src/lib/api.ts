@@ -252,6 +252,69 @@ export const rehostCreativeMedia = (tenantId: string, sourceUrl: string, mediaTy
     { method: 'POST', body: JSON.stringify({ sourceUrl, mediaType }) },
   )
 
+/**
+ * Registers an already-made creative (a single image or video you already
+ * have) as a real library entry — rehosts sourceUrl onto our own S3, creates
+ * a new CreativePackage, and auto-populates the Gallery, same as an
+ * AI-generated package. Unlike pasting a URL when launching a manual
+ * campaign, this one shows up in the Creatives library and Gallery.
+ */
+export interface UploadCreativeItem {
+  productName?: string
+  targetLanguage?: string
+  topic?: string
+  copy: { headline: string; primaryText: string; cta: string }
+  assetType: 'image' | 'video'
+  sourceUrl: string
+  aspectRatio?: string
+  resolution?: string
+}
+
+export const uploadCreative = (tenantId: string, body: UploadCreativeItem) =>
+  apiFetch<{ status: string; packageId: string }>(
+    `/creative/${tenantId}/packages/upload`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+export interface UploadCreativeResult {
+  status: 'completed' | 'failed'
+  packageId?: string
+  error?: string
+  sourceUrl: string
+}
+
+/** Bulk version of uploadCreative — files several already-made creatives into the library (and Gallery) in one request. One bad URL doesn't block the rest of the batch; check each result's `status`. */
+export const uploadCreativeBulk = (tenantId: string, items: UploadCreativeItem[]) =>
+  apiFetch<UploadCreativeResult[]>(
+    `/creative/${tenantId}/packages/upload-bulk`,
+    { method: 'POST', body: JSON.stringify({ items }) },
+  )
+
+/** Soft-delete, reversible, per-asset — see the backend schema comment on ImageCreative.rejected for the full rationale. */
+export const rejectAsset = (tenantId: string, packageId: string, assetType: 'image' | 'video', variantIndex: number) =>
+  apiFetch<{ packageId: string; assetType: string; variantIndex: number; rejected: boolean }>(
+    `/creative/${tenantId}/packages/${packageId}/reject-asset`,
+    { method: 'POST', body: JSON.stringify({ assetType, variantIndex }) },
+  )
+
+export const restoreAsset = (tenantId: string, packageId: string, assetType: 'image' | 'video', variantIndex: number) =>
+  apiFetch<{ packageId: string; assetType: string; variantIndex: number; rejected: boolean }>(
+    `/creative/${tenantId}/packages/${packageId}/restore-asset`,
+    { method: 'POST', body: JSON.stringify({ assetType, variantIndex }) },
+  )
+
+export interface RejectedAssetItem {
+  packageId: string
+  assetType: 'image' | 'video'
+  variantIndex: number
+  assetUrl: string
+  productName?: string
+}
+
+/** Every rejected image/video across all packages for this tenant — powers the "Rejected" tab on the creative library page. */
+export const getRejectedAssets = (tenantId: string) =>
+  apiFetch<RejectedAssetItem[]>(`/creative/${tenantId}/rejected-assets`)
+
 export const updateCreativePackage = (
   tenantId: string,
   packageId: string,
@@ -480,6 +543,113 @@ export const syncCampaigns = (tenantId: string) =>
     `/campaigns/${tenantId}/sync`,
     { method: 'POST' },
   )
+
+// ── Gallery (Topic -> Sheet -> Asset organization for creatives) ────────────
+// A GalleryAsset is a movable pointer at one image variant / the video /
+// one carousel card inside a CreativePackage — never the asset data itself.
+// New creatives auto-populate into a Topic (matching what they were
+// generated under) and its default "Unsorted" sheet; moving an asset to a
+// different sheet (even a different topic) never touches the source package.
+
+export interface GalleryTopicSummary {
+  _id: string
+  name: string
+  sheetCount: number
+  assetCount: number
+}
+
+export interface GallerySheetSummary {
+  _id: string
+  name: string
+  assetCount: number
+}
+
+export interface GallerySheetWithTopic {
+  sheetId: string
+  sheetName: string
+  topicId: string
+  topicName: string
+}
+
+export interface GalleryAssetItem {
+  _id: string
+  assetType: 'image' | 'video' | 'carousel_card'
+  variantIndex: number
+  sourcePackageId: string
+  assetUrl: string
+  aspectRatio?: string
+  resolution?: string
+}
+
+export type GalleryAssetLocations = Record<string, { topicId: string; topicName: string; sheetId: string; sheetName: string; rejected: boolean }>
+
+export const listGalleryTopics = (tenantId: string) =>
+  apiFetch<GalleryTopicSummary[]>(`/gallery/${tenantId}/topics`)
+
+export const createGalleryTopic = (tenantId: string, name: string) =>
+  apiFetch<{ _id: string; name: string }>(`/gallery/${tenantId}/topics`, {
+    method: 'POST', body: JSON.stringify({ name }),
+  })
+
+export const renameGalleryTopic = (tenantId: string, topicId: string, name: string) =>
+  apiFetch<{ _id: string; name: string }>(`/gallery/${tenantId}/topics/${topicId}`, {
+    method: 'PATCH', body: JSON.stringify({ name }),
+  })
+
+export const listGallerySheets = (tenantId: string, topicId: string) =>
+  apiFetch<GallerySheetSummary[]>(`/gallery/${tenantId}/topics/${topicId}/sheets`)
+
+export const createGallerySheet = (tenantId: string, topicId: string, name: string) =>
+  apiFetch<{ _id: string; name: string }>(`/gallery/${tenantId}/topics/${topicId}/sheets`, {
+    method: 'POST', body: JSON.stringify({ name }),
+  })
+
+export const renameGallerySheet = (tenantId: string, sheetId: string, name: string) =>
+  apiFetch<{ _id: string; name: string }>(`/gallery/${tenantId}/sheets/${sheetId}`, {
+    method: 'PATCH', body: JSON.stringify({ name }),
+  })
+
+/** Every Topic/Sheet pair for the tenant — powers the "move to" destination picker. */
+export const listAllGallerySheets = (tenantId: string) =>
+  apiFetch<GallerySheetWithTopic[]>(`/gallery/${tenantId}/sheets`)
+
+export const listGalleryAssets = (tenantId: string, sheetId: string) =>
+  apiFetch<GalleryAssetItem[]>(`/gallery/${tenantId}/sheets/${sheetId}/assets`)
+
+export const moveGalleryAsset = (tenantId: string, assetId: string, sheetId: string) =>
+  apiFetch<{ _id: string; sheetId: string }>(`/gallery/${tenantId}/assets/${assetId}`, {
+    method: 'PATCH', body: JSON.stringify({ sheetId }),
+  })
+
+/** Bulk version of moveGalleryAsset — move any number of selected assets to one destination sheet in one call. */
+export const moveGalleryAssets = (tenantId: string, assetIds: string[], sheetId: string) =>
+  apiFetch<{ movedCount: number; sheetId: string }>(`/gallery/${tenantId}/assets/move`, {
+    method: 'PATCH', body: JSON.stringify({ assetIds, sheetId }),
+  })
+
+/** Powers the "in gallery: Topic / Sheet" line on the package detail page. */
+export const getPackageAssetLocations = (tenantId: string, packageId: string) =>
+  apiFetch<GalleryAssetLocations>(`/gallery/${tenantId}/packages/${packageId}/asset-locations`)
+
+/** Removes the GalleryAsset pointer only — the source creative is untouched, still fully intact in the Creatives library. */
+export const removeGalleryAssets = (tenantId: string, assetIds: string[]) =>
+  apiFetch<{ removedCount: number }>(`/gallery/${tenantId}/assets/remove`, {
+    method: 'POST', body: JSON.stringify({ assetIds }),
+  })
+
+/** Bulk-reject (soft-delete, reversible) by gallery-asset-id — hides them from this sheet until restored from the Rejected tab. */
+export const rejectGalleryAssets = (tenantId: string, assetIds: string[]) =>
+  apiFetch<{ rejectedCount: number }>(`/gallery/${tenantId}/assets/reject`, {
+    method: 'POST', body: JSON.stringify({ assetIds }),
+  })
+
+/** Cascade-deletes a sheet's asset pointers, then the sheet. Source creatives are never touched. */
+export const deleteGallerySheet = (tenantId: string, sheetId: string) =>
+  apiFetch<{ _id: string }>(`/gallery/${tenantId}/sheets/${sheetId}`, { method: 'DELETE' })
+
+/** Cascade-deletes every sheet in a topic (and their asset pointers), then the topic. */
+export const deleteGalleryTopic = (tenantId: string, topicId: string) =>
+  apiFetch<{ _id: string }>(`/gallery/${tenantId}/topics/${topicId}`, { method: 'DELETE' })
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
 export const getRuns = (tenantId: string) =>

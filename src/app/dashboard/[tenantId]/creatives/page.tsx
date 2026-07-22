@@ -3,11 +3,11 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap,
+  Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw, Plus, Trash2, CheckCircle2, XCircle,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, uploadCreativeBulk, getRejectedAssets, restoreAsset } from '@/lib/api'
 import type { Company, CreativePackage } from '@/types'
-import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary } from '@/lib/api'
+import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem, UploadCreativeResult } from '@/lib/api'
 
 // Which hookStyle group applies to a given format id — matches format-specs.ts's group assignments.
 function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
@@ -15,6 +15,18 @@ function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
   if (format === 'screenshot') return 'screenshot'
   if (format === 'poll_quiz') return 'poll'
   return 'dr'
+}
+
+// One row in the bulk-upload form — becomes one UploadCreativeItem on submit.
+interface UploadRow {
+  assetType: 'image' | 'video'
+  sourceUrl: string
+  headline: string
+  primaryText: string
+  cta: string
+}
+function emptyUploadRow(): UploadRow {
+  return { assetType: 'image', sourceUrl: '', headline: '', primaryText: '', cta: '' }
 }
 
 interface PageProps {
@@ -136,6 +148,25 @@ export default function CreativesPage({ params }: PageProps) {
   const [error, setError] = useState('')
   const [pendingBriefId, setPendingBriefId] = useState<string | null>(null)
 
+  // Active / Rejected tabs — Rejected is a separate, additive view (rejected
+  // assets aren't removed from anywhere else), lazy-loaded on first visit.
+  const [activeTab, setActiveTab] = useState<'active' | 'rejected'>('active')
+  const [rejectedAssets, setRejectedAssets] = useState<RejectedAssetItem[]>([])
+  const [rejectedLoading, setRejectedLoading] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+
+  // Upload already-made creatives — registers each as a real library +
+  // Gallery entry (unlike pasting a URL into a one-off manual campaign).
+  // Bulk: one product + one topic shared across the batch (they're filed
+  // together), each row is its own creative (type/URL/copy) — one bad URL
+  // doesn't block the rest, per-row results show after submit.
+  const [showUploadForm, setShowUploadForm] = useState(false)
+  const [uploadProduct, setUploadProduct] = useState('')
+  const [uploadTopic, setUploadTopic] = useState('')
+  const [uploadRows, setUploadRows] = useState<UploadRow[]>([emptyUploadRow()])
+  const [uploading, setUploading] = useState(false)
+  const [uploadResults, setUploadResults] = useState<UploadCreativeResult[] | null>(null)
+
   const loadPackages = useCallback(async () => {
     try {
       const list = await listCreativePackages(tenantId, {
@@ -168,7 +199,7 @@ export default function CreativesPage({ params }: PageProps) {
         setFormats(fmts)
         setHookStyles(hooks)
         const active = c.products?.find(p => p.active !== false) ?? c.products?.[0]
-        if (active) setProduct(active.name)
+        if (active) { setProduct(active.name); setUploadProduct(active.name) }
       } catch {
         // handled by the empty state below
       } finally {
@@ -280,6 +311,83 @@ export default function CreativesPage({ params }: PageProps) {
     }
   }
 
+  const loadRejectedAssets = useCallback(async () => {
+    setRejectedLoading(true)
+    try {
+      const list = await getRejectedAssets(tenantId)
+      setRejectedAssets(list)
+    } catch {
+      // non-fatal — keep showing whatever we already have
+    } finally {
+      setRejectedLoading(false)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    if (activeTab === 'rejected') loadRejectedAssets()
+  }, [activeTab, loadRejectedAssets])
+
+  async function handleRestoreRejected(asset: RejectedAssetItem) {
+    const key = `${asset.packageId}-${asset.assetType}-${asset.variantIndex}`
+    setRestoringId(key)
+    try {
+      await restoreAsset(tenantId, asset.packageId, asset.assetType, asset.variantIndex)
+      await loadRejectedAssets()
+    } catch {
+      setError('Failed to restore')
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
+  function addUploadRow() {
+    setUploadRows(rows => [...rows, emptyUploadRow()])
+  }
+
+  function removeUploadRow(index: number) {
+    setUploadRows(rows => rows.filter((_, i) => i !== index))
+  }
+
+  function updateUploadRow(index: number, patch: Partial<UploadRow>) {
+    setUploadRows(rows => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)))
+  }
+
+  async function handleUploadCreative() {
+    if (!uploadProduct) { setError('Pick a product'); return }
+    const incomplete = uploadRows.some(r => !r.sourceUrl.trim() || !r.headline.trim() || !r.primaryText.trim() || !r.cta.trim())
+    if (incomplete) {
+      setError('Every row needs a source URL, headline, primary text, and CTA')
+      return
+    }
+    setError('')
+    setUploading(true)
+    setUploadResults(null)
+    try {
+      const results = await uploadCreativeBulk(
+        tenantId,
+        uploadRows.map(r => ({
+          productName: uploadProduct,
+          topic: uploadTopic || undefined,
+          assetType: r.assetType,
+          sourceUrl: r.sourceUrl.trim(),
+          copy: { headline: r.headline.trim(), primaryText: r.primaryText.trim(), cta: r.cta.trim() },
+        })),
+      )
+      setUploadResults(results)
+      if (results.every(r => r.status === 'completed')) {
+        setShowUploadForm(false)
+        setUploadRows([emptyUploadRow()])
+        setUploadTopic('')
+        setUploadResults(null)
+      }
+      await loadPackages()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to upload creatives')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -315,11 +423,101 @@ export default function CreativesPage({ params }: PageProps) {
           <button onClick={() => loadPackages()} className="btn btn-ghost">
             <RefreshCw size={14} /> Refresh
           </button>
+          <button onClick={() => setShowUploadForm(s => !s)} className="btn btn-ghost">
+            <Upload size={14} /> Upload existing creatives
+          </button>
           <button onClick={() => setShowForm(s => !s)} className="btn btn-primary">
             <Sparkles size={14} /> Generate new creative
           </button>
         </div>
       </div>
+
+      {showUploadForm && (
+        <div className="card p-6 mb-6">
+          <p className="micro-label mb-1">Upload existing creatives</p>
+          <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>
+            Already have images or videos made elsewhere? Add a row per asset and submit them together — each gets rehosted permanently on our own storage, registered as a real library entry, and auto-organized into the same Gallery topic, just like generated ones. One bad URL won't block the rest.
+          </p>
+          <div className="grid md:grid-cols-2 gap-3 mb-4">
+            <label className="block">
+              <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Product (applies to all rows)</span>
+              <select value={uploadProduct} onChange={e => setUploadProduct(e.target.value)} className="input" disabled={uploading}>
+                <option value="">Select a product</option>
+                {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Gallery topic (optional — applies to all rows)</span>
+              <input value={uploadTopic} onChange={e => setUploadTopic(e.target.value)} className="input" placeholder="Defaults to the product name" disabled={uploading} />
+            </label>
+          </div>
+
+          <div className="space-y-4 mb-4">
+            {uploadRows.map((row, i) => {
+              const result = uploadResults?.[i]
+              return (
+                <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Row {i + 1}</span>
+                    <div className="flex items-center gap-2">
+                      {result && (
+                        result.status === 'completed'
+                          ? <span className="chip chip-good"><CheckCircle2 size={11} /> Uploaded</span>
+                          : <span className="chip chip-bad" title={result.error}><XCircle size={11} /> Failed</span>
+                      )}
+                      {uploadRows.length > 1 && (
+                        <button onClick={() => removeUploadRow(i)} disabled={uploading} className="p-1 rounded-md" style={{ color: 'var(--bad)' }}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {result?.status === 'failed' && (
+                    <p className="text-[11px] mb-2" style={{ color: 'var(--bad)' }}>{result.error}</p>
+                  )}
+                  <div className="grid md:grid-cols-[120px_1fr] gap-3 mb-3">
+                    <label className="block">
+                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Type</span>
+                      <select value={row.assetType} onChange={e => updateUploadRow(i, { assetType: e.target.value as 'image' | 'video' })} className="input" disabled={uploading}>
+                        <option value="image">Image</option>
+                        <option value="video">Video</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Source URL</span>
+                      <input value={row.sourceUrl} onChange={e => updateUploadRow(i, { sourceUrl: e.target.value })} className="input" placeholder="https://..." disabled={uploading} />
+                    </label>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3 mb-3">
+                    <label className="block">
+                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Headline</span>
+                      <input value={row.headline} onChange={e => updateUploadRow(i, { headline: e.target.value })} className="input" disabled={uploading} />
+                    </label>
+                    <label className="block">
+                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>CTA</span>
+                      <input value={row.cta} onChange={e => updateUploadRow(i, { cta: e.target.value })} className="input" placeholder="e.g. Get My Report" disabled={uploading} />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Primary text</span>
+                    <textarea value={row.primaryText} onChange={e => updateUploadRow(i, { primaryText: e.target.value })} className="input" style={{ minHeight: 60 }} disabled={uploading} />
+                  </label>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={addUploadRow} disabled={uploading} className="btn btn-ghost">
+              <Plus size={14} /> Add another
+            </button>
+            <button onClick={handleUploadCreative} disabled={uploading} className="btn btn-primary">
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {uploading ? 'Uploading…' : `Upload ${uploadRows.length > 1 ? `all ${uploadRows.length}` : 'creative'}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {pendingBriefId && (
         <div
@@ -672,64 +870,148 @@ export default function CreativesPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Library filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="input" style={{ maxWidth: 220 }}>
-          <option value="">All products</option>
-          {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-        </select>
-        <select value={filterLanguage} onChange={e => setFilterLanguage(e.target.value)} className="input" style={{ maxWidth: 180 }}>
-          <option value="">All languages</option>
-          {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
-        </select>
+      {/* Tab bar — underline style, matching runs/page.tsx's convention */}
+      <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--hairline)' }}>
+        {([{ key: 'active' as const, label: 'Active' }, { key: 'rejected' as const, label: 'Rejected' }]).map(tab => {
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className="relative px-4 py-3 text-[13px] font-medium transition-colors"
+              style={{ color: isActive ? 'var(--ink)' : 'var(--ink-3)' }}
+            >
+              {tab.label}
+              {tab.key === 'rejected' && rejectedAssets.length > 0 && (
+                <span className="ml-1.5 text-[10px] font-semibold mono tabular-nums" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
+                  {rejectedAssets.length}
+                </span>
+              )}
+              {isActive && (
+                <div className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: 'var(--accent)' }} />
+              )}
+            </button>
+          )
+        })}
       </div>
 
-      {packages.length === 0 ? (
-        <div className="card px-6 py-14 text-center">
-          <p style={{ color: 'var(--ink-3)' }}>No creative yet.</p>
-          <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
-            Click <b>Generate new creative</b> above to make your first one.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {packages.map(pkg => {
-            const selected = pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
-            const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
-            const thumb = pkg.images?.[pkg.selectedCopyIndex ?? 0]?.imageUrl
-              || pkg.carouselCards?.[0]?.imageUrl
-              || pkg.video?.videoThumbnailUrl
-            const isVideo = !!pkg.video?.videoUrl
-            return (
-              <Link key={pkg._id} href={`/dashboard/${tenantId}/creatives/${pkg._id}`} className="card overflow-hidden block">
-                <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
-                  {thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      {isVideo ? <VideoIcon size={22} style={{ color: 'var(--ink-4)' }} /> : <ImageIcon size={22} style={{ color: 'var(--ink-4)' }} />}
+      {activeTab === 'active' ? (
+        <>
+          {/* Library filters */}
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="input" style={{ maxWidth: 220 }}>
+              <option value="">All products</option>
+              {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+            </select>
+            <select value={filterLanguage} onChange={e => setFilterLanguage(e.target.value)} className="input" style={{ maxWidth: 180 }}>
+              <option value="">All languages</option>
+              {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+            </select>
+          </div>
+
+          {packages.length === 0 ? (
+            <div className="card px-6 py-14 text-center">
+              <p style={{ color: 'var(--ink-3)' }}>No creative yet.</p>
+              <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
+                Click <b>Generate new creative</b> above to make your first one.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {packages.map(pkg => {
+                const selected = pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
+                const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
+                const thumb = pkg.images?.[pkg.selectedCopyIndex ?? 0]?.imageUrl
+                  || pkg.carouselCards?.[0]?.imageUrl
+                  || pkg.video?.videoThumbnailUrl
+                const isVideo = !!pkg.video?.videoUrl
+                return (
+                  <Link key={pkg._id} href={`/dashboard/${tenantId}/creatives/${pkg._id}`} className="card overflow-hidden block">
+                    <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          {isVideo ? <VideoIcon size={22} style={{ color: 'var(--ink-4)' }} /> : <ImageIcon size={22} style={{ color: 'var(--ink-4)' }} />}
+                        </div>
+                      )}
+                      <div className="flex gap-1" style={{ position: 'absolute', top: 8, right: 8 }}>
+                        {isCarousel && <span className="chip chip-neutral">Carousel</span>}
+                        <span className={`chip ${STATUS_STYLE[pkg.status ?? ''] ?? 'chip-neutral'}`}>
+                          {STATUS_LABEL[pkg.status ?? ''] ?? pkg.status}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex gap-1" style={{ position: 'absolute', top: 8, right: 8 }}>
-                    {isCarousel && <span className="chip chip-neutral">Carousel</span>}
-                    <span className={`chip ${STATUS_STYLE[pkg.status ?? ''] ?? 'chip-neutral'}`}>
-                      {STATUS_LABEL[pkg.status ?? ''] ?? pkg.status}
-                    </span>
+                    <div className="p-3">
+                      <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--ink)' }}>
+                        {selected?.headline || pkg.productName || 'Untitled'}
+                      </p>
+                      <p className="text-[11.5px] mt-0.5 truncate" style={{ color: 'var(--ink-3)' }}>
+                        {pkg.productName || '—'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}
+                      </p>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {rejectedLoading ? (
+            <div className="flex items-center justify-center py-14">
+              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            </div>
+          ) : rejectedAssets.length === 0 ? (
+            <div className="card px-6 py-14 text-center">
+              <p style={{ color: 'var(--ink-3)' }}>Nothing rejected.</p>
+              <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
+                Reject an image or video from its package page, or from the Gallery, and it'll show up here — fully reversible.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {rejectedAssets.map(asset => {
+                const key = `${asset.packageId}-${asset.assetType}-${asset.variantIndex}`
+                return (
+                  <div key={key} className="card overflow-hidden">
+                    <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                      {asset.assetType === 'video' ? (
+                        <video src={asset.assetUrl} className="w-full h-full object-cover" muted />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={asset.assetUrl} alt="Rejected creative" className="w-full h-full object-cover" />
+                      )}
+                      <span className="chip chip-bad" style={{ position: 'absolute', top: 8, right: 8 }}>
+                        {asset.assetType === 'video' ? <VideoIcon size={11} /> : <ImageIcon size={11} />}
+                      </span>
+                    </div>
+                    <div className="p-3">
+                      <p className="text-[11.5px] mt-0.5 mb-2" style={{ color: 'var(--ink-3)' }}>{asset.productName || '—'}</p>
+                      <Link
+                        href={`/dashboard/${tenantId}/creatives/${asset.packageId}`}
+                        className="text-[11.5px] font-medium block mb-2"
+                        style={{ color: 'var(--accent-strong)' }}
+                      >
+                        View source package →
+                      </Link>
+                      <button
+                        onClick={() => handleRestoreRejected(asset)}
+                        disabled={restoringId === key}
+                        className="btn btn-primary w-full"
+                        style={{ fontSize: '11px' }}
+                      >
+                        {restoringId === key ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                        Restore
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="p-3">
-                  <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--ink)' }}>
-                    {selected?.headline || pkg.productName || 'Untitled'}
-                  </p>
-                  <p className="text-[11.5px] mt-0.5 truncate" style={{ color: 'var(--ink-3)' }}>
-                    {pkg.productName || '—'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}
-                  </p>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
