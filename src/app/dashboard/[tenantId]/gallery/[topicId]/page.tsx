@@ -4,14 +4,17 @@ import { useState, useEffect, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import * as Tabs from '@radix-ui/react-tabs'
-import { ArrowLeft, Loader2, Plus, Image as ImageIcon, Video as VideoIcon, LayoutGrid, Check, Trash2, XCircle, Pencil, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Image as ImageIcon, Video as VideoIcon, LayoutGrid, Check, Trash2, XCircle, Pencil, X, Expand } from 'lucide-react'
 import {
   listGalleryTopics, listGallerySheets, createGallerySheet, listGalleryAssets,
   listAllGallerySheets, moveGalleryAssets, removeGalleryAssets, rejectGalleryAssets,
   deleteGallerySheet, deleteGalleryTopic, renameGalleryTopic, renameGallerySheet,
+  getCreativePackage, getCompany,
 } from '@/lib/api'
 import type { GalleryTopicSummary, GallerySheetSummary, GalleryAssetItem, GallerySheetWithTopic } from '@/lib/api'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { CreativePreviewModal } from '@/components/ui/CreativePreviewModal'
+import { AddCreativeSheet } from '@/components/creative/AddCreativeSheet'
 
 interface PageProps {
   params: Promise<{ tenantId: string; topicId: string }>
@@ -57,6 +60,36 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
   const [sheetNameDraft, setSheetNameDraft] = useState('')
   const [renaming, setRenaming] = useState(false)
 
+  // Quick-look preview — separate from the select-for-bulk-actions click on
+  // the same card, triggered by a small expand icon instead. Fetches the
+  // source package on open to show real headline/copy (GalleryAssetItem
+  // itself carries no copy text, only the resolved media URL).
+  const [previewAsset, setPreviewAsset] = useState<GalleryAssetItem | null>(null)
+  const [previewCopy, setPreviewCopy] = useState<{ headline?: string; primaryText?: string; cta?: string } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  // Add creative bottom sheet — pick from everything already in the
+  // Creatives library, or upload a brand new one. Files directly into
+  // whichever sheet this was opened from, skipping the "lands in Unsorted,
+  // then move" hop.
+  const [products, setProducts] = useState<{ name: string }[]>([])
+  const [addSheetOpenFor, setAddSheetOpenFor] = useState<GallerySheetSummary | null>(null)
+
+  async function openPreview(asset: GalleryAssetItem) {
+    setPreviewAsset(asset)
+    setPreviewCopy(null)
+    setPreviewLoading(true)
+    try {
+      const pkg = await getCreativePackage(tenantId, asset.sourcePackageId)
+      const variant = pkg.copyVariants?.[asset.variantIndex] ?? pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
+      setPreviewCopy(variant ? { headline: variant.headline, primaryText: variant.primaryText, cta: variant.cta } : null)
+    } catch {
+      setPreviewCopy(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
   const loadSheets = useCallback(async () => {
     const [topics, sheetList, allSheetList] = await Promise.all([
       listGalleryTopics(tenantId),
@@ -75,6 +108,8 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       setLoading(true)
       try {
         await loadSheets()
+        const company = await getCompany(tenantId).catch(() => null)
+        if (!cancelled && company) setProducts(company.products ?? [])
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load topic')
       } finally {
@@ -83,7 +118,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
     }
     init()
     return () => { cancelled = true }
-  }, [loadSheets])
+  }, [loadSheets, tenantId])
 
   const loadAssets = useCallback(async (sheetId: string) => {
     if (!sheetId) { setAssets([]); return }
@@ -378,6 +413,13 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
               >
                 <Trash2 size={11} /> Delete this sheet
               </button>
+              <button
+                onClick={() => setAddSheetOpenFor(sheet)}
+                className="btn btn-primary"
+                style={{ fontSize: '11px' }}
+              >
+                <Plus size={11} /> Add creative
+              </button>
             </div>
 
             {assetsLoading ? (
@@ -458,19 +500,16 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
                         className="card overflow-hidden"
                         style={isSelected ? { border: '2px solid var(--accent-strong)' } : undefined}
                       >
-                        <button
-                          onClick={() => toggleSelect(asset._id)}
-                          className="relative w-full block"
-                          style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}
-                        >
+                        <div className="relative w-full" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
                           {asset.assetType === 'video' ? (
                             <video src={asset.assetUrl} className="w-full h-full object-cover" muted />
                           ) : (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={asset.assetUrl} alt="Creative asset" className="w-full h-full object-cover" />
                           )}
+                          <button onClick={() => toggleSelect(asset._id)} className="absolute inset-0" aria-label="Select" />
                           <span
-                            className="flex items-center justify-center rounded-md"
+                            className="flex items-center justify-center rounded-md pointer-events-none"
                             style={{
                               position: 'absolute', top: 8, left: 8, width: 22, height: 22,
                               background: isSelected ? 'var(--accent-strong)' : 'rgba(255,255,255,0.85)',
@@ -479,10 +518,18 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
                           >
                             {isSelected && <Check size={14} color="#fff" />}
                           </span>
-                          <span className="chip chip-neutral" style={{ position: 'absolute', top: 8, right: 8 }}>
+                          <span className="chip chip-neutral pointer-events-none" style={{ position: 'absolute', top: 8, right: 8 }}>
                             {asset.assetType === 'video' ? <VideoIcon size={11} /> : <ImageIcon size={11} />}
                           </span>
-                        </button>
+                          <button
+                            onClick={() => openPreview(asset)}
+                            className="flex items-center justify-center rounded-md"
+                            style={{ position: 'absolute', bottom: 8, right: 8, width: 26, height: 26, background: 'rgba(255,255,255,0.9)', border: '1px solid var(--border)' }}
+                            aria-label="Preview"
+                          >
+                            <Expand size={13} style={{ color: 'var(--ink-2)' }} />
+                          </button>
+                        </div>
                         <div className="p-3">
                           <Link
                             href={`/dashboard/${tenantId}/creatives/${asset.sourcePackageId}`}
@@ -511,6 +558,31 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
         loading={confirming}
         onConfirm={handleConfirmedAction}
         onCancel={() => setPendingConfirm(null)}
+      />
+
+      <CreativePreviewModal
+        open={previewAsset !== null}
+        onClose={() => setPreviewAsset(null)}
+        mediaUrl={previewAsset?.assetUrl ?? ''}
+        mediaType={previewAsset?.assetType === 'video' ? 'video' : 'image'}
+        headline={previewCopy?.headline}
+        primaryText={previewCopy?.primaryText}
+        cta={previewCopy?.cta}
+        meta={previewAsset ? `${previewAsset.assetType === 'video' ? 'Video' : 'Image'} · variant ${previewAsset.variantIndex + 1}` : undefined}
+        tenantId={tenantId}
+        packageId={previewAsset?.sourcePackageId}
+        loading={previewLoading}
+      />
+
+      <AddCreativeSheet
+        open={addSheetOpenFor !== null}
+        onClose={() => setAddSheetOpenFor(null)}
+        tenantId={tenantId}
+        products={products}
+        targetSheetId={addSheetOpenFor?._id ?? ''}
+        targetSheetName={addSheetOpenFor?.name ?? ''}
+        targetTopicName={topic?.name}
+        onAdded={() => { loadAssets(activeSheetId); loadSheets() }}
       />
     </div>
   )

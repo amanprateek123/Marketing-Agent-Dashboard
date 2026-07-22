@@ -263,6 +263,8 @@ export interface UploadCreativeItem {
   productName?: string
   targetLanguage?: string
   topic?: string
+  /** When set, lands directly in this existing Gallery sheet instead of the resolved topic's "Unsorted" sheet — takes priority over `topic`. */
+  sheetId?: string
   copy: { headline: string; primaryText: string; cta: string }
   assetType: 'image' | 'video'
   sourceUrl: string
@@ -650,6 +652,24 @@ export const deleteGallerySheet = (tenantId: string, sheetId: string) =>
 /** Cascade-deletes every sheet in a topic (and their asset pointers), then the topic. */
 export const deleteGalleryTopic = (tenantId: string, topicId: string) =>
   apiFetch<{ _id: string }>(`/gallery/${tenantId}/topics/${topicId}`, { method: 'DELETE' })
+
+export interface AddExistingAssetItem {
+  packageId: string
+  assetType: 'image' | 'video' | 'carousel_card'
+  variantIndex: number
+}
+
+/**
+ * Files existing creatives (picked from the whole Creatives library, not
+ * just already-tracked GalleryAssets) directly into a sheet — powers the
+ * Gallery's "Add creative" bottom-sheet picker. Packages that predate the
+ * Gallery feature (or never got auto-populated) get a brand new pointer;
+ * ones already tracked elsewhere get moved here instead of duplicated.
+ */
+export const addExistingCreativesToSheet = (tenantId: string, sheetId: string, items: AddExistingAssetItem[]) =>
+  apiFetch<{ addedCount: number; movedCount: number }>(`/gallery/${tenantId}/sheets/${sheetId}/assets/add`, {
+    method: 'POST', body: JSON.stringify({ items }),
+  })
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
 export const getRuns = (tenantId: string) =>
