@@ -14,9 +14,11 @@ import {
   Brain,
   Image as ImageIcon,
   LayoutGrid,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
+import { logout } from '@/lib/auth'
 
 interface SidebarProps {
   tenantId: string
@@ -152,13 +154,24 @@ export function Sidebar({ tenantId }: SidebarProps) {
         })}
       </nav>
 
-      <div className="px-6 py-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
-        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+      <div className="px-6 py-4 flex items-center justify-between gap-2" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+        <p className="text-[11px] min-w-0 truncate" style={{ color: 'var(--ink-3)' }}>
           Working on{' '}
           <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>
             {tenantId}
           </span>
         </p>
+        <button
+          type="button"
+          onClick={logout}
+          title="Sign out"
+          className="shrink-0 p-1.5 rounded-md transition-colors duration-120"
+          style={{ color: 'var(--ink-3)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--bad)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-3)')}
+        >
+          <LogOut size={15} />
+        </button>
       </div>
     </aside>
   )

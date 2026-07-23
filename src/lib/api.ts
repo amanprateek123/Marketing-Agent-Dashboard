@@ -25,6 +25,8 @@ import type {
   CreativePackage,
 } from '@/types'
 
+import { getToken } from './auth'
+
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
@@ -32,8 +34,15 @@ export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  // Belt-and-suspenders: the global fetch interceptor (lib/auth-fetch.ts)
+  // already attaches this for every API_BASE call, including this one —
+  // set explicitly too since apiFetch is the "proper" shared entry point.
+  const token = getToken()
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     cache: 'no-store',
     ...init,
   })
