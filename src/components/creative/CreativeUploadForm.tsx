@@ -1,19 +1,27 @@
 'use client'
 
-import { useState } from 'react'
-import { Upload, Plus, Trash2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import { uploadCreativeBulk } from '@/lib/api'
+import { useRef, useState } from 'react'
+import { Upload, Plus, Trash2, CheckCircle2, XCircle, Loader2, Link as LinkIcon, File as FileIcon, X } from 'lucide-react'
+import { uploadCreativeBulk, uploadCreativeFile } from '@/lib/api'
 import type { UploadCreativeResult } from '@/lib/api'
 
 interface UploadRow {
   assetType: 'image' | 'video'
+  /** 'upload' (default) files straight to S3 via uploadCreativeFile and stores the resulting URL in sourceUrl below; 'url' is the old paste-a-link path — kept for assets that are already hosted somewhere (e.g. a rehosted Higgsfield output). */
+  sourceMode: 'upload' | 'url'
   sourceUrl: string
+  fileName: string
+  fileUploading: boolean
+  fileError: string
   headline: string
   primaryText: string
   cta: string
 }
 function emptyUploadRow(): UploadRow {
-  return { assetType: 'image', sourceUrl: '', headline: '', primaryText: '', cta: '' }
+  return {
+    assetType: 'image', sourceMode: 'upload', sourceUrl: '', fileName: '', fileUploading: false, fileError: '',
+    headline: '', primaryText: '', cta: '',
+  }
 }
 
 interface Product {
@@ -46,6 +54,8 @@ export function CreativeUploadForm({ tenantId, products, fixedTopic, fixedSheetI
   const [uploading, setUploading] = useState(false)
   const [results, setResults] = useState<UploadCreativeResult[] | null>(null)
   const [error, setError] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   function addRow() {
     setRows(r => [...r, emptyUploadRow()])
@@ -59,11 +69,31 @@ export function CreativeUploadForm({ tenantId, products, fixedTopic, fixedSheetI
     setRows(r => r.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
+  async function handleFileSelected(index: number, file: File | undefined | null) {
+    if (!file) return
+    updateRow(index, { fileUploading: true, fileError: '', fileName: file.name, sourceUrl: '' })
+    try {
+      const { url } = await uploadCreativeFile(tenantId, file)
+      updateRow(index, { fileUploading: false, sourceUrl: url })
+    } catch (e) {
+      updateRow(index, { fileUploading: false, fileError: e instanceof Error ? e.message : 'Upload failed', fileName: '' })
+    }
+  }
+
+  function handleDrop(index: number, e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragIndex(null)
+    handleFileSelected(index, e.dataTransfer.files?.[0])
+  }
+
   async function handleUpload() {
     if (!product) { setError('Pick a product'); return }
+    if (rows.some(r => r.fileUploading)) { setError('Wait for file uploads to finish'); return }
     const incomplete = rows.some(r => !r.sourceUrl.trim() || !r.headline.trim() || !r.primaryText.trim() || !r.cta.trim())
     if (incomplete) {
-      setError('Every row needs a source URL, headline, primary text, and CTA')
+      setError(rows.some(r => r.sourceMode === 'upload' && !r.sourceUrl.trim())
+        ? 'Every row needs a creative file, headline, primary text, and CTA'
+        : 'Every row needs a source URL, headline, primary text, and CTA')
       return
     }
     setError('')
@@ -149,10 +179,79 @@ export function CreativeUploadForm({ tenantId, products, fixedTopic, fixedSheetI
                     <option value="video">Video</option>
                   </select>
                 </label>
-                <label className="block">
-                  <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Source URL</span>
-                  <input value={row.sourceUrl} onChange={e => updateRow(i, { sourceUrl: e.target.value })} className="input" placeholder="https://..." disabled={uploading} />
-                </label>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Creative</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateRow(i, { sourceMode: 'upload' })}
+                        disabled={uploading}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                        style={row.sourceMode === 'upload' ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)' } : { color: 'var(--ink-3)' }}
+                      >
+                        <Upload size={11} /> Upload file
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateRow(i, { sourceMode: 'url' })}
+                        disabled={uploading}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                        style={row.sourceMode === 'url' ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)' } : { color: 'var(--ink-3)' }}
+                      >
+                        <LinkIcon size={11} /> Paste URL
+                      </button>
+                    </div>
+                  </div>
+
+                  {row.sourceMode === 'url' ? (
+                    <input value={row.sourceUrl} onChange={e => updateRow(i, { sourceUrl: e.target.value })} className="input" placeholder="https://..." disabled={uploading} />
+                  ) : (
+                    <div
+                      onClick={() => !uploading && !row.fileUploading && fileInputRefs.current[i]?.click()}
+                      onDragOver={e => { e.preventDefault(); setDragIndex(i) }}
+                      onDragLeave={() => setDragIndex(prev => (prev === i ? null : prev))}
+                      onDrop={e => handleDrop(i, e)}
+                      className="flex items-center gap-2 rounded-lg px-3 cursor-pointer"
+                      style={{
+                        height: 38,
+                        border: `1.5px dashed ${dragIndex === i ? 'var(--accent-strong)' : 'var(--hairline)'}`,
+                        background: dragIndex === i ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <input
+                        ref={el => { fileInputRefs.current[i] = el }}
+                        type="file"
+                        accept={row.assetType === 'video' ? 'video/*' : 'image/*'}
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={e => handleFileSelected(i, e.target.files?.[0])}
+                      />
+                      {row.fileUploading ? (
+                        <span className="flex items-center gap-1.5 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                          <Loader2 size={13} className="animate-spin" /> Uploading…
+                        </span>
+                      ) : row.sourceUrl && row.fileName ? (
+                        <span className="flex items-center gap-1.5 text-[12.5px] font-medium truncate" style={{ color: 'var(--good)' }}>
+                          <CheckCircle2 size={13} /> <span className="truncate">{row.fileName}</span>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); updateRow(i, { sourceUrl: '', fileName: '', fileError: '' }) }}
+                            className="p-0.5 rounded"
+                            style={{ color: 'var(--ink-3)' }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1.5 text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                          <FileIcon size={13} /> Select file or drag and drop
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {row.fileError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{row.fileError}</p>}
+                </div>
               </div>
               <div className="grid md:grid-cols-2 gap-3 mb-3">
                 <label className="block">

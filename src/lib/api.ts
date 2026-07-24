@@ -262,6 +262,26 @@ export const rehostCreativeMedia = (tenantId: string, sourceUrl: string, mediaTy
   )
 
 /**
+ * Uploads a local file (picked or dropped in the browser) straight to this
+ * tenant's S3 bucket, returning a permanent URL — the file-based counterpart
+ * to rehostCreativeMedia above. Bypasses apiFetch: multipart/form-data needs
+ * the browser to set its own Content-Type boundary, which apiFetch's fixed
+ * 'application/json' header would clobber. The global auth-fetch interceptor
+ * (lib/auth-fetch.ts) still attaches the bearer token since this hits API_BASE.
+ */
+export async function uploadCreativeFile(tenantId: string, file: File): Promise<{ url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${API_BASE}/creative/${tenantId}/upload-file`, {
+    method: 'POST',
+    body: formData,
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+/**
  * Registers an already-made creative (a single image or video you already
  * have) as a real library entry — rehosts sourceUrl onto our own S3, creates
  * a new CreativePackage, and auto-populates the Gallery, same as an
