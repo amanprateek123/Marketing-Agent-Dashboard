@@ -1,26 +1,27 @@
 'use client'
 
-import { useState, useEffect, use, useMemo } from 'react'
+import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
-  ArrowRight, Play, Loader2, CheckCircle, AlertTriangle,
-  Settings, Inbox, Sparkles, TrendingUp, Rocket,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle, Loader2, Minus,
+  Play, Settings,
 } from 'lucide-react'
 import {
-  formatCurrency,
-  formatRelativeTime,
-  formatROASPlain,
-  roasHealth,
-  spendVsEarnedSentence,
-  statusToPlain,
+  formatCurrency, formatPercent, formatROASPlain, formatSignedCurrency,
 } from '@/lib/utils'
-import { getActionOutcomes } from '@/lib/api'
+import { getDashboardOverview } from '@/lib/api'
 import { PlainMetric } from '@/components/plain/PlainMetric'
-import { HealthBadge } from '@/components/plain/HealthBadge'
-import type { Company, Campaign, PipelineRun, ExecutedActionRecord } from '@/types'
-import { useRouter } from 'next/navigation'
+import { AlertFeed } from '@/components/overview/AlertFeed'
+import { BreakevenBar } from '@/components/overview/BreakevenBar'
+import { FacetBreakdown } from '@/components/overview/FacetBreakdown'
+import { InsightList } from '@/components/overview/InsightList'
+import { ActivityGrid } from '@/components/overview/ActivityGrid'
+import type { DashboardOverview } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
+
+const WINDOWS = [7, 30, 90] as const
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -30,38 +31,26 @@ export default function HomePage({ params }: PageProps) {
   const { tenantId } = use(params)
   const router = useRouter()
 
-  const [company, setCompany]     = useState<Company | null>(null)
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [runs, setRuns]           = useState<PipelineRun[]>([])
-  const [actions, setActions]     = useState<ExecutedActionRecord[]>([])
-  const [companyError, setCompanyError]     = useState<string | null>(null)
-  const [triggerState, setTriggerState]     = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [data, setData] = useState<DashboardOverview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [windowDays, setWindowDays] = useState<number>(30)
+  const [triggerState, setTriggerState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [triggerMessage, setTriggerMessage] = useState('')
 
-  useEffect(() => {
-    async function fetchAll() {
-      try {
-        const res = await fetch(`${API_BASE}/companies/${tenantId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setCompany(await res.json())
-      } catch (err) {
-        setCompanyError(err instanceof Error ? err.message : "Couldn't load your company info")
-      }
-      try {
-        const res = await fetch(`${API_BASE}/campaigns/${tenantId}`)
-        if (res.ok) setCampaigns(await res.json())
-      } catch { /* silent — surfaced separately in Your Ads section */ }
-      try {
-        const res = await fetch(`${API_BASE}/pipeline/${tenantId}/runs`)
-        if (res.ok) setRuns(await res.json())
-      } catch { /* non-critical */ }
-      try {
-        const out = await getActionOutcomes(tenantId)
-        setActions(out.recent ?? [])
-      } catch { /* non-critical */ }
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setData(await getDashboardOverview(tenantId, windowDays))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load your dashboard")
+    } finally {
+      setLoading(false)
     }
-    fetchAll()
-  }, [tenantId])
+  }, [tenantId, windowDays])
+
+  useEffect(() => { void load() }, [load])
 
   async function handleTrigger() {
     setTriggerState('loading')
@@ -69,86 +58,111 @@ export default function HomePage({ params }: PageProps) {
     try {
       const res = await fetch(`${API_BASE}/pipeline/${tenantId}/trigger`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const body = await res.json()
       setTriggerState('success')
-      setTriggerMessage("Working on new ad ideas…")
-      if (data?.runId) setTimeout(() => router.push(`/dashboard/${tenantId}/runs/${data.runId}`), 900)
-      else setTimeout(() => setTriggerState('idle'), 5000)
+      setTriggerMessage('Working on new ad ideas…')
+      if (body?.runId) {
+        setTimeout(() => router.push(`/dashboard/${tenantId}/runs/${body.runId}`), 900)
+      } else {
+        setTimeout(() => setTriggerState('idle'), 5000)
+      }
     } catch (err) {
       setTriggerState('error')
-      setTriggerMessage(err instanceof Error ? err.message : "Something went wrong")
+      setTriggerMessage(err instanceof Error ? err.message : 'Something went wrong')
       setTimeout(() => setTriggerState('idle'), 4000)
     }
   }
 
-  // ── Derived stats ─────────────────────────────────────────────────
-  const totalSpend      = campaigns.reduce((s, c) => s + (c.spend || 0), 0)
-  const allRoas         = campaigns.filter(c => c.roas && c.roas > 0).map(c => c.roas as number)
-  const avgRoas         = allRoas.length ? allRoas.reduce((a, b) => a + b, 0) / allRoas.length : 0
-  const totalEarned     = campaigns.reduce((s, c) => s + (c.spend || 0) * (c.roas || 0), 0)
-  const activeCampaigns = campaigns.filter(c => c.status === 'active')
-  const pendingList     = campaigns.filter(c => c.status === 'pending_approval')
-  const metaConnected   = !!(company?.meta?.accessToken)
+  if (loading && !data) {
+    return (
+      <div className="px-8 py-8 max-w-[1600px] mx-auto">
+        <div className="skeleton" style={{ height: 40, width: 320, marginBottom: 24 }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="skeleton" style={{ height: 112 }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-  const healthCounts = useMemo(() => {
-    const counts = { good: 0, watch: 0, bad: 0, unknown: 0 }
-    for (const c of activeCampaigns) {
-      counts[roasHealth(c.roas ?? null)] += 1
-    }
-    return counts
-  }, [activeCampaigns])
+  if (error || !data) {
+    return (
+      <div className="px-8 py-8 max-w-[1600px] mx-auto">
+        <div
+          className="flex items-center gap-3 rounded-xl px-5 py-4"
+          style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
+        >
+          <AlertTriangle size={16} className="shrink-0" />
+          <span>{error ?? 'No data'}</span>
+          <button onClick={() => void load()} className="btn btn-ghost ml-auto">Retry</button>
+        </div>
+      </div>
+    )
+  }
 
-  const topInsight = useMemo(() => {
-    const insights = company?.learnings?.causalInsights ?? []
-    return [...insights].sort(
-      (a, b) =>
-        (b.confidence * Math.log(1 + b.dataPoints)) -
-        (a.confidence * Math.log(1 + a.dataPoints)),
-    )[0] ?? null
-  }, [company])
-
-  const recentCampaigns = [...campaigns]
-    .sort((a, b) => new Date(b.launchedAt || 0).getTime() - new Date(a.launchedAt || 0).getTime())
-    .slice(0, 5)
-
-  // ── Empty-state helpers ──────────────────────────────────────────
-  const nothingConnected = !metaConnected
-  const noCampaigns = campaigns.length === 0
+  const { economics, portfolio, lifetime, trend, alerts, activity, window: win } = data
+  const metaConnected = activity.meta.connected
+  const criticalCount = alerts.filter(a => a.severity === 'critical').length
 
   return (
     <div className="min-h-screen">
       <div className="px-8 py-8 max-w-[1600px] mx-auto">
 
-        {/* ── Hero ────────────────────────────────────────────────── */}
-        <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
+        {/* ── Hero ─────────────────────────────────────────────────── */}
+        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="page-title">
-              Hi, here's what's happening today
-            </h1>
+            <h1 className="page-title">Hi, here&rsquo;s what&rsquo;s happening today</h1>
             <p className="page-subtitle">
-              {company?.name || tenantId}{company?.industry ? ` · ${company.industry}` : ''}
+              {data.companyName || tenantId}
+              {data.industry ? ` · ${data.industry}` : ''}
             </p>
           </div>
-          <button
-            onClick={handleTrigger}
-            disabled={triggerState === 'loading' || !metaConnected}
-            className={
-              'btn btn-lg ' + (
-                triggerState === 'success' ? 'btn-ghost'
-                : triggerState === 'error' ? 'btn-danger'
-                : 'btn-accent'
-              )
-            }
-            title={!metaConnected ? 'Connect Meta first in Settings' : undefined}
-          >
-            {triggerState === 'loading' ? <Loader2 size={16} className="animate-spin" />
-             : triggerState === 'success' ? <CheckCircle size={16} />
-             : <Play size={14} fill="currentColor" />}
-            {triggerState === 'loading' ? 'Thinking…'
-              : triggerState === 'success' ? 'On it'
-              : triggerState === 'error' ? 'Try again'
-              : 'Come up with new ad ideas'}
-          </button>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
+              {WINDOWS.map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setWindowDays(w)}
+                  className="chip"
+                  style={{
+                    cursor: 'pointer',
+                    background: windowDays === w ? 'var(--accent-bg)' : 'transparent',
+                    borderColor: windowDays === w ? 'var(--accent-border)' : 'var(--hairline)',
+                    color: windowDays === w ? 'var(--accent-strong)' : 'var(--ink-3)',
+                  }}
+                >
+                  {w}d
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleTrigger}
+              disabled={triggerState === 'loading' || !metaConnected}
+              /* Demoted from the primary action. Generating more ideas while
+                 the account is below breakeven adds spend to a funnel that
+                 loses money on every rupee — fixing what's live comes first,
+                 and the alert feed below now carries that call to action. */
+              className={
+                'btn ' + (
+                  triggerState === 'success' ? 'btn-ghost'
+                  : triggerState === 'error' ? 'btn-danger'
+                  : portfolio.isProfitable ? 'btn-accent'
+                  : 'btn-ghost'
+                )
+              }
+              title={!metaConnected ? 'Connect Meta first in Settings' : undefined}
+            >
+              {triggerState === 'loading' ? <Loader2 size={14} className="animate-spin" />
+               : triggerState === 'success' ? <CheckCircle size={14} />
+               : <Play size={13} fill="currentColor" />}
+              {triggerState === 'loading' ? 'Thinking…'
+                : triggerState === 'success' ? 'On it'
+                : triggerState === 'error' ? 'Try again'
+                : 'Come up with new ad ideas'}
+            </button>
+          </div>
         </div>
         {triggerMessage && (
           <p className="mb-4" style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}>
@@ -156,26 +170,15 @@ export default function HomePage({ params }: PageProps) {
           </p>
         )}
 
-        {/* ── Not connected banner ────────────────────────────────── */}
-        {companyError && (
+        {!metaConnected && (
           <div
-            className="flex items-center gap-3 rounded-xl px-5 py-4 text-[14px] mb-5"
-            style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
+            className="card px-5 py-4 flex items-center gap-4 mb-5"
+            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
           >
-            <AlertTriangle size={16} className="shrink-0" />
-            <span>{companyError}</span>
-          </div>
-        )}
-        {nothingConnected && !companyError && (
-          <div className="card px-5 py-4 flex items-center gap-4 mb-5" style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}>
             <AlertTriangle size={18} style={{ color: 'var(--warn)' }} className="shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold" style={{ color: 'var(--ink)' }}>
-                Meta not connected yet
-              </p>
-              <p className="explain">
-                Add your Meta Ads token in Settings so we can see your ads and suggest changes.
-              </p>
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Meta not connected yet</p>
+              <p className="explain">Add your Meta Ads token in Settings so we can see your ads.</p>
             </div>
             <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost shrink-0">
               <Settings size={14} /> Open settings
@@ -183,221 +186,171 @@ export default function HomePage({ params }: PageProps) {
           </div>
         )}
 
-        {/* ── Top-line summary tiles ──────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* ── Breakeven context ────────────────────────────────────── */}
+        <div className="mb-5">
+          <BreakevenBar economics={economics} roas={portfolio.roas} />
+        </div>
+
+        {/* ── Top-line tiles ───────────────────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+          {/* Total across EVERY objective. The three tiles beside it cover
+              sales campaigns only, so this one has to state the whole number
+              or the page appears to lose track of real spend. */}
           <PlainMetric
-            label="Money spent"
-            value={formatCurrency(Math.round(totalSpend))}
-            sub={`Across ${campaigns.length} ${campaigns.length === 1 ? 'campaign' : 'campaigns'}`}
-            help="Total amount your ads have spent on Meta so far."
+            label={`Money spent · ${win.label.toLowerCase()}`}
+            value={formatCurrency(Math.round(portfolio.totalSpendAllObjectives))}
+            sub={
+              portfolio.nonRevenueSpend > 0
+                ? `${formatCurrency(Math.round(portfolio.spend))} on sales goals · ${formatCurrency(Math.round(portfolio.nonRevenueSpend))} on other goals`
+                : `Across ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'}` +
+                  (trend?.spendPct != null ? ` · ${signed(trend.spendPct)}% vs previous` : '')
+            }
+            help="Every campaign, all objectives. The tiles beside this one cover sales-objective campaigns only, since return and profit are only meaningful there."
           />
           <PlainMetric
-            label="Money earned"
-            value={totalEarned > 0 ? formatCurrency(Math.round(totalEarned)) : '—'}
+            label="Money earned · sales goals"
+            value={portfolio.revenue > 0 ? formatCurrency(Math.round(portfolio.revenue)) : '—'}
             sub={
-              avgRoas > 0
-                ? formatROASPlain(avgRoas)
-                : 'Waiting for first conversions'
+              portfolio.revenue > 0
+                ? formatROASPlain(portfolio.roas, economics.breakevenROAS)
+                : 'No attributed revenue yet'
             }
-            help="Revenue attributed by Meta's pixel."
-            health={roasHealth(avgRoas)}
+            help="Revenue attributed by Meta's pixel, already net of refunds."
+            health={portfolio.isProfitable ? 'good' : 'bad'}
+          />
+          {/* The tile the old dashboard was missing entirely: whether any of
+              this actually made money once cost of goods is taken out. */}
+          <PlainMetric
+            label="Actual profit · sales goals"
+            value={formatSignedCurrency(portfolio.contributionProfit)}
+            sub={
+              economics.hasMixedMargins
+                ? "After each product's own margin"
+                : `After ${formatPercent(economics.marginPct)} margin${economics.isEstimated ? ' (assumed)' : ''}`
+            }
+            help="Revenue × margin − spend, across sales-objective campaigns. Awareness, traffic and app campaigns are excluded — they were never asked for tracked revenue."
+            health={portfolio.contributionProfit >= 0 ? 'good' : 'bad'}
           />
           <PlainMetric
-            label="Ads running"
-            value={String(activeCampaigns.length)}
+            label="Money at risk"
+            value={portfolio.moneyAtRisk > 0 ? formatCurrency(Math.round(portfolio.moneyAtRisk)) : '₹0'}
             sub={
-              activeCampaigns.length === 0
-                ? 'Nothing live right now'
-                : `${healthCounts.good} doing well, ${healthCounts.watch} to watch`
+              portfolio.campaignsBelowBreakeven > 0
+                ? `${portfolio.campaignsBelowBreakeven} campaign${portfolio.campaignsBelowBreakeven === 1 ? '' : 's'} below breakeven · ${formatPercent(portfolio.pctSpendBelowBreakeven)} of spend`
+                : 'Every campaign is above breakeven'
             }
-            help="Campaigns currently spending on Meta."
-          />
-          <PlainMetric
-            label="Waiting for you"
-            value={String(pendingList.length)}
-            sub={
-              pendingList.length === 0
-                ? 'All caught up 👍'
-                : 'Review before they launch'
-            }
-            health={pendingList.length > 0 ? 'watch' : 'good'}
+            help="Contribution profit being destroyed by campaigns that lose money."
+            health={portfolio.moneyAtRisk > 0 ? 'bad' : 'good'}
           />
         </div>
 
-        {/* ── Two-column: What needs your attention · What we're learning ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+        {/* Window provenance + lifetime, stated rather than implied. The old
+            page stacked a lifetime total on top of a 10-day table with no
+            label on either. */}
+        <div className="flex items-center gap-3 flex-wrap mb-8 explain">
+          <span>
+            {win.metricsSource === 'timeseries'
+              ? `True ${win.days}-day window from daily data.`
+              : `Daily data not synced — showing lifetime totals for campaigns started in the last ${win.days} days.`}
+            {portfolio.nonRevenueCampaigns > 0 && (
+              <>
+                {' '}
+                {portfolio.nonRevenueCampaigns} campaign
+                {portfolio.nonRevenueCampaigns === 1 ? '' : 's'} run non-sales goals
+                {portfolio.nonRevenueOffTarget > 0
+                  ? ` (${portfolio.nonRevenueOffTarget} off target)`
+                  : ''}{' '}
+                and are judged on their own KPIs.
+              </>
+            )}
+          </span>
+          <span style={{ color: 'var(--ink-4)' }}>|</span>
+          <span>
+            Lifetime: {formatCurrency(Math.round(lifetime.spend))} spent ·{' '}
+            {formatCurrency(Math.round(lifetime.revenue))} earned ·{' '}
+            <span style={{ color: lifetime.isProfitable ? 'var(--good)' : 'var(--bad)' }}>
+              {lifetime.roas.toFixed(2)}x
+            </span>{' '}
+            ·{' '}
+            <span style={{ color: lifetime.contributionProfit >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+              {formatSignedCurrency(lifetime.contributionProfit)} profit
+            </span>
+          </span>
+          {trend && (
+            <>
+              <span style={{ color: 'var(--ink-4)' }}>|</span>
+              <span className="inline-flex items-center gap-1">
+                <TrendIcon direction={trend.direction} />
+                <span
+                  style={{
+                    color:
+                      trend.direction === 'improving' ? 'var(--good)'
+                      : trend.direction === 'declining' ? 'var(--bad)'
+                      : 'var(--ink-3)',
+                  }}
+                >
+                  {trend.direction === 'flat'
+                    ? 'Flat vs previous period'
+                    : `${trend.direction === 'improving' ? 'Improving' : 'Declining'}${
+                        trend.roasPct != null ? ` · ${signed(trend.roasPct)}% return` : ''
+                      }`}
+                </span>
+              </span>
+            </>
+          )}
+        </div>
 
-          {/* Attention */}
+        {/* ── Attention + learnings ────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
           <div className="lg:col-span-2 card overflow-hidden">
-            <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid var(--hairline)' }}>
-              <Inbox size={18} style={{ color: pendingList.length > 0 ? 'var(--warn)' : 'var(--ink-3)' }} />
+            <div
+              className="px-5 py-4 flex items-center gap-2.5"
+              style={{ borderBottom: '1px solid var(--hairline)' }}
+            >
+              <AlertTriangle
+                size={18}
+                style={{ color: criticalCount > 0 ? 'var(--bad)' : 'var(--ink-3)' }}
+              />
               <h2 className="section-title">What needs your attention</h2>
-              {pendingList.length > 0 && (
-                <span className="ml-auto chip chip-warn">{pendingList.length} waiting</span>
+              {criticalCount > 0 && (
+                <span className="ml-auto chip chip-bad">{criticalCount} urgent</span>
               )}
             </div>
-            {pendingList.length === 0 ? (
-              <div className="px-5 py-10 text-center">
-                <p style={{ color: 'var(--ink-3)' }}>
-                  Nothing waiting on you right now. 🎉
-                </p>
-                <p className="explain mt-2">
-                  When the agent creates a new ad idea it'll show up here for your approval.
-                </p>
-              </div>
-            ) : (
-              <div>
-                {pendingList.slice(0, 4).map((c) => (
-                  <Link
-                    key={c._id}
-                    href={`/dashboard/${tenantId}/approvals`}
-                    className="flex items-center gap-3 px-5 py-3.5"
-                    style={{ borderTop: '1px solid var(--hairline-light)' }}
-                  >
-                    <Rocket size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate" style={{ color: 'var(--ink)' }}>
-                        {c.name || c.topic || 'New ad idea'}
-                      </p>
-                      <p className="explain">
-                        {c.budget ? `Ready to launch with ${formatCurrency(c.budget)} daily budget` : 'Ready to review'}
-                      </p>
-                    </div>
-                    <ArrowRight size={16} style={{ color: 'var(--warn)' }} />
-                  </Link>
-                ))}
-                <Link
-                  href={`/dashboard/${tenantId}/approvals`}
-                  className="block px-5 py-3 text-center font-medium"
-                  style={{ borderTop: '1px solid var(--hairline-light)', color: 'var(--accent-strong)' }}
-                >
-                  Review all {pendingList.length} →
-                </Link>
-              </div>
-            )}
+            <AlertFeed alerts={alerts} />
           </div>
 
-          {/* Latest insight */}
-          <div className="card px-5 py-5 flex flex-col">
-            <div className="flex items-center gap-2.5 mb-3">
-              <Sparkles size={16} style={{ color: 'var(--accent)' }} />
-              <h2 className="section-title">What we're learning</h2>
-            </div>
-            {topInsight ? (
-              <>
-                <p className="insight-quote">
-                  "{topInsight.finding}"
-                </p>
-                <div className="mt-4 flex items-center gap-3 flex-wrap">
-                  <HealthBadge
-                    health={topInsight.confidence >= 0.7 ? 'good' : topInsight.confidence >= 0.5 ? 'watch' : 'unknown'}
-                    label={`${(topInsight.confidence * 100).toFixed(0)}% sure`}
-                  />
-                  <span className="explain">
-                    Based on {topInsight.dataPoints} {topInsight.dataPoints === 1 ? 'campaign' : 'campaigns'}
-                  </span>
-                </div>
-                <Link
-                  href={`/dashboard/${tenantId}/learnings`}
-                  className="mt-auto pt-4 text-sm font-medium"
-                  style={{ color: 'var(--accent-strong)' }}
-                >
-                  See all patterns →
-                </Link>
-              </>
-            ) : (
-              <>
-                <p style={{ color: 'var(--ink-3)' }}>
-                  Not enough data yet.
-                </p>
-                <p className="explain mt-2">
-                  Once a few campaigns finish, the agent will show you which patterns worked best.
-                </p>
-              </>
-            )}
-          </div>
+          <InsightList insights={data.insights} tenantId={tenantId} />
         </div>
 
-        {/* ── Your ads ────────────────────────────────────────────── */}
-        <div className="card overflow-hidden">
-          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--hairline)' }}>
-            <div className="flex items-center gap-2.5">
-              <TrendingUp size={18} style={{ color: 'var(--ink-3)' }} />
-              <h2 className="section-title">Your ads</h2>
-            </div>
-            <Link href={`/dashboard/${tenantId}/campaigns`} className="text-sm font-medium" style={{ color: 'var(--accent-strong)' }}>
-              See all →
-            </Link>
-          </div>
-          {noCampaigns ? (
-            <div className="px-5 py-12 text-center">
-              <p style={{ color: 'var(--ink-3)' }}>No ads yet.</p>
-              <p className="explain mt-2">
-                Click <b>Come up with new ad ideas</b> above to get started.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '40%' }}>Campaign</th>
-                    <th>How it's doing</th>
-                    <th className="num">Spent so far</th>
-                    <th className="num">Return</th>
-                    <th className="num">Started</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentCampaigns.map((c, idx) => {
-                    const health = roasHealth(c.roas ?? null)
-                    return (
-                      <tr key={c._id || idx}>
-                        <td>
-                          <Link
-                            href={`/dashboard/${tenantId}/campaigns/${c._id}`}
-                            className="font-semibold hover:underline"
-                            style={{ color: 'var(--ink)' }}
-                          >
-                            {c.name || c.topic || 'Untitled'}
-                          </Link>
-                          <p className="explain mt-0.5">{statusToPlain(c.status)}</p>
-                        </td>
-                        <td>
-                          <HealthBadge health={health} />
-                        </td>
-                        <td className="num" style={{ color: 'var(--ink)' }}>
-                          {c.spend ? formatCurrency(Math.round(c.spend)) : '—'}
-                        </td>
-                        <td className="num">
-                          {c.roas != null && c.roas > 0 ? (
-                            <span
-                              className="font-semibold"
-                              style={{
-                                color:
-                                  health === 'good' ? 'var(--good)'
-                                  : health === 'watch' ? 'var(--warn)'
-                                  : 'var(--bad)',
-                              }}
-                            >
-                              {spendVsEarnedSentence(c.spend ?? 0, c.roas ?? 0)}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--ink-3)' }}>—</span>
-                          )}
-                        </td>
-                        <td className="num" style={{ color: 'var(--ink-3)' }}>
-                          {c.launchedAt ? formatRelativeTime(c.launchedAt) : '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        {/* ── Grouped performance ──────────────────────────────────── */}
+        <div className="mb-8">
+          <FacetBreakdown facets={data.facets} breakevenROAS={economics.breakevenROAS} />
+        </div>
+
+        {/* The per-campaign table lives on /campaigns, not here. This page
+            answers "what's happening and what needs me", which the tiles,
+            alert feed and grouped view already cover; an 18-row table
+            underneath repeated the same verdicts one campaign at a time. */}
+
+        {/* ── Everything else under this tenant ────────────────────── */}
+        <div className="mb-3">
+          <h2 className="section-title mb-1">Everything else running</h2>
+          <p className="explain mb-4">
+            The rest of the system working on this account.
+          </p>
+          <ActivityGrid activity={activity} tenantId={tenantId} />
         </div>
       </div>
     </div>
   )
+}
+
+function TrendIcon({ direction }: { direction: 'improving' | 'declining' | 'flat' }) {
+  if (direction === 'improving') return <ArrowUpRight size={13} style={{ color: 'var(--good)' }} />
+  if (direction === 'declining') return <ArrowDownRight size={13} style={{ color: 'var(--bad)' }} />
+  return <Minus size={13} style={{ color: 'var(--ink-3)' }} />
+}
+
+function signed(pct: number): string {
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}`
 }

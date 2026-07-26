@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -26,8 +27,10 @@ import {
   rejectIntelligenceDecision,
   primeIntelligence,
   getIntelligenceCycles,
+  getDecisionTrace,
   DecisionsSummary,
   IntelligenceCycle,
+  DecisionTrace,
 } from '@/lib/api'
 import type {
   IntelligenceDecision,
@@ -571,6 +574,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
             <CampaignBucketCard
               key={b.campaignId}
               bucket={b}
+              tenantId={tenantId}
               busyId={busyId}
               rejectingId={rejectingId}
               rejectReason={rejectReason}
@@ -597,6 +601,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
 
 interface CampaignBucketCardProps {
   bucket: CampaignBucket
+  tenantId: string
   busyId: string | null
   rejectingId: string | null
   rejectReason: string
@@ -609,6 +614,7 @@ interface CampaignBucketCardProps {
 
 function CampaignBucketCard({
   bucket,
+  tenantId,
   busyId,
   rejectingId,
   rejectReason,
@@ -697,6 +703,7 @@ function CampaignBucketCard({
           <ActionOption
             key={d._id}
             d={d}
+            tenantId={tenantId}
             busy={busyId === d._id}
             rejectingOpen={rejectingId === d._id}
             rejectReason={rejectReason}
@@ -716,6 +723,7 @@ function CampaignBucketCard({
 
 interface ActionOptionProps {
   d: IntelligenceDecision
+  tenantId: string
   busy: boolean
   rejectingOpen: boolean
   rejectReason: string
@@ -726,8 +734,198 @@ interface ActionOptionProps {
   onConfirmReject: () => void
 }
 
+/**
+ * The sixteen engine steps behind one suggestion, in a slide-over panel.
+ *
+ * Two deliberate choices here:
+ *
+ * 1. It opens in a panel, not inline. Sixteen steps expanded underneath a card
+ *    pushed every other option off-screen, so comparing "why this one" against
+ *    the alternatives meant scrolling past the reasoning for the first. The
+ *    panel keeps the list in place behind it.
+ *
+ * 2. The engine's raw slice log is gone. It was a `key = value` dump —
+ *    snapshotId, freshnessSec, metrics.campaignLevel.cpc, engineVersion — which
+ *    is the right thing to persist and the wrong thing to put in front of an
+ *    operator deciding whether to pause an ad. The headline and its bullets
+ *    already carry the same facts as sentences. The full slice remains in
+ *    intelligence_engine_outputs for anyone debugging the cascade itself.
+ *
+ * Loads lazily on first open and caches thereafter.
+ */
+function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisionId: string }) {
+  const [open, setOpen] = useState(false)
+  const [trace, setTrace] = useState<DecisionTrace | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function openPanel() {
+    setOpen(true)
+    if (trace || loading) return
+    setLoading(true)
+    setError('')
+    try {
+      setTrace(await getDecisionTrace(tenantId, decisionId))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the reasoning trace')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Escape closes, and the body must not scroll behind an open overlay.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        onClick={openPanel}
+        className="mt-2 ml-4 inline-flex items-center gap-1 text-[12px] font-semibold"
+        style={{ color: 'var(--accent-strong)' }}
+      >
+        <ChevronRight size={12} />
+        How it decided (16 steps)
+      </button>
+
+      {/* Rendered through a portal into <body>.
+          This page's wrapper carries `stagger`, whose `animation: revealUp …
+          both` leaves a persisting `transform: translateY(0)` on each card.
+          Any non-none transform makes that element the containing block for
+          `position: fixed` descendants — so an in-place panel anchored itself
+          to the card instead of the viewport: the header rendered off-screen
+          and the backdrop stopped short of the sidebar. */}
+      {open && createPortal(
+        <div
+          data-portal
+          className="fixed inset-0 z-[100] flex justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="How it decided — 16 steps"
+        >
+          <div
+            className="absolute inset-0 animate-fade-in"
+            style={{ background: 'rgba(0,0,0,0.35)' }}
+            onClick={() => setOpen(false)}
+          />
+          <aside
+            className="relative h-full w-full max-w-[560px] flex flex-col animate-panel-slide-in"
+            style={{ background: 'var(--paper)', boxShadow: 'var(--shadow-overlay)' }}
+          >
+            <header
+              className="px-5 py-4 flex items-start justify-between gap-3 shrink-0"
+              style={{ borderBottom: '1px solid var(--hairline)', background: 'var(--paper)' }}
+            >
+              <div className="min-w-0">
+                <h2 className="section-title">How it decided</h2>
+                <p className="explain mt-0.5">
+                  {trace
+                    ? `${trace.stepsWithData} of ${trace.totalSteps} steps recorded output`
+                    : 'Sixteen engines, in order'}
+                </p>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="btn btn-ghost shrink-0"
+                aria-label="Close"
+              >
+                Close
+              </button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {loading && (
+                <p className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
+                  Loading the reasoning…
+                </p>
+              )}
+              {error && (
+                <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>
+              )}
+
+              {trace && (
+                <ol className="flex flex-col gap-2.5">
+                  {trace.steps.map(s => (
+                    <li
+                      key={s.step}
+                      className="rounded-lg px-3.5 py-3"
+                      style={{
+                        background: 'var(--surface-warm)',
+                        // Decisive steps are the causal path; the rest ran but
+                        // didn't change the outcome. Dimming them lets the
+                        // chain be read at a glance, not as 16 equal blocks.
+                        border: s.decisive
+                          ? '1px solid var(--accent)'
+                          : '1px solid var(--hairline-light)',
+                        opacity: s.status === 'no_data' ? 0.55 : 1,
+                      }}
+                    >
+                      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                        <span className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+                          {s.label}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          {s.decisive && (
+                            <span className="chip chip-good" style={{ fontSize: '9.5px', padding: '1px 6px' }}>
+                              drove this
+                            </span>
+                          )}
+                          {s.status === 'no_data' && (
+                            <span className="chip chip-neutral" style={{ fontSize: '9.5px', padding: '1px 6px' }}>
+                              no data
+                            </span>
+                          )}
+                          {s.meta?.degraded && (
+                            <span className="chip chip-warn" style={{ fontSize: '9.5px', padding: '1px 6px' }}>
+                              partial data
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-4)' }}>{s.question}</p>
+                      <p className="text-[12.5px] mt-1 leading-relaxed" style={{ color: 'var(--ink)' }}>
+                        {s.headline}
+                      </p>
+
+                      {s.details.length > 0 && (
+                        <ul className="mt-1.5 flex flex-col gap-1">
+                          {s.details.map((line, i) => (
+                            <li
+                              key={i}
+                              className="text-[12px] leading-relaxed pl-3"
+                              style={{ color: 'var(--ink-2)', textIndent: '-0.6rem' }}
+                            >
+                              · {line}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </aside>
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 function ActionOption({
   d,
+  tenantId,
   busy,
   rejectingOpen,
   rejectReason,
@@ -840,6 +1038,9 @@ function ActionOption({
           </ol>
         </div>
       )}
+
+      {/* Full 16-step trace — how it got here, not just what it concluded. */}
+      <DecisionTracePanel tenantId={tenantId} decisionId={d._id} />
 
       {/* Countdown / status footer */}
       <div className="mt-3 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>

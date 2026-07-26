@@ -356,6 +356,17 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
               <span className="text-[10px] font-bold ml-0.5 px-1.5 py-0.5 rounded-md" style={{ background: 'var(--surface-warm)', color: 'var(--ink-3)' }}>
                 {sheet.assetCount}
               </span>
+              {/* Rejected/orphaned pointers never render in the grid, so
+                  without this the sheet silently just looks short by N. */}
+              {!!sheet.hiddenCount && (
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                  style={{ background: 'var(--surface-warm)', color: 'var(--ink-4)' }}
+                  title={`${sheet.hiddenCount} hidden — rejected, or the source creative was deleted. Rejection is reversible from the creative's package page.`}
+                >
+                  +{sheet.hiddenCount}
+                </span>
+              )}
             </Tabs.Trigger>
           ))}
           {showNewSheet ? (

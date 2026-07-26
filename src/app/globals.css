@@ -108,7 +108,13 @@ body::before {
   background-size: 36px 36px;
   mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, black 30%, transparent 100%);
 }
-body > * { position: relative; z-index: 1; }
+/* Lifts real content above the body::before blueprint grid (z-index 0).
+   Excludes [data-portal] because this rule sets `position` as well as
+   z-index, and a portalled overlay is a direct child of <body> — so it
+   silently rewrote `position: fixed` to `relative`, anchoring full-screen
+   panels to the document instead of the viewport. Any future modal or
+   drawer rendered through createPortal must carry data-portal. */
+body > *:not([data-portal]) { position: relative; z-index: 1; }
 
 /* ── Typography utilities ─────────────────────────────────────────────── */
 
@@ -330,6 +336,8 @@ input:focus, textarea:focus, select:focus {
 @keyframes barGrow { from { width: 0; } }
 @keyframes feedIn { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
 @keyframes sheetSlideUp { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:translateY(0); } }
+/* Side panels slide in from the right edge, not up from the bottom. */
+@keyframes panelSlideIn { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:translateX(0); } }
 
 .animate-fade-up { animation: fadeUp 0.3s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-fade-in { animation: fadeIn 0.22s ease both; }
@@ -338,6 +346,7 @@ input:focus, textarea:focus, select:focus {
 .animate-bar-grow { animation: barGrow 0.7s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-feed-in { animation: feedIn 0.3s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-sheet-slide-up { animation: sheetSlideUp 0.28s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-panel-slide-in { animation: panelSlideIn 0.26s cubic-bezier(0.22,1,0.36,1) both; }
 
 .stagger > * { animation: revealUp 0.35s cubic-bezier(0.22,1,0.36,1) both; }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }

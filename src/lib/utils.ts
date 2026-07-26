@@ -58,22 +58,78 @@ export function formatRelativeTime(dateStr: string | undefined | null): string {
   }
 }
 
-/** "For every ₹1 spent, you earn ₹1.85" style — human ROAS. */
-export function formatROASPlain(roas: number | null | undefined): string {
+/**
+ * "For every ₹1 spent, you earn ₹1.85" style — human ROAS.
+ *
+ * Takes breakeven so the sentence carries its own verdict. "You earn ₹0.92"
+ * reads as a near-miss on its own; "₹0.92 — you need ₹1.03 to break even"
+ * reads as what it is.
+ */
+export function formatROASPlain(
+  roas: number | null | undefined,
+  breakeven?: number,
+): string {
   if (roas == null || !Number.isFinite(roas) || roas <= 0) return 'No revenue yet'
-  const rounded = roas.toFixed(2)
-  return `For every ₹1 spent, you earn ₹${rounded}`
+  const base = `For every ₹1 spent, you earn ₹${roas.toFixed(2)}`
+  if (breakeven == null || !Number.isFinite(breakeven) || breakeven <= 0) return base
+  return roas >= breakeven
+    ? `${base} — above your ₹${breakeven.toFixed(2)} breakeven`
+    : `${base} — you need ₹${breakeven.toFixed(2)} to break even`
 }
 
-/** Simple traffic-light health from a ROAS number vs a target. */
+/**
+ * Traffic-light health for a ROAS, judged against the tenant's real economics.
+ *
+ * `breakeven` and `target` are REQUIRED to mean anything. The previous version
+ * defaulted to `target = 1.5` with an implicit breakeven of 1.0, which is
+ * wrong in both directions: for a 97%-margin digital product (breakeven 1.03,
+ * target 2.06) it painted a sub-target 1.5x as "working well", and for a
+ * 40%-margin product (breakeven 2.5) it painted a deeply loss-making 1.2x as
+ * merely "watch this". Both numbers now come from the server.
+ *
+ * Note `roas === 0` returns 'bad', not 'unknown' — see `dataStateHealth` for
+ * why a zero-revenue campaign is a result rather than a missing measurement.
+ * Callers that genuinely have no data should pass null/undefined.
+ */
 export function roasHealth(
   roas: number | null | undefined,
-  target = 1.5,
+  breakeven: number,
+  target: number,
 ): 'good' | 'watch' | 'bad' | 'unknown' {
-  if (roas == null || !Number.isFinite(roas) || roas === 0) return 'unknown'
+  if (roas == null || !Number.isFinite(roas)) return 'unknown'
   if (roas >= target) return 'good'
-  if (roas >= 1) return 'watch'
+  if (roas >= breakeven) return 'watch'
   return 'bad'
+}
+
+/** Maps a server-computed verdict severity straight onto the UI's palette. */
+export function severityToHealth(
+  severity: 'good' | 'watch' | 'bad' | 'neutral',
+): 'good' | 'watch' | 'bad' | 'unknown' {
+  return severity === 'neutral' ? 'unknown' : severity
+}
+
+/** Currency with an explicit sign — for profit/loss figures where the
+ *  direction is the whole point. */
+export function formatSignedCurrency(amount: number): string {
+  const sign = amount < 0 ? '−' : '+'
+  return `${sign}₹${Math.abs(Math.round(amount)).toLocaleString('en-IN')}`
+}
+
+/** 0.42 → "42%" */
+export function formatPercent(fraction: number, dp = 0): string {
+  if (!Number.isFinite(fraction)) return '—'
+  return `${(fraction * 100).toFixed(dp)}%`
+}
+
+/** Compact ₹ for dense tables: 6431174 → "₹64.3L" */
+export function formatCompactCurrency(amount: number): string {
+  const abs = Math.abs(amount)
+  const sign = amount < 0 ? '−' : ''
+  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(2)}Cr`
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)}L`
+  if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(1)}K`
+  return `${sign}₹${Math.round(abs).toLocaleString('en-IN')}`
 }
 
 /** Short label for status enum → non-tech text. */
@@ -96,6 +152,47 @@ export function statusToPlain(status: string | undefined): string {
     default:
       return status ?? '—'
   }
+}
+
+/**
+ * Status chip for a creative package, derived from its assets rather than from
+ * `status` alone.
+ *
+ * `status` records how the PRODUCTION RUN ended and is never recomputed
+ * afterwards — rejecting an asset writes only `images[i].rejected`, by design,
+ * since "generation completed" stays true regardless of what a human later
+ * decides about the output. But rendering `completed` as a flat "Ready" then
+ * claims a package is usable when every one of its assets has been rejected,
+ * which is how a discarded creative ends up looking production-ready.
+ *
+ * Rejection is reversible and per-asset, so this is a labelling concern, not a
+ * reason to mutate `status`.
+ */
+export function creativePackageStatus(pkg: {
+  status?: string
+  images?: Array<{ imageUrl?: string; rejected?: boolean }>
+  video?: { videoUrl?: string; rejected?: boolean }
+  carouselCards?: Array<{ imageUrl?: string }>
+}): { label: string; chip: string } {
+  const base: Record<string, { label: string; chip: string }> = {
+    pending: { label: 'Producing…', chip: 'chip-warn' },
+    completed: { label: 'Ready', chip: 'chip-good' },
+    failed: { label: 'Failed', chip: 'chip-bad' },
+  }
+  const fallback = { label: pkg.status ?? '—', chip: 'chip-neutral' }
+  if (pkg.status !== 'completed') return base[pkg.status ?? ''] ?? fallback
+
+  const usableImages = (pkg.images ?? []).filter(i => i.imageUrl && !i.rejected).length
+  const usableVideo = !!pkg.video?.videoUrl && !pkg.video.rejected
+  const usableCards = (pkg.carouselCards ?? []).filter(c => c.imageUrl).length
+  if (usableImages || usableVideo || usableCards) return base.completed
+
+  // Distinguish "produced nothing" from "produced, then discarded" — the first
+  // is a generation failure to investigate, the second is a reversible choice.
+  const hadAssets = (pkg.images ?? []).some(i => i.imageUrl) || !!pkg.video?.videoUrl
+  return hadAssets
+    ? { label: 'All rejected', chip: 'chip-warn' }
+    : { label: 'No assets', chip: 'chip-bad' }
 }
 
 /**

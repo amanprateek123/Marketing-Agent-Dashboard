@@ -23,6 +23,7 @@ import type {
   CreateManualCampaignDto,
   UpdateManualCampaignConfigDto,
   CreativePackage,
+  DashboardOverview,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -385,6 +386,35 @@ export const editCreativeImage = (tenantId: string, packageId: string, instructi
     { method: 'POST', body: JSON.stringify({ variantIndex, instruction, ...overrides }) },
   )
 
+/**
+ * Fill in a variant's missing placement sizes by canvas-extending its existing
+ * image — no crop, no model call, no spend. Meta centre-crops a single asset to
+ * fit each placement, which on a headline-top/CTA-bottom creative cuts both;
+ * shipping an asset already at the target ratio leaves nothing to crop.
+ *
+ * Unlike every other creative call here this is SYNCHRONOUS — it does the work
+ * (~0.5s per size, local CPU) and returns the finished images[], so callers
+ * reload on resolve rather than polling. Sizes already present are skipped, so
+ * `added: 0` means "nothing was missing", not a failure.
+ *
+ * Omit `variantIndex` for every variant in the package; omit `ratios` for all four.
+ */
+export const generateCreativeSizes = (
+  tenantId: string,
+  packageId: string,
+  variantIndex?: number,
+  ratios?: CreativeAspectRatio[],
+) =>
+  apiFetch<{
+    status: string
+    creativePackageId: string
+    added: number
+    images: Array<{ variantIndex: number; aspectRatio: string | null; imageUrl: string; extendedFrom: string | null }>
+  }>(
+    `/creative/${tenantId}/packages/${packageId}/generate-sizes`,
+    { method: 'POST', body: JSON.stringify({ variantIndex, ratios }) },
+  )
+
 export const regenerateCreativeVideo = (tenantId: string, packageId: string, overrides?: VideoGenOverrides) =>
   apiFetch<{ status: string }>(
     `/creative/${tenantId}/packages/${packageId}/regenerate-video`,
@@ -592,7 +622,14 @@ export interface GalleryTopicSummary {
 export interface GallerySheetSummary {
   _id: string
   name: string
+  /** Assets that actually render — matches the grid, not the raw pointer count. */
   assetCount: number
+  /**
+   * Pointers that exist but resolve to nothing, almost always because the
+   * asset was rejected (reversible) or its source package was deleted. Shown
+   * so a missing creative reads as "hidden, here's why" rather than a bug.
+   */
+  hiddenCount?: number
 }
 
 export interface GallerySheetWithTopic {
@@ -820,6 +857,49 @@ export const getIntelligenceDecisions = (
   )
 }
 
+/**
+ * One step of the 16-engine cascade, rendered in plain English by the backend.
+ * `logs` is the engine's own recorded output, so the summary above it can be
+ * checked rather than taken on trust.
+ */
+export interface DecisionTraceStep {
+  step: number
+  engine: string
+  /** "Step 7 → Why it is happening" — pre-formatted by the backend. */
+  label: string
+  title: string
+  question: string
+  headline: string
+  details: string[]
+  logs: string[]
+  meta?: {
+    engineConfidence?: number
+    computedAt?: string
+    ms?: number
+    deterministic?: boolean
+    degraded?: string
+    evidenceCount?: number
+  }
+  status: 'ok' | 'no_data'
+  /** This step materially shaped the decision, rather than merely having run. */
+  decisive: boolean
+}
+
+export interface DecisionTrace {
+  decisionId: string
+  cycleId: string
+  campaignName: string
+  actionType: string
+  status: string
+  stepsWithData: number
+  totalSteps: number
+  steps: DecisionTraceStep[]
+}
+
+/** Read-only: replays what the cycle already recorded, never re-runs an engine. */
+export const getDecisionTrace = (tenantId: string, decisionId: string) =>
+  apiFetch<DecisionTrace>(`/intelligence/${tenantId}/decisions/${decisionId}/trace`)
+
 export const getIntelligenceDecisionsSummary = (tenantId: string) =>
   apiFetch<DecisionsSummary>(`/intelligence/${tenantId}/decisions/summary`)
 
@@ -888,3 +968,14 @@ export const getIntelligenceCycles = (
     `/intelligence/${tenantId}/cycles${qs ? `?${qs}` : ''}`,
   )
 }
+
+// ── Tenant overview ────────────────────────────────────────────────────────
+/**
+ * The whole dashboard home page in one call. Every figure arrives
+ * pre-computed against the tenant's contribution margin — see
+ * types/overview.ts for why nothing here should be recalculated client-side.
+ */
+export const getDashboardOverview = (tenantId: string, windowDays = 30) =>
+  apiFetch<DashboardOverview>(
+    `/dashboard/${tenantId}/overview?windowDays=${windowDays}`,
+  )

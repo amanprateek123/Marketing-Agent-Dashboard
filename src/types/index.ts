@@ -488,6 +488,15 @@ export interface CreativeImage {
   resolution?: string
   /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
   rejected?: boolean
+  /**
+   * Set when this entry is a placement size the backend derived by canvas-
+   * extending another asset (value = that asset's imageUrl) rather than a
+   * separately generated creative. Present => render it as a size OF its
+   * source, not as its own variant, and don't offer regenerate/edit/reject on
+   * it — those act on the variant, which is keyed by variantIndex alone and
+   * would resolve to the original anyway.
+   */
+  extendedFrom?: string
 }
 
 export interface CreativeVideo {
@@ -1176,3 +1185,6 @@ export interface CaseStudy {
   }
   lesson?: string
 }
+
+// ── Tenant overview (dashboard home) ───────────────────────────────────────
+export * from './overview'

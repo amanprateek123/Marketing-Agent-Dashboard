@@ -8,6 +8,7 @@ import {
 import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, uploadCreativeBulk, getRejectedAssets, restoreAsset } from '@/lib/api'
 import type { Company, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem, UploadCreativeResult } from '@/lib/api'
+import { creativePackageStatus } from '@/lib/utils'
 
 // Which hookStyle group applies to a given format id — matches format-specs.ts's group assignments.
 function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
@@ -95,17 +96,6 @@ const VIDEO_RESOLUTIONS: { value: '480p' | '720p' | '1080p' | '4k'; label: strin
 
 // Cheapest-first — used to auto-pick the lowest resolution a given Higgsfield model actually supports.
 const RESOLUTION_ORDER = ['480p', '720p', '1080p', '4k'] as const
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Producing…',
-  completed: 'Ready',
-  failed: 'Failed',
-}
-const STATUS_STYLE: Record<string, string> = {
-  pending: 'chip-warn',
-  completed: 'chip-good',
-  failed: 'chip-bad',
-}
 
 export default function CreativesPage({ params }: PageProps) {
   const { tenantId } = use(params)
@@ -397,6 +387,17 @@ export default function CreativesPage({ params }: PageProps) {
   }
 
   const products = company?.products ?? []
+  // The Active tab is the usable library, so a package whose every asset has
+  // been rejected doesn't belong in it — there's nothing left to launch or
+  // edit, and its assets are listed (and restorable) on the Rejected tab right
+  // next to it, so nothing becomes unreachable.
+  //
+  // Deliberately does NOT hide 'No assets' — a package that completed while
+  // producing nothing has no rejected assets, so it appears on the Rejected
+  // tab either. Hiding it here would make a generation failure invisible
+  // everywhere rather than surfacing it for a retry.
+  const visiblePackages = packages.filter(pkg => creativePackageStatus(pkg).label !== 'All rejected')
+  const hiddenRejectedCount = packages.length - visiblePackages.length
   const selectedFormatSkipsVideo = formats.find(f => f.value === format)?.skipVideo ?? false
   // Image formats (skipVideo=true) vs video formats (skipVideo=false) — same
   // split the pipeline already uses internally, just surfaced as the type toggle.
@@ -907,21 +908,47 @@ export default function CreativesPage({ params }: PageProps) {
               <option value="">All languages</option>
               {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
             </select>
+            {/* A breadcrumb, not a listing — the creative itself stays out of
+                this tab, but a silent drop in count reads as data loss. */}
+            {hiddenRejectedCount > 0 && (
+              <button
+                onClick={() => setActiveTab('rejected')}
+                className="text-[11.5px]"
+                style={{ color: 'var(--ink-4)' }}
+                title="Every asset on these creatives was rejected. Restore one from the Rejected tab to bring it back here."
+              >
+                {hiddenRejectedCount} fully-rejected hidden
+              </button>
+            )}
           </div>
 
-          {packages.length === 0 ? (
+          {visiblePackages.length === 0 ? (
             <div className="card px-6 py-14 text-center">
-              <p style={{ color: 'var(--ink-3)' }}>No creative yet.</p>
+              <p style={{ color: 'var(--ink-3)' }}>
+                {packages.length === 0 ? 'No creative yet.' : 'No usable creative here.'}
+              </p>
               <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
-                Click <b>Generate new creative</b> above to make your first one.
+                {packages.length === 0
+                  ? <>Click <b>Generate new creative</b> above to make your first one.</>
+                  : <>Every creative here has been rejected — see the <b>Rejected</b> tab to restore one.</>}
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {packages.map(pkg => {
+              {visiblePackages.map(pkg => {
                 const selected = pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
                 const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
-                const thumb = pkg.images?.[pkg.selectedCopyIndex ?? 0]?.imageUrl
+                // Match on variantIndex and skip rejected/derived entries
+                // rather than indexing images[] positionally: a variant can
+                // hold several entries (pre-made sizes, or canvas-extended
+                // placement sizes appended by the resizer), so position stopped
+                // tracking variant long ago — and a derived size would show the
+                // blur-margined version as the library thumbnail.
+                const variantImages = (pkg.images ?? []).filter(
+                  im => im.variantIndex === (pkg.selectedCopyIndex ?? 0) && im.imageUrl && !im.rejected,
+                )
+                const thumb = (variantImages.find(im => !im.extendedFrom) ?? variantImages[0])?.imageUrl
+                  || (pkg.images ?? []).find(im => im.imageUrl && !im.rejected && !im.extendedFrom)?.imageUrl
                   || pkg.carouselCards?.[0]?.imageUrl
                   || pkg.video?.videoThumbnailUrl
                 const isVideo = !!pkg.video?.videoUrl
@@ -938,9 +965,12 @@ export default function CreativesPage({ params }: PageProps) {
                       )}
                       <div className="flex gap-1" style={{ position: 'absolute', top: 8, right: 8 }}>
                         {isCarousel && <span className="chip chip-neutral">Carousel</span>}
-                        <span className={`chip ${STATUS_STYLE[pkg.status ?? ''] ?? 'chip-neutral'}`}>
-                          {STATUS_LABEL[pkg.status ?? ''] ?? pkg.status}
-                        </span>
+                        {(() => {
+                          // Derived from usable assets, not `status` alone —
+                          // see creativePackageStatus for why they differ.
+                          const s = creativePackageStatus(pkg)
+                          return <span className={`chip ${s.chip}`}>{s.label}</span>
+                        })()}
                       </div>
                     </div>
                     <div className="p-3">
