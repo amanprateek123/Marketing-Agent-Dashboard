@@ -24,6 +24,7 @@ import type {
   UpdateManualCampaignConfigDto,
   CreativePackage,
   DashboardOverview,
+  CampaignLaunchReview,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -120,6 +121,17 @@ export const getCampaigns = (tenantId: string) =>
 
 export const getCampaign = (tenantId: string, campaignId: string) =>
   apiFetch<Campaign>(`/campaigns/${tenantId}/${campaignId}`)
+
+/**
+ * Pre-launch review — what approving this campaign will ACTUALLY do.
+ *
+ * Everything here is resolved server-side rather than read off the campaign
+ * document: the product the ads point at, the exact destination URL, the pixel
+ * and conversion event they'll optimize toward, the ₹/day per ad set, and
+ * `blockers` — the things that will make /approve fail. Gate Approve on `ready`.
+ */
+export const getCampaignReview = (tenantId: string, campaignId: string) =>
+  apiFetch<CampaignLaunchReview>(`/campaigns/${tenantId}/${campaignId}/review`)
 
 /**
  * The rolling-7-day spend estimate that actually gates new campaign creation

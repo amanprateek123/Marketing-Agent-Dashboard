@@ -991,11 +991,137 @@ export interface CreateManualCampaignDto {
  */
 export interface UpdateManualCampaignConfigDto {
   name?: string
+  /**
+   * Reassign the campaign to a different product. Re-resolves conversion
+   * event/value from it and rewrites campaign.productName — which is what
+   * launch reads for the landing URL, pixel and custom conversion. Also the
+   * repair path for older campaigns that have no product recorded.
+   */
+  productName?: string
   accountId?: string
   campaignType?: 'advantage_plus' | 'custom'
   budget?: number
   objective?: string
   adSets?: ManualAdSetInput[]
+}
+
+/* ── Pre-launch review ─────────────────────────────────────────────────────
+   GET /campaigns/:tenantId/:campaignId/review — the resolved truth about what
+   approving will actually do: which product the ads point at, the exact
+   destination URL, the pixel and conversion event they'll optimize toward, the
+   ₹/day each ad set gets, and `blockers` (what will make Approve fail).
+   Values here are RESOLVED, not stored — the destination is the same string
+   launch sends to Meta, not a field copied off the campaign document. */
+
+export interface LaunchReviewIssue {
+  /** Stable machine code — drives the plain-English headline in the UI. */
+  code: string
+  message: string
+  /** Where to go to fix it, when there's an obvious place. */
+  fix?: string
+}
+
+export interface LaunchReviewProduct {
+  name: string
+  /** 'campaign' = recorded explicitly on the campaign. Anything else was inferred. */
+  resolvedVia: 'campaign' | 'brief' | 'sole_active'
+  landingUrl: string
+  price: number | null
+  currency: string
+  conversionValueGross: number
+  conversionValueNet: number
+  refundRatePercent: number
+  contributionMargin: number | null
+  breakevenROAS: number | null
+  conversionTracking:
+    | { type: 'custom_conversion'; id: string }
+    | { type: 'custom_event'; name: string }
+    | { type: 'standard_event'; event: string }
+  pixelId: string
+  pixelSource: 'product' | 'company_default'
+  metaOptimizationGoal: string | null
+  languages: string[]
+}
+
+export interface LaunchReviewAdSet {
+  name: string
+  budgetPercent: number
+  /** ₹/day this ad set actually gets — budget × its share, already computed. */
+  dailyBudget: number
+  audienceType: string
+  customAudience: { id: string; name: string } | null
+  excludedAudiences: Array<{ id: string; name: string } | null>
+  ageMin: number | null
+  ageMax: number | null
+  gender: string
+  geoLocations: string[]
+  locales: number[]
+  interestIds: string[]
+  optimizationGoal: string
+  creativeFormat: string
+  copyVariantIndices: number[]
+  /** The exact page traffic lands on. UTM params are appended per ad at launch. */
+  destinationUrl: string
+}
+
+export interface CampaignLaunchReview {
+  ready: boolean
+  blockers: LaunchReviewIssue[]
+  warnings: LaunchReviewIssue[]
+  campaign: {
+    id: string
+    name: string
+    /** The name Meta will actually create — not always the stored name. */
+    metaCampaignName: string
+    status: string
+    source: string
+    objective: string
+    dailyBudget: number
+    projectedWeeklySpend: number
+    spendCap: number
+    stopTime: string | null
+    intendedAccountId: string
+    allowedAccountIds: string[]
+    isLandingPageTest: boolean
+    briefId: string | null
+    creativePackageId: string | null
+    createdAt: string | null
+    reviewNotes: string
+  }
+  product: LaunchReviewProduct | null
+  adSets: LaunchReviewAdSet[]
+  creative: {
+    packageId: string | null
+    status: string | null
+    copyVariants: Array<{
+      index: number
+      hookStyle: string
+      primaryText: string
+      headline: string
+      description: string
+      cta: string
+    }>
+    images: Array<{
+      variantIndex: number
+      aspectRatio: string | null
+      imageUrl: string
+      rejected: boolean
+    }>
+    videos: Array<{ variantIndex: number; aspectRatio: string | null; videoUrl: string }>
+    carouselCards: Array<{
+      index: number
+      headline: string
+      description: string
+      imageUrl: string
+      link: string
+    }>
+  }
+  budgetContext: {
+    weeklyAlreadyCommitted: number
+    weeklyCap: number
+    weeklyRemaining: number | null
+    maxBudgetPerCampaign: number
+  }
 }
 
 export interface AuditSnapshot {
@@ -1075,6 +1201,13 @@ export interface Campaign {
   _id: string
   status: 'pending_approval' | 'active' | 'paused' | 'completed' | 'failed'
   source?: 'agent' | 'human' | 'manual'
+  /**
+   * Which product this campaign sells — recorded when it was created. The
+   * landing URL, pixel and conversion event all come from this product at
+   * launch. Empty on campaigns created before the field existed; launch then
+   * falls back to the brief, and refuses to launch if that's ambiguous too.
+   */
+  productName?: string
   syncedAt?: string
   metaAccountId?: string
   lastAuditedAt?: string

@@ -27,6 +27,7 @@ import {
 } from '@/components/badges'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { formatCurrency } from '@/lib/utils'
 import {
   getCampaigns,
@@ -39,7 +40,7 @@ import {
   getMetaAccounts,
   getMetaAccountAudiences,
 } from '@/lib/api'
-import type { Campaign, Company, CopyVariant, CreativeImage, MetaAdAccount, MetaCustomAudience, AdSetConfig } from '@/types'
+import type { Campaign, CampaignLaunchReview, Company, CopyVariant, CreativeImage, MetaAdAccount, MetaCustomAudience, AdSetConfig } from '@/types'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -288,6 +289,13 @@ function ApprovalCard({
   )
   const [approveState, setApproveState] = useState<ActionState>('idle')
   const [approveOpen, setApproveOpen] = useState(false)
+
+  // Pre-launch review. Null while loading, or when /review itself failed —
+  // in that case we don't block the operator (the launch endpoint runs the
+  // same checks server-side and will refuse on its own), we just can't show
+  // them the destination up front.
+  const [review, setReview] = useState<CampaignLaunchReview | null>(null)
+  const launchBlocked = !!review && !review.ready
 
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -677,11 +685,24 @@ function ApprovalCard({
             </div>
           )}
 
-          {/* Targeting — who this will actually reach, per ad set. */}
-          {adSets.length > 0 && (
+          {/* What approving actually does — destination, tracking, targeting.
+              Server-resolved (GET /review), so this is the URL, pixel and
+              conversion event Meta will really receive, not fields read off
+              the campaign document. `ready` gates the launch button below. */}
+          <LaunchReview
+            tenantId={tenantId}
+            campaignId={campaign._id}
+            products={company?.products ?? []}
+            onReview={setReview}
+          />
+
+          {/* Ad-set targeting with audience names resolved live against the
+              SELECTED account — the review can't do this, since it doesn't
+              know which account the operator has picked in this session. */}
+          {adSets.some((a) => a.metaAudienceId) && (
             <div className="space-y-2">
               <p className="micro-label flex items-center gap-1.5">
-                <Target size={11} /> Targeting ({adSets.length} ad set{adSets.length === 1 ? '' : 's'})
+                <Target size={11} /> Audiences on the selected account
               </p>
               <div className="space-y-2">
                 {adSets.map((a, i) => (
@@ -695,15 +716,20 @@ function ApprovalCard({
           <div className="flex items-center gap-3 flex-wrap pt-2">
             <button
               onClick={() => setApproveOpen(true)}
-              disabled={approveState === 'loading' || !accountId}
+              disabled={approveState === 'loading' || !accountId || launchBlocked}
               className="btn btn-lg btn-primary"
+              title={
+                launchBlocked
+                  ? `Fix ${review!.blockers.length} thing${review!.blockers.length === 1 ? '' : 's'} above first`
+                  : undefined
+              }
             >
               {approveState === 'loading' ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
                 <CheckCircle2 size={16} />
               )}
-              Yes, launch this ad
+              {launchBlocked ? 'Fix the issues above first' : 'Yes, launch this ad'}
             </button>
 
             <button

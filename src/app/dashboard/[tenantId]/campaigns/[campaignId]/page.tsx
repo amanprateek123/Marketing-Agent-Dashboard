@@ -17,7 +17,8 @@ import { DebateLog } from '@/components/ui/DebateLog'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
 import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
-import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience } from '@/types'
+import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product } from '@/types'
+import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 
@@ -1179,6 +1180,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [tab, setTab] = useState('overview')
   // Open shadow_review counts keyed by Meta adset ID, populated once per load.
   const [adsetProposals, setAdsetProposals] = useState<Record<string, number>>({})
+  // Pre-launch review — what approving actually does (destination, pixel,
+  // conversion event, blockers). Only loaded for pending_approval campaigns.
+  // Null while loading, or if /review itself errored — in that case we don't
+  // block the operator, since /approve runs the same checks server-side.
+  const [review, setReview] = useState<CampaignLaunchReview | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const launchBlocked = !!review && !review.ready
 
   const flash = (m: string, t: 'success' | 'error') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 4000) }
 
@@ -1200,6 +1208,9 @@ export default function CampaignDetailPage({ params }: PageProps) {
         fetch(`${API}/companies/${tenantId}`).then(r => r.ok ? r.json() : null).then(c => {
           const ids: string[] = c?.meta?.accountIds || []
           setAccountIds(ids)
+          // Products power the one-click "which product is this for?" fix in
+          // the launch review panel.
+          setProducts(c?.products ?? [])
           if (!ids.length || selectedAccountId) return
           // Prefer the account the Create Campaign form was built for
           // (audiences picked there are only valid on that same account) —
@@ -1467,6 +1478,18 @@ export default function CampaignDetailPage({ params }: PageProps) {
               </Link>
             </div>
             <div className="p-6 space-y-6">
+              {/* Destination, tracking and blockers first — resolved by the
+                  same code the launch uses, so this is what Meta will really
+                  receive. Everything below is the creative that ships to it. */}
+              <div className="rounded-xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <LaunchReview
+                  tenantId={tenantId}
+                  campaignId={campaignId}
+                  products={products}
+                  onReview={setReview}
+                />
+              </div>
+
               {pkgLoading ? <div className="flex items-center gap-2 py-6" style={{ color: C.textMuted }}><Loader2 size={14} className="animate-spin" />Loading creative…</div> : pkg?.copyVariants?.length ? (
                 <div className="flex gap-4 flex-wrap md:flex-nowrap">
                   {(() => {
@@ -1572,7 +1595,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                   <div className="relative mb-4"><select value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm appearance-none pr-10" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.text }}>{accountIds.map(id => <option key={id} value={id}>{accountNames[id] ? `${accountNames[id]} (act_${id})` : `act_${id}`}</option>)}</select><ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.textMuted }} /></div>
                 )}
                 <div className="flex gap-3">
-                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId} className="btn flex-1" style={{ background: C.green, color: '#fff' }}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : 'Approve & Launch'}</button>
+                  <button onClick={doApprove} disabled={approveState !== 'idle' || !selectedAccountId || launchBlocked} className="btn flex-1" style={{ background: C.green, color: '#fff' }} title={launchBlocked ? `Fix ${review!.blockers.length} thing${review!.blockers.length === 1 ? '' : 's'} above first` : undefined}>{approveState === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <ThumbsUp size={16} />}{approveState === 'loading' ? 'Launching…' : approveState === 'success' ? 'Launched!' : launchBlocked ? 'Fix the issues above first' : 'Approve & Launch'}</button>
                   <button onClick={() => setRejectOpen(o => !o)} className="btn btn-danger"><XCircle size={14} className="inline mr-1.5" />Reject</button>
                 </div>
                 {rejectOpen && <div className="mt-4 pt-4 space-y-3" style={{ borderTop: `1px solid ${C.redBorder}` }}><textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason…" rows={3} className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={{ border: `1px solid ${C.redBorder}`, color: C.text }} /><div className="flex gap-2"><button onClick={doReject} disabled={rejectState === 'loading' || !rejectReason.trim()} className="btn" style={{ background: C.red, color: '#fff' }}>{rejectState === 'loading' ? 'Rejecting…' : 'Confirm'}</button><button onClick={() => { setRejectOpen(false); setRejectReason('') }} className="text-xs" style={{ color: C.textMuted }}>Cancel</button></div></div>}
