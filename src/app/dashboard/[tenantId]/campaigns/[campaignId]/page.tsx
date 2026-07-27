@@ -19,6 +19,7 @@ import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccou
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product } from '@/types'
 import { LaunchReview } from '@/components/campaign/LaunchReview'
+import { CampaignSetup } from '@/components/campaign/CampaignSetup'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 
@@ -1626,6 +1627,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
           {/* ── OVERVIEW ── */}
           <Tabs.Content value="overview">
             <div className="space-y-5">
+              {/* What this campaign IS — destination, conversion being bought,
+                  what Meta may pay for one, who can see it. The metrics above
+                  say how it's doing; this says what it's doing. Skipped while
+                  pending, where the Awaiting Approval panel already shows it. */}
+              {!isPendingApproval && (
+                <CampaignSetup tenantId={tenantId} campaign={campaign} />
+              )}
               {(campaign.reviewNotes || campaign.reviewAdjustments?.budgetAdjusted) && (
                 <div className="card p-6">
                   <p className="micro-label mb-3">Review Notes</p>
