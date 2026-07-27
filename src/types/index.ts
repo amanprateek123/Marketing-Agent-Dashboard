@@ -497,6 +497,14 @@ export interface CreativeImage {
    * would resolve to the original anyway.
    */
   extendedFrom?: string
+  /**
+   * Set when this entry is an alternate size a human uploaded ready-made
+   * alongside the creative (value = that creative's imageUrl) rather than one
+   * the backend derived. Same display rule as `extendedFrom` — a size OF its
+   * source, never the creative itself — but it's a real cut rather than a
+   * canvas-extended one, so it's labelled differently.
+   */
+  uploadedSizeOf?: string
 }
 
 export interface CreativeVideo {

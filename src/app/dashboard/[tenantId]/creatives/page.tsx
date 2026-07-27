@@ -3,11 +3,12 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw, Plus, Trash2, CheckCircle2, XCircle,
+  Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, uploadCreativeBulk, getRejectedAssets, restoreAsset } from '@/lib/api'
-import type { Company, CreativePackage } from '@/types'
-import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem, UploadCreativeResult } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset } from '@/lib/api'
+import type { Company, CreativeImage, CreativePackage } from '@/types'
+import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
+import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
 import { creativePackageStatus } from '@/lib/utils'
 
 // Which hookStyle group applies to a given format id — matches format-specs.ts's group assignments.
@@ -16,18 +17,6 @@ function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
   if (format === 'screenshot') return 'screenshot'
   if (format === 'poll_quiz') return 'poll'
   return 'dr'
-}
-
-// One row in the bulk-upload form — becomes one UploadCreativeItem on submit.
-interface UploadRow {
-  assetType: 'image' | 'video'
-  sourceUrl: string
-  headline: string
-  primaryText: string
-  cta: string
-}
-function emptyUploadRow(): UploadRow {
-  return { assetType: 'image', sourceUrl: '', headline: '', primaryText: '', cta: '' }
 }
 
 interface PageProps {
@@ -147,15 +136,10 @@ export default function CreativesPage({ params }: PageProps) {
 
   // Upload already-made creatives — registers each as a real library +
   // Gallery entry (unlike pasting a URL into a one-off manual campaign).
-  // Bulk: one product + one topic shared across the batch (they're filed
-  // together), each row is its own creative (type/URL/copy) — one bad URL
-  // doesn't block the rest, per-row results show after submit.
+  // The form itself is shared with the Gallery's own "Upload new" tab
+  // (CreativeUploadForm), so file-picking, drag-and-drop and multi-size rows
+  // behave identically wherever an upload starts.
   const [showUploadForm, setShowUploadForm] = useState(false)
-  const [uploadProduct, setUploadProduct] = useState('')
-  const [uploadTopic, setUploadTopic] = useState('')
-  const [uploadRows, setUploadRows] = useState<UploadRow[]>([emptyUploadRow()])
-  const [uploading, setUploading] = useState(false)
-  const [uploadResults, setUploadResults] = useState<UploadCreativeResult[] | null>(null)
 
   const loadPackages = useCallback(async () => {
     try {
@@ -189,7 +173,7 @@ export default function CreativesPage({ params }: PageProps) {
         setFormats(fmts)
         setHookStyles(hooks)
         const active = c.products?.find(p => p.active !== false) ?? c.products?.[0]
-        if (active) { setProduct(active.name); setUploadProduct(active.name) }
+        if (active) setProduct(active.name)
       } catch {
         // handled by the empty state below
       } finally {
@@ -330,54 +314,6 @@ export default function CreativesPage({ params }: PageProps) {
     }
   }
 
-  function addUploadRow() {
-    setUploadRows(rows => [...rows, emptyUploadRow()])
-  }
-
-  function removeUploadRow(index: number) {
-    setUploadRows(rows => rows.filter((_, i) => i !== index))
-  }
-
-  function updateUploadRow(index: number, patch: Partial<UploadRow>) {
-    setUploadRows(rows => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)))
-  }
-
-  async function handleUploadCreative() {
-    if (!uploadProduct) { setError('Pick a product'); return }
-    const incomplete = uploadRows.some(r => !r.sourceUrl.trim() || !r.headline.trim() || !r.primaryText.trim() || !r.cta.trim())
-    if (incomplete) {
-      setError('Every row needs a source URL, headline, primary text, and CTA')
-      return
-    }
-    setError('')
-    setUploading(true)
-    setUploadResults(null)
-    try {
-      const results = await uploadCreativeBulk(
-        tenantId,
-        uploadRows.map(r => ({
-          productName: uploadProduct,
-          topic: uploadTopic || undefined,
-          assetType: r.assetType,
-          sourceUrl: r.sourceUrl.trim(),
-          copy: { headline: r.headline.trim(), primaryText: r.primaryText.trim(), cta: r.cta.trim() },
-        })),
-      )
-      setUploadResults(results)
-      if (results.every(r => r.status === 'completed')) {
-        setShowUploadForm(false)
-        setUploadRows([emptyUploadRow()])
-        setUploadTopic('')
-        setUploadResults(null)
-      }
-      await loadPackages()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to upload creatives')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -437,86 +373,14 @@ export default function CreativesPage({ params }: PageProps) {
         <div className="card p-6 mb-6">
           <p className="micro-label mb-1">Upload existing creatives</p>
           <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>
-            Already have images or videos made elsewhere? Add a row per asset and submit them together — each gets rehosted permanently on our own storage, registered as a real library entry, and auto-organized into the same Gallery topic, just like generated ones. One bad URL won't block the rest.
+            Already have images or videos made elsewhere? Add a row per asset — pick the file off your machine or paste a link — and submit them together. Each gets rehosted permanently on our own storage, registered as a real library entry, and auto-organized into the same Gallery topic, just like generated ones. One bad asset won&apos;t block the rest.
           </p>
-          <div className="grid md:grid-cols-2 gap-3 mb-4">
-            <label className="block">
-              <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Product (applies to all rows)</span>
-              <select value={uploadProduct} onChange={e => setUploadProduct(e.target.value)} className="input" disabled={uploading}>
-                <option value="">Select a product</option>
-                {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Gallery topic (optional — applies to all rows)</span>
-              <input value={uploadTopic} onChange={e => setUploadTopic(e.target.value)} className="input" placeholder="Defaults to the product name" disabled={uploading} />
-            </label>
-          </div>
-
-          <div className="space-y-4 mb-4">
-            {uploadRows.map((row, i) => {
-              const result = uploadResults?.[i]
-              return (
-                <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Row {i + 1}</span>
-                    <div className="flex items-center gap-2">
-                      {result && (
-                        result.status === 'completed'
-                          ? <span className="chip chip-good"><CheckCircle2 size={11} /> Uploaded</span>
-                          : <span className="chip chip-bad" title={result.error}><XCircle size={11} /> Failed</span>
-                      )}
-                      {uploadRows.length > 1 && (
-                        <button onClick={() => removeUploadRow(i)} disabled={uploading} className="p-1 rounded-md" style={{ color: 'var(--bad)' }}>
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {result?.status === 'failed' && (
-                    <p className="text-[11px] mb-2" style={{ color: 'var(--bad)' }}>{result.error}</p>
-                  )}
-                  <div className="grid md:grid-cols-[120px_1fr] gap-3 mb-3">
-                    <label className="block">
-                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Type</span>
-                      <select value={row.assetType} onChange={e => updateUploadRow(i, { assetType: e.target.value as 'image' | 'video' })} className="input" disabled={uploading}>
-                        <option value="image">Image</option>
-                        <option value="video">Video</option>
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Source URL</span>
-                      <input value={row.sourceUrl} onChange={e => updateUploadRow(i, { sourceUrl: e.target.value })} className="input" placeholder="https://..." disabled={uploading} />
-                    </label>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-3 mb-3">
-                    <label className="block">
-                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Headline</span>
-                      <input value={row.headline} onChange={e => updateUploadRow(i, { headline: e.target.value })} className="input" disabled={uploading} />
-                    </label>
-                    <label className="block">
-                      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>CTA</span>
-                      <input value={row.cta} onChange={e => updateUploadRow(i, { cta: e.target.value })} className="input" placeholder="e.g. Get My Report" disabled={uploading} />
-                    </label>
-                  </div>
-                  <label className="block">
-                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Primary text</span>
-                    <textarea value={row.primaryText} onChange={e => updateUploadRow(i, { primaryText: e.target.value })} className="input" style={{ minHeight: 60 }} disabled={uploading} />
-                  </label>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button onClick={addUploadRow} disabled={uploading} className="btn btn-ghost">
-              <Plus size={14} /> Add another
-            </button>
-            <button onClick={handleUploadCreative} disabled={uploading} className="btn btn-primary">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploading ? 'Uploading…' : `Upload ${uploadRows.length > 1 ? `all ${uploadRows.length}` : 'creative'}`}
-            </button>
-          </div>
+          <CreativeUploadForm
+            tenantId={tenantId}
+            products={products}
+            defaultProduct={products.find(p => p.active !== false)?.name}
+            onUploaded={() => { loadPackages() }}
+          />
         </div>
       )}
 
@@ -938,17 +802,18 @@ export default function CreativesPage({ params }: PageProps) {
               {visiblePackages.map(pkg => {
                 const selected = pkg.copyVariants?.[pkg.selectedCopyIndex ?? 0]
                 const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
-                // Match on variantIndex and skip rejected/derived entries
-                // rather than indexing images[] positionally: a variant can
-                // hold several entries (pre-made sizes, or canvas-extended
+                // Match on variantIndex and skip rejected entries and alternate
+                // sizes rather than indexing images[] positionally: a variant
+                // can hold several entries (uploaded sizes, or canvas-extended
                 // placement sizes appended by the resizer), so position stopped
-                // tracking variant long ago — and a derived size would show the
-                // blur-margined version as the library thumbnail.
+                // tracking variant long ago — and an alternate size would show
+                // an off-ratio (or blur-margined) cut as the library thumbnail.
                 const variantImages = (pkg.images ?? []).filter(
                   im => im.variantIndex === (pkg.selectedCopyIndex ?? 0) && im.imageUrl && !im.rejected,
                 )
-                const thumb = (variantImages.find(im => !im.extendedFrom) ?? variantImages[0])?.imageUrl
-                  || (pkg.images ?? []).find(im => im.imageUrl && !im.rejected && !im.extendedFrom)?.imageUrl
+                const isAlternateSize = (im: CreativeImage) => !!im.extendedFrom || !!im.uploadedSizeOf
+                const thumb = (variantImages.find(im => !isAlternateSize(im)) ?? variantImages[0])?.imageUrl
+                  || (pkg.images ?? []).find(im => im.imageUrl && !im.rejected && !isAlternateSize(im))?.imageUrl
                   || pkg.carouselCards?.[0]?.imageUrl
                   || pkg.video?.videoThumbnailUrl
                 const isVideo = !!pkg.video?.videoUrl

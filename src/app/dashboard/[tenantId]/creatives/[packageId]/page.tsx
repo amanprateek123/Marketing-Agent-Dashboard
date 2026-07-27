@@ -198,12 +198,17 @@ export default function CreativeDetailPage({ params }: PageProps) {
     }
   }
 
-  // All images for a variant, original first. The backend appends derived
-  // sizes, so `extendedFrom` is what separates "the creative" from "another
-  // size of the creative" — order in the array is not a guarantee.
+  // All images for a variant, the creative itself first. Alternate sizes —
+  // uploaded ready-made (`uploadedSizeOf`) or canvas-extended by the resizer
+  // (`extendedFrom`) — are appended, so those two tags are what separate "the
+  // creative" from "another size of it"; order in the array is not a
+  // guarantee.
+  function isAlternateSize(im: CreativeImage): boolean {
+    return !!im.extendedFrom || !!im.uploadedSizeOf
+  }
   function variantImages(i: number): CreativeImage[] {
     const all = (pkg?.images ?? []).filter(im => im.variantIndex === i && im.imageUrl)
-    return [...all.filter(im => !im.extendedFrom), ...all.filter(im => im.extendedFrom)]
+    return [...all.filter(im => !isAlternateSize(im)), ...all.filter(isAlternateSize)]
   }
 
   // Canvas-extend the variant's image into whichever of the four placement
@@ -510,7 +515,14 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 // those are listed separately below it. Final fallback keeps
                 // the pre-resize behaviour for an entry that has a prompt but
                 // no imageUrl yet (mid-generation), which variantImages drops.
-                const img = sizes.find(im => !im.extendedFrom) ?? sizes[0] ?? pkg.images?.find(im => im.variantIndex === i)
+                const img = sizes.find(im => !isAlternateSize(im)) ?? sizes[0] ?? pkg.images?.find(im => im.variantIndex === i)
+                // Where the extra sizes came from — auto-resized here, or
+                // supplied ready-made at upload. Worth saying, since one is a
+                // canvas-extend with a blurred margin and the other is a real cut.
+                const sizeBreakdown = [
+                  sizes.filter(s => s.extendedFrom).length,
+                  sizes.filter(s => s.uploadedSizeOf).length,
+                ].map((n, idx) => (n ? `${n} ${idx === 0 ? 'auto-resized' : 'uploaded'}` : '')).filter(Boolean).join(', ')
                 const busy = imageBusy[i] ?? null
                 return (
                   <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: isPrimary ? '2px solid var(--accent)' : '1px solid var(--hairline-light)' }}>
@@ -677,9 +689,9 @@ export default function CreativeDetailPage({ params }: PageProps) {
                         >
                           {showSizes[i] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                           {sizes.length} sizes
-                          <span className="font-normal" style={{ color: 'var(--ink-3)' }}>
-                            ({sizes.filter(s => s.extendedFrom).length} auto-resized)
-                          </span>
+                          {sizeBreakdown && (
+                            <span className="font-normal" style={{ color: 'var(--ink-3)' }}>({sizeBreakdown})</span>
+                          )}
                         </button>
 
                         {showSizes[i] && (
@@ -706,7 +718,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                                     {size.aspectRatio ?? '—'}
                                   </span>
                                   <span className="text-[9.5px]" style={{ color: 'var(--ink-3)' }}>
-                                    {size.extendedFrom ? 'Resized' : 'Original'}
+                                    {size.extendedFrom ? 'Resized' : size.uploadedSizeOf ? 'Uploaded' : 'Original'}
                                   </span>
                                 </div>
                               </a>

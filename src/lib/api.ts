@@ -300,6 +300,14 @@ export interface UploadCreativeItem {
   sourceUrl: string
   aspectRatio?: string
   resolution?: string
+  /**
+   * Ready-made alternate sizes of the SAME image — your own 1:1/9:16 cuts of
+   * one ad, filed under one creative so launch serves the right size per
+   * placement instead of letting Meta centre-crop it. Image-only: a package
+   * holds a single video, so extra video sizes are rejected. A size that
+   * fails to upload doesn't fail the creative — it comes back in `sizeErrors`.
+   */
+  sizes?: { sourceUrl: string; aspectRatio?: string; resolution?: string }[]
 }
 
 export const uploadCreative = (tenantId: string, body: UploadCreativeItem) =>
@@ -313,6 +321,8 @@ export interface UploadCreativeResult {
   packageId?: string
   error?: string
   sourceUrl: string
+  /** Extra sizes that failed to upload. The row still succeeded — the creative and its remaining sizes are filed — so this is a warning, not a failure. */
+  sizeErrors?: { sourceUrl: string; error: string }[]
 }
 
 /** Bulk version of uploadCreative — files several already-made creatives into the library (and Gallery) in one request. One bad URL doesn't block the rest of the batch; check each result's `status`. */
