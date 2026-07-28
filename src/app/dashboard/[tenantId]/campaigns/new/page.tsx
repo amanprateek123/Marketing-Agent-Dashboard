@@ -253,7 +253,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   }, [creativeSource, productName, tenantId])
 
   const totalPct = adSets.reduce((s, a) => s + (a.budgetPercent || 0), 0)
-  const pctValid = campaignType === 'advantage_plus' || adSets.length === 1 || Math.abs(totalPct - 100) < 1
+  const pctValid = adSets.length === 1 || Math.abs(totalPct - 100) < 1
 
   // When ad sets carry different creative subsets, every variant must be
   // covered by at least one ad set — otherwise it's silently never shown.
@@ -329,7 +329,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
           campaignType,
           budget,
           objective,
-          adSets: campaignType === 'advantage_plus' ? [adSets[0]] : adSets,
+          adSets,
         })
         router.push(`/dashboard/${tenantId}/campaigns/${editCampaignId}`)
         return
@@ -341,7 +341,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
         campaignType,
         budget,
         objective,
-        adSets: campaignType === 'advantage_plus' ? [adSets[0]] : adSets,
+        adSets,
         ...(creativeSource === 'library'
           ? { creativePackageId: selectedPackageId }
           : creativeSource === 'gallery'
@@ -491,10 +491,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
           {/* ── Ad sets ── */}
           <section className="card p-6">
             <div className="flex items-center justify-between mb-4">
-              <p className="micro-label mb-0">{campaignType === 'advantage_plus' ? 'Ad set' : `Ad sets (${adSets.length})`}</p>
-              {campaignType === 'custom' && (
-                <button onClick={addAdSet} className="btn btn-ghost text-xs"><Plus size={11} /> Add ad set</button>
-              )}
+              <p className="micro-label mb-0">{adSets.length === 1 ? 'Ad set' : `Ad sets (${adSets.length})`}</p>
+              <button onClick={addAdSet} className="btn btn-ghost text-xs"><Plus size={11} /> Add ad set</button>
             </div>
             {!pctValid && (
               <p className="text-[11px] font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
@@ -507,21 +505,21 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
               </p>
             )}
             <div className="space-y-4">
-              {(campaignType === 'advantage_plus' ? adSets.slice(0, 1) : adSets).map((a, i) => (
+              {adSets.map((a, i) => (
                 <AdSetCard
                   key={i}
                   index={i}
                   adSet={a}
-                  showBudgetSplit={campaignType === 'custom' && adSets.length > 1}
+                  showBudgetSplit={adSets.length > 1}
                   showTargeting={campaignType === 'custom'}
                   advantagePlus={campaignType === 'advantage_plus'}
-                  showRemove={campaignType === 'custom' && adSets.length > 1}
+                  showRemove={adSets.length > 1}
                   audiences={accountAudiences}
                   audiencesLoading={audiencesLoading}
                   audiencesError={audiencesError}
                   tenantId={tenantId}
                   copyVariants={copyVariants}
-                  showCreativeSplit={campaignType === 'custom' && adSets.length > 1}
+                  showCreativeSplit={adSets.length > 1}
                   metaLocales={metaLocales}
                   geoLabels={geoLabels}
                   onLearnLabels={learnGeoLabels}
@@ -860,7 +858,11 @@ function AdSetCard({
   onRemove: () => void
 }) {
   const needsAudience = ['lookalike', 'retarget', 'custom'].includes(adSet.audienceType)
-  const needsInterests = adSet.audienceType === 'interest'
+  // An Advantage+ ad set inside a Custom campaign behaves exactly like the
+  // standalone Advantage+ type — suggestions instead of filters, no age/gender.
+  // Both routes funnel through this flag so the two can't drift apart.
+  const apAdSet = advantagePlus || adSet.audienceType === 'advantage_plus'
+  const needsInterests = adSet.audienceType === 'interest' || apAdSet
   // geoLocations defaults to ['IN'] on every fresh ad set (emptyAdSet()) —
   // that's not a sign of deliberate customization, so it's excluded here.
   // Without this exclusion, every new ad set opened "expanded" by default,
@@ -916,6 +918,10 @@ function AdSetCard({
               <option value="retarget">Retarget (custom audience)</option>
               <option value="lookalike">Lookalike audience</option>
               <option value="interest">Interest-based (prospecting)</option>
+              {/* Advantage+ is a per-ad-set audience flag in Meta, not a
+                  campaign type — so one campaign can run it alongside
+                  hand-targeted ad sets and A/B them on the same creative. */}
+              <option value="advantage_plus">Advantage+ (Meta finds the audience)</option>
             </select>
           </label>
 
@@ -930,6 +936,31 @@ function AdSetCard({
                 onSelect={id => onChange({ metaAudienceId: id })}
               />
             </label>
+          )}
+
+          {adSet.audienceType === 'advantage_plus' && (
+            <>
+              <div className="rounded-lg px-3 py-2 mb-3" style={{ background: 'var(--warn-bg, var(--surface))', border: '1px solid var(--hairline)' }}>
+                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+                  <strong>This ad set&apos;s targeting is a suggestion.</strong> Meta starts with people who
+                  match it, then delivers wherever it expects conversions. Pair it with a hand-targeted
+                  ad set on the same creative to see which audience actually performs. Age and gender
+                  don&apos;t apply — Meta overrides them.
+                </p>
+              </div>
+              <label className="block mb-3">
+                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
+                  Include a custom audience <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(optional seed)</span>
+                </span>
+                <AudiencePicker
+                  audiences={audiences}
+                  audiencesLoading={audiencesLoading}
+                  audiencesError={audiencesError}
+                  selectedId={adSet.metaAudienceId ?? ''}
+                  onSelect={id => onChange({ metaAudienceId: id })}
+                />
+              </label>
+            </>
           )}
 
           {needsInterests && (
@@ -954,12 +985,15 @@ function AdSetCard({
             style={{ color: 'var(--accent)' }}
           >
             {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            Advanced targeting (age, gender, geo, language)
+            {apAdSet ? 'Advanced targeting (geo, language)' : 'Advanced targeting (age, gender, geo, language)'}
           </button>
 
           {showAdvanced && (
             <div className="mb-3 space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {/* Age/gender are omitted for Advantage+ ad sets — Meta overrides
+                  both, and the backend strips them so campaignConfig can't
+                  claim targeting that never ships. */}
+              <div className={`grid grid-cols-2 md:grid-cols-3 gap-3${apAdSet ? ' hidden' : ''}`}>
                 <label className="block">
                   <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Age min</span>
                   <input type="number" min={18} max={65} value={adSet.ageMin ?? 18} onChange={e => onChange({ ageMin: Number(e.target.value) })} className="input" />
