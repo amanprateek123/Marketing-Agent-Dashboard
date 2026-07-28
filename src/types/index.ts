@@ -588,6 +588,10 @@ export interface AdSetConfig {
   ageMax?: number
   gender?: string
   geoLocations?: string[]
+  /** Meta region keys — replace the country layer at launch. */
+  geoStates?: string[]
+  /** Meta city keys — replace the country layer at launch. */
+  geoCities?: string[]
   /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — see getMetaLocales() for the verified table. */
   locales?: number[]
   interests?: string[]
@@ -894,6 +898,22 @@ export interface MetaInterestOption {
 }
 
 /**
+ * A Meta geo-targeting location (state/region or city) from the live
+ * adgeolocation search. `key` is the opaque Meta identifier that goes into
+ * targeting.geo_locations.regions[].key / .cities[].key — never a name, and
+ * never a hand-copied constant (the backend hardcoded region keys before this
+ * search existed, with the same drift risk that bit the locale ID table).
+ */
+export interface MetaGeoOption {
+  key: string
+  name: string
+  type: string
+  /** Parent state on city results — disambiguates same-named cities. */
+  region?: string
+  countryCode?: string
+}
+
+/**
  * Live custom/lookalike audience from ONE specific ad account (not the
  * saved product.metaAudiences snapshot) — Custom Audiences are account-
  * scoped Meta objects, so this list always matches whichever account the
@@ -940,8 +960,17 @@ export interface ManualAdSetInput {
   ageMin?: number
   ageMax?: number
   gender?: 'male' | 'female' | 'all'
+  /** ISO country codes. Dropped at launch whenever geoStates/geoCities are set. */
   geoLocations?: string[]
-  /** Meta locale IDs (e.g. 84 = Marathi, 53 = Hindi) — filters delivery to users whose platform language matches. */
+  /**
+   * Meta region keys from searchMetaGeo(). These REPLACE the country layer at
+   * launch — Meta rejects overlapping country + region targeting (subcode
+   * 1487756), so the backend sends whichever is narrowest, never both.
+   */
+  geoStates?: string[]
+  /** Meta city keys, same source and precedence as geoStates (25km radius applied at launch). */
+  geoCities?: string[]
+  /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — filters delivery to users whose platform language matches. */
   locales?: number[]
   interests?: Array<{ id: string; name: string }>
   optimizationGoal?: string
@@ -1055,6 +1084,12 @@ export interface LaunchReviewAdSet {
   ageMax: number | null
   gender: string
   geoLocations: string[]
+  /** Meta region keys that will ship (suppressing the country layer). */
+  geoStates: string[]
+  /** Meta city keys that will ship (suppressing the country layer). */
+  geoCities: string[]
+  /** Which geo layer Meta actually receives — the narrowest one that's set. */
+  effectiveGeoLayer: 'countries' | 'regions' | 'cities'
   locales: number[]
   interestIds: string[]
   optimizationGoal: string

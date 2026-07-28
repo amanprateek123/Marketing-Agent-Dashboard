@@ -408,11 +408,27 @@ function IssueRow({
 // ── Ad group row ────────────────────────────────────────────────────────────
 function AdSetRow({ adSet, showSplit }: { adSet: LaunchReviewAdSet; showSplit: boolean }) {
   const facts: Array<[string, string]> = []
-  if (adSet.customAudience) facts.push(['Audience', adSet.customAudience.name])
+  // Under Advantage+ a custom audience only SEEDS delivery — Meta spends
+  // outside it. Printing the bare name would read as "confined to this
+  // audience", which is what the approver would otherwise assume.
+  if (adSet.customAudience)
+    facts.push([
+      'Audience',
+      adSet.audienceType === 'advantage_plus'
+        ? `${adSet.customAudience.name} — suggestion only, Meta delivers beyond it`
+        : adSet.customAudience.name,
+    ])
   if (adSet.ageMin != null || adSet.ageMax != null)
     facts.push(['Age', `${adSet.ageMin ?? 18}–${adSet.ageMax ?? 65}`])
   if (adSet.gender && adSet.gender !== 'all') facts.push(['Gender', adSet.gender])
-  if (adSet.geoLocations.length) facts.push(['Location', adSet.geoLocations.join(', ')])
+  // Show the layer Meta actually receives. An ad set with states selected
+  // still carries geoLocations in its stored config, but launch drops it —
+  // printing "Location: IN" there tells the approver the opposite of reality.
+  if (adSet.effectiveGeoLayer === 'cities' && adSet.geoCities?.length)
+    facts.push(['Location', `${adSet.geoCities.length} city area(s) — country targeting dropped`])
+  else if (adSet.effectiveGeoLayer === 'regions' && adSet.geoStates?.length)
+    facts.push(['Location', `${adSet.geoStates.length} state(s) — country targeting dropped`])
+  else if (adSet.geoLocations.length) facts.push(['Location', adSet.geoLocations.join(', ')])
   if (adSet.interestIds.length) facts.push(['Interests', `${adSet.interestIds.length} selected`])
   if (adSet.optimizationGoal)
     facts.push(['Optimising for', adSet.optimizationGoal.replace(/_/g, ' ').toLowerCase()])

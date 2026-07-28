@@ -8,12 +8,12 @@ import {
   Target, Zap, Info, Image as ImageIcon, Video as VideoIcon, X,
   ChevronUp, ChevronDown,
 } from 'lucide-react'
-import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAccountAudiences, getMetaLocales, searchMetaInterests, createManualCampaign, updateManualCampaignConfig, listCreativePackages, listGalleryTopics, listGallerySheets, listGalleryAssets } from '@/lib/api'
+import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAccountAudiences, getMetaLocales, searchMetaInterests, searchMetaGeo, resolveMetaGeo, createManualCampaign, updateManualCampaignConfig, listCreativePackages, listGalleryTopics, listGallerySheets, listGalleryAssets } from '@/lib/api'
 import type { GalleryTopicSummary, GallerySheetSummary } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CampaignFieldGuide } from '@/components/campaign/CampaignFieldGuide'
 import type {
-  Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
+  Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
@@ -64,6 +64,14 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   // live from the same table meta-ads.service.ts uses at launch, so the
   // picker can't silently drift from what actually gets sent to Meta.
   const [metaLocales, setMetaLocales] = useState<{ name: string; id: number }[]>([])
+  // Meta geo key → display name. Ad sets store bare keys (that's all the
+  // targeting payload accepts), so this map is the only thing that lets the
+  // chips read "Maharashtra" instead of "1735". Populated as the user picks,
+  // and back-filled from Meta when an existing campaign is opened for edit.
+  const [geoLabels, setGeoLabels] = useState<Record<string, string>>({})
+  const learnGeoLabels = useCallback((labels: Record<string, string>) => {
+    setGeoLabels(prev => ({ ...prev, ...labels }))
+  }, [])
 
   const [name, setName] = useState('')
   const [productName, setProductName] = useState('')
@@ -162,12 +170,26 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
             ageMax: a.ageMax,
             gender: a.gender as ManualAdSetInput['gender'],
             geoLocations: a.geoLocations,
+            geoStates: a.geoStates,
+            geoCities: a.geoCities,
             locales: a.locales,
             interests: (a.interests ?? []).map(id => ({ id, name: id })),
             optimizationGoal: a.optimizationGoal,
             creativeFormat: a.creativeFormat === 'carousel' ? 'both' : a.creativeFormat,
             ads: a.ads,
           })))
+
+          // A saved campaign only stores geo KEYS, and meta-geo-search looks up
+          // by name — so without this the geo chips would read "1735, 1738".
+          // Best-effort: the endpoint returns {} on any Meta hiccup and the
+          // chips fall back to raw keys rather than the edit screen breaking.
+          const regionKeys = [...new Set(cfgAdSets.flatMap(a => a.geoStates ?? []))]
+          const cityKeys = [...new Set(cfgAdSets.flatMap(a => a.geoCities ?? []))]
+          if (regionKeys.length || cityKeys.length) {
+            resolveMetaGeo(tenantId, regionKeys, cityKeys)
+              .then(labels => { if (!cancelled) learnGeoLabels(labels) })
+              .catch(() => { /* raw keys are an acceptable fallback */ })
+          }
         }
         // Read-only display for the per-ad-set "which creative" picker below
         // (that picker edits `ads` — which variant index each ad set ships —
@@ -189,7 +211,9 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load campaign for editing') })
       .finally(() => { if (!cancelled) setEditLoading(false) })
     return () => { cancelled = true }
-  }, [tenantId, editCampaignId])
+    // learnGeoLabels is a useCallback with no deps — stable, so listing it
+    // here can't re-trigger the prefill.
+  }, [tenantId, editCampaignId, learnGeoLabels])
 
   // Audiences are account-scoped Meta objects — re-fetch live whenever the
   // selected ad account changes, instead of relying on a saved snapshot.
@@ -451,7 +475,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 icon={<Zap size={16} />}
                 title="Advantage+"
                 subtitle="Meta finds your audience automatically"
-                body="Fastest way to test a new offer or creative. Meta's algorithm decides who sees your ads — you set budget and objective, nothing else. You give up precise control over age, gender, geography, and interests; the trade-off is usually faster initial delivery and lower manual effort. Best for: new creative tests, broad awareness, when you don't yet have a proven audience."
+                body="Fastest way to test a new offer or creative. You can suggest interests, locations and languages, but Meta treats them as hints and delivers beyond them whenever it expects better results — and it overrides age and gender entirely. The trade-off is usually faster initial delivery and lower manual effort. Best for: new creative tests, broad awareness, when you don't yet have a proven audience."
               />
               <TypeCard
                 active={campaignType === 'custom'}
@@ -490,6 +514,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                   adSet={a}
                   showBudgetSplit={campaignType === 'custom' && adSets.length > 1}
                   showTargeting={campaignType === 'custom'}
+                  advantagePlus={campaignType === 'advantage_plus'}
                   showRemove={campaignType === 'custom' && adSets.length > 1}
                   audiences={accountAudiences}
                   audiencesLoading={audiencesLoading}
@@ -498,6 +523,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                   copyVariants={copyVariants}
                   showCreativeSplit={campaignType === 'custom' && adSets.length > 1}
                   metaLocales={metaLocales}
+                  geoLabels={geoLabels}
+                  onLearnLabels={learnGeoLabels}
                   onChange={patch => updateAdSet(i, patch)}
                   onRemove={() => removeAdSet(i)}
                 />
@@ -693,7 +720,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
               </p>
               {campaignType === 'advantage_plus' ? (
                 <ul className="text-[12px] leading-relaxed space-y-1.5" style={{ color: 'var(--ink-3)' }}>
-                  <li>• No age/gender/geo/interest control — Meta decides delivery.</li>
+                  <li>• Interests, location and language are suggestions only — Meta delivers beyond them.</li>
+                  <li>• No age or gender control at all — Meta overrides both.</li>
                   <li>• Typically fastest to exit the learning phase (more traffic to learn from).</li>
                   <li>• Can&rsquo;t isolate which segment is profitable after the fact.</li>
                   <li>• Good default when you have no retargeting audience yet.</li>
@@ -803,12 +831,20 @@ function TypeCard({ active, onClick, icon, title, subtitle, body }: { active: bo
 }
 
 function AdSetCard({
-  index, adSet, showBudgetSplit, showTargeting, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, onChange, onRemove,
+  index, adSet, showBudgetSplit, showTargeting, advantagePlus, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, geoLabels, onLearnLabels, onChange, onRemove,
 }: {
   index: number
   adSet: ManualAdSetInput
   showBudgetSplit: boolean
   showTargeting: boolean
+  /**
+   * Advantage+ campaign. Targeting still renders, but as SUGGESTIONS —
+   * Meta's own Advantage+ audience screen exposes detailed targeting and
+   * location the same way, and delivers beyond them when it wants to.
+   * Age/gender are the exception and stay hidden: Meta constrains those
+   * under Advantage+ (age_max must remain 65), so the backend omits them.
+   */
+  advantagePlus: boolean
   showRemove: boolean
   audiences: MetaCustomAudience[]
   audiencesLoading: boolean
@@ -817,6 +853,9 @@ function AdSetCard({
   copyVariants: ManualCopyVariant[]
   showCreativeSplit: boolean
   metaLocales: { name: string; id: number }[]
+  /** Meta geo key → display name, shared across ad sets (keys are globally unique). */
+  geoLabels: Record<string, string>
+  onLearnLabels: (labels: Record<string, string>) => void
   onChange: (patch: Partial<ManualAdSetInput>) => void
   onRemove: () => void
 }) {
@@ -826,8 +865,11 @@ function AdSetCard({
   // that's not a sign of deliberate customization, so it's excluded here.
   // Without this exclusion, every new ad set opened "expanded" by default,
   // defeating the point of collapsing this section.
-  const isCustomGeo = (adSet.geoLocations?.length ?? 0) > 0
-    && !(adSet.geoLocations!.length === 1 && adSet.geoLocations![0] === 'IN')
+  const isCustomGeo = ((adSet.geoLocations?.length ?? 0) > 0
+    && !(adSet.geoLocations!.length === 1 && adSet.geoLocations![0] === 'IN'))
+    // State/city targeting is always deliberate — there's no default for it,
+    // so any value here should open the section on a prefilled ad set.
+    || (adSet.geoStates?.length ?? 0) > 0 || (adSet.geoCities?.length ?? 0) > 0
   const [showAdvanced, setShowAdvanced] = useState(
     !!(adSet.gender && adSet.gender !== 'all') || isCustomGeo || (adSet.locales?.length ?? 0) > 0
     || adSet.ageMin !== undefined && adSet.ageMin !== 18 || adSet.ageMax !== undefined && adSet.ageMax !== 65,
@@ -894,6 +936,17 @@ function AdSetCard({
             <InterestPicker tenantId={tenantId} selected={adSet.interests ?? []} onChange={interests => onChange({ interests })} />
           )}
 
+          <ExclusionPicker
+            audiences={audiences}
+            audiencesLoading={audiencesLoading}
+            audiencesError={audiencesError}
+            selected={adSet.excludeAudienceIds ?? []}
+            // Retarget/custom ad sets deliberately DO want existing audiences,
+            // so the backend skips auto-exclusion for them — don't promise it.
+            autoExcludeNote={!needsAudience || adSet.audienceType === 'lookalike'}
+            onChange={excludeAudienceIds => onChange({ excludeAudienceIds })}
+          />
+
           <button
             type="button"
             onClick={() => setShowAdvanced(s => !s)}
@@ -906,7 +959,7 @@ function AdSetCard({
 
           {showAdvanced && (
             <div className="mb-3 space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <label className="block">
                   <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Age min</span>
                   <input type="number" min={18} max={65} value={adSet.ageMin ?? 18} onChange={e => onChange({ ageMin: Number(e.target.value) })} className="input" />
@@ -921,40 +974,87 @@ function AdSetCard({
                     <option value="all">All</option><option value="male">Male</option><option value="female">Female</option>
                   </select>
                 </label>
-                <label className="block">
-                  <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Geo (ISO codes)</span>
-                  <input value={(adSet.geoLocations ?? []).join(', ')} onChange={e => onChange({ geoLocations: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) })} className="input" placeholder="IN" />
-                </label>
               </div>
 
-              <div>
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
-                  Language <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(leave empty for no language filter — verified IDs only, see below)</span>
-                </span>
-                {metaLocales.length === 0 ? (
-                  <p className="text-[11px]" style={{ color: 'var(--ink-4)' }}>No verified languages configured yet — add one to META_LOCALE_IDS in audience-targeting-resolver.ts (never guess an ID; Meta silently targets the wrong language).</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {metaLocales.map(l => {
-                      const active = (adSet.locales ?? []).includes(l.id)
-                      return (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => toggleLocale(l.id)}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
-                          style={active ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }}
-                        >
-                          {l.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+              <GeoPicker
+                tenantId={tenantId}
+                adSet={adSet}
+                geoLabels={geoLabels}
+                onLearnLabels={onLearnLabels}
+                onChange={onChange}
+              />
+
+              <LanguagePicker metaLocales={metaLocales} selected={adSet.locales ?? []} onToggle={toggleLocale} />
             </div>
           )}
         </>
+      )}
+
+      {/* Advantage+ audience suggestions. Meta's own Advantage+ screen shows a
+          Detailed targeting box and a location picker, and treats both as hints
+          it may deliver beyond — so these render here too, just labelled for
+          what they actually are. Age/gender are omitted deliberately: Meta
+          constrains them under Advantage+ and the backend drops them. */}
+      {advantagePlus && (
+        <div className="mb-3 space-y-3">
+          <div className="rounded-lg px-3 py-2" style={{ background: 'var(--warn-bg, var(--surface))', border: '1px solid var(--hairline)' }}>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+              <strong>These are suggestions, not filters.</strong> Meta starts with people who match
+              them, then delivers to anyone else it expects to convert. Use <strong>Custom Targeting</strong> if
+              the targeting must actually bind. Age and gender aren&apos;t offered here — Meta
+              overrides them under Advantage+.
+            </p>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>
+                Include a custom audience <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(optional seed)</span>
+              </span>
+              {adSet.metaAudienceId && (
+                <button type="button" onClick={() => onChange({ metaAudienceId: undefined })} className="text-[11px] font-semibold" style={{ color: 'var(--ink-4)' }}>
+                  Clear
+                </button>
+              )}
+            </div>
+            <AudiencePicker
+              audiences={audiences}
+              audiencesLoading={audiencesLoading}
+              audiencesError={audiencesError}
+              selectedId={adSet.metaAudienceId ?? ''}
+              onSelect={id => onChange({ metaAudienceId: id })}
+            />
+            <p className="text-[10px] mt-1" style={{ color: 'var(--ink-4)' }}>
+              Seeds delivery — Meta still spends outside this audience. For real retargeting that
+              stays inside it, use Custom Targeting with audience source &ldquo;Retarget&rdquo;.
+            </p>
+          </div>
+
+          <InterestPicker tenantId={tenantId} selected={adSet.interests ?? []} onChange={interests => onChange({ interests })} />
+
+          {/* Exclusions are NOT a suggestion under Advantage+ — Meta subtracts
+              them for real (verified in the launch probe: excluded_custom_
+              audiences survived alongside advantage_audience=1). This is the
+              only hard audience control available on this campaign type. */}
+          <ExclusionPicker
+            audiences={audiences}
+            audiencesLoading={audiencesLoading}
+            audiencesError={audiencesError}
+            selected={adSet.excludeAudienceIds ?? []}
+            autoExcludeNote
+            onChange={excludeAudienceIds => onChange({ excludeAudienceIds })}
+          />
+
+          <GeoPicker
+            tenantId={tenantId}
+            adSet={adSet}
+            geoLabels={geoLabels}
+            onLearnLabels={onLearnLabels}
+            onChange={onChange}
+          />
+
+          <LanguagePicker metaLocales={metaLocales} selected={adSet.locales ?? []} onToggle={toggleLocale} />
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
@@ -1010,6 +1110,112 @@ function AdSetCard({
  * (unlike InterestPicker below): the full list is already in memory, so
  * filtering is instant.
  */
+/**
+ * Exclusion audiences — Meta's "Exclude" box, multi-select.
+ *
+ * Ships as targeting.excluded_custom_audiences, which Meta honours under BOTH
+ * campaign types (unlike an *included* custom audience, which Advantage+
+ * demotes to a suggestion). An exclusion is a hard subtract either way, so
+ * this is the one audience control that always means exactly what it says.
+ *
+ * Not to be confused with the auto-exclusion the backend applies on top: any
+ * prospecting ad set additionally excludes the tenant's Purchasers audience
+ * (buildAdSetConfigs). Whatever is picked here is merged with that, never
+ * replaced — see the note rendered below the chips.
+ */
+function ExclusionPicker({
+  audiences, audiencesLoading, audiencesError, selected, autoExcludeNote, onChange,
+}: {
+  audiences: MetaCustomAudience[]
+  audiencesLoading: boolean
+  audiencesError: string
+  selected: string[]
+  autoExcludeNote: boolean
+  onChange: (ids: string[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const base = q ? audiences.filter(a => a.name.toLowerCase().includes(q)) : audiences
+    return base.filter(a => !selected.includes(a.id)).slice(0, 40)
+  }, [audiences, query, selected])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  // Selected IDs may not resolve to a name when the campaign was built against
+  // a different ad account (Custom Audiences are account-scoped) — show the
+  // bare ID rather than dropping the chip, so nothing silently disappears.
+  const nameOf = (id: string) => audiences.find(a => a.id === id)?.name ?? id
+
+  return (
+    <div className="mb-3">
+      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
+        Exclude audiences <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(never shown these people)</span>
+      </span>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {selected.map(id => (
+            <span key={id} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md" style={{ background: 'var(--bad-bg, var(--surface))', color: 'var(--bad)' }}>
+              {nameOf(id)}
+              <button type="button" onClick={() => onChange(selected.filter(x => x !== id))}><X size={10} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="relative" ref={containerRef}>
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          className="input"
+          placeholder={audiencesLoading ? 'Loading audiences…' : 'Search audiences to exclude…'}
+          disabled={audiencesLoading}
+        />
+        {open && !audiencesLoading && (
+          <div className="absolute z-20 mt-1 w-full rounded-lg overflow-hidden max-h-64 overflow-y-auto" style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', boxShadow: 'var(--shadow-raised)' }}>
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-[12px]" style={{ color: 'var(--ink-4)' }}>No matches</p>
+            ) : filtered.map(a => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => { onChange([...selected, a.id]); setQuery('') }}
+                className="w-full text-left px-3 py-2 text-[12px] flex items-center justify-between gap-2 hover:opacity-80"
+                style={{ color: 'var(--ink)' }}
+              >
+                <span className="truncate">{a.name}</span>
+                <span className="text-[10px] shrink-0" style={{ color: 'var(--ink-4)' }}>{a.type}{a.approxSizeLower != null ? ` · ~${a.approxSizeLower.toLocaleString()}` : ''}</span>
+              </button>
+            ))}
+            {filtered.length === 40 && (
+              <p className="px-3 py-1.5 text-[10px]" style={{ color: 'var(--ink-4)', borderTop: '1px solid var(--hairline-light)' }}>Showing first 40 — keep typing to narrow down</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {autoExcludeNote && (
+        <p className="text-[10px] mt-1" style={{ color: 'var(--ink-4)' }}>
+          Past purchasers are excluded automatically on prospecting ad sets — added on top of anything picked here, not instead of it.
+        </p>
+      )}
+      {audiencesError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{audiencesError}</p>}
+    </div>
+  )
+}
+
 function AudiencePicker({
   audiences, audiencesLoading, audiencesError, selectedId, onSelect,
 }: {
@@ -1145,6 +1351,188 @@ function InterestPicker({ tenantId, selected, onChange }: { tenantId: string; se
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Language (Meta locale) toggles. Shared by the Custom and Advantage+ paths —
+ * locale targeting is one of the few things Meta honours identically under
+ * both (meta-ads.service.ts applies it outside its advantage_plus branch).
+ */
+function LanguagePicker({
+  metaLocales, selected, onToggle,
+}: {
+  metaLocales: { name: string; id: number }[]
+  selected: number[]
+  onToggle: (id: number) => void
+}) {
+  return (
+    <div>
+      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
+        Language <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(leave empty for no language filter — verified IDs only)</span>
+      </span>
+      {metaLocales.length === 0 ? (
+        <p className="text-[11px]" style={{ color: 'var(--ink-4)' }}>No verified languages configured yet — add one to META_LOCALE_IDS in audience-targeting-resolver.ts (never guess an ID; Meta silently targets the wrong language).</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {metaLocales.map(l => {
+            const active = selected.includes(l.id)
+            return (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => onToggle(l.id)}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+                style={active ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }}
+              >
+                {l.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Geo targeting picker — countries, states/regions, or cities.
+ *
+ * The three layers are mutually exclusive by design, not by preference: Meta
+ * rejects an ad set that targets both a country and regions inside it
+ * (subcode 1487756), so the backend sends only the narrowest layer that's set
+ * and drops the rest. Modelling that as one selector makes the discarded
+ * layers impossible to set by accident.
+ *
+ * States/cities are searched live and stored as opaque Meta keys. Names are
+ * kept in a page-level label map purely for display — on a campaign reopened
+ * for edit, keys whose labels haven't been resolved yet render as the raw key.
+ */
+function GeoPicker({
+  tenantId, adSet, geoLabels, onLearnLabels, onChange,
+}: {
+  tenantId: string
+  adSet: ManualAdSetInput
+  geoLabels: Record<string, string>
+  onLearnLabels: (labels: Record<string, string>) => void
+  onChange: (patch: Partial<ManualAdSetInput>) => void
+}) {
+  const layer: 'countries' | 'regions' | 'cities' =
+    (adSet.geoCities?.length ?? 0) > 0 ? 'cities'
+      : (adSet.geoStates?.length ?? 0) > 0 ? 'regions'
+        : 'countries'
+
+  const [mode, setMode] = useState<'countries' | 'regions' | 'cities'>(layer)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<MetaGeoOption[]>([])
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const searchType = mode === 'cities' ? 'city' : 'region'
+  const field = mode === 'cities' ? 'geoCities' : 'geoStates'
+  const selectedKeys = (mode === 'cities' ? adSet.geoCities : adSet.geoStates) ?? []
+
+  const runSearch = useCallback((q: string) => {
+    if (q.trim().length < 2) { setResults([]); return }
+    setSearching(true)
+    // Country filter follows whatever the ad set has in its country layer, so
+    // a US campaign doesn't get Indian cities. Defaults to IN, this tenant's market.
+    const country = adSet.geoLocations?.[0] || 'IN'
+    searchMetaGeo(tenantId, q, searchType, country)
+      .then(setResults)
+      .catch(() => setResults([]))
+      .finally(() => setSearching(false))
+  }, [tenantId, searchType, adSet.geoLocations])
+
+  function handleQueryChange(v: string) {
+    setQuery(v)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => runSearch(v), 350)
+  }
+
+  function addPlace(opt: MetaGeoOption) {
+    if (selectedKeys.includes(opt.key)) return
+    onLearnLabels({ [opt.key]: opt.name })
+    onChange({ [field]: [...selectedKeys, opt.key] } as Partial<ManualAdSetInput>)
+    setQuery('')
+    setResults([])
+  }
+  function removePlace(key: string) {
+    onChange({ [field]: selectedKeys.filter(k => k !== key) } as Partial<ManualAdSetInput>)
+  }
+
+  // Switching layer clears the others — leaving stale keys behind would make
+  // the visible selection differ from what actually ships.
+  function switchMode(next: 'countries' | 'regions' | 'cities') {
+    setMode(next)
+    setQuery(''); setResults([])
+    if (next === 'countries') onChange({ geoStates: [], geoCities: [] })
+    else if (next === 'regions') onChange({ geoCities: [] })
+    else onChange({ geoStates: [] })
+  }
+
+  return (
+    <div>
+      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Location</span>
+      <div className="flex gap-1.5 mb-2">
+        {([['countries', 'Countries'], ['regions', 'States'], ['cities', 'Cities']] as const).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => switchMode(v)}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+            style={mode === v
+              ? { background: 'var(--accent)', color: '#fff' }
+              : { background: 'var(--surface)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'countries' ? (
+        <input
+          value={(adSet.geoLocations ?? []).join(', ')}
+          onChange={e => onChange({ geoLocations: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) })}
+          className="input"
+          placeholder="IN"
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {selectedKeys.map(k => (
+              <span key={k} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>
+                {geoLabels[k] ?? k}<button onClick={() => removePlace(k)}><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+          <div className="relative">
+            <input
+              value={query}
+              onChange={e => handleQueryChange(e.target.value)}
+              className="input"
+              placeholder={mode === 'cities' ? 'Search cities, e.g. Mumbai…' : 'Search states, e.g. Maharashtra…'}
+            />
+            {searching && <Loader2 size={13} className="animate-spin absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-4)' }} />}
+            {results.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full rounded-lg overflow-hidden max-h-56 overflow-y-auto" style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', boxShadow: 'var(--shadow-raised)' }}>
+                {results.map(r => (
+                  <button key={r.key} onClick={() => addPlace(r)} className="w-full text-left px-3 py-2 text-[12px] flex items-center justify-between hover:opacity-80" style={{ color: 'var(--ink)' }}>
+                    <span>{r.name}</span>
+                    <span className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{r.region ?? r.countryCode ?? r.type}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {selectedKeys.length > 0 && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--ink-4)' }}>
+              Country targeting is dropped at launch — Meta rejects overlapping country + {mode === 'cities' ? 'city' : 'region'} targeting.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }

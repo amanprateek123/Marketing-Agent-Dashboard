@@ -17,6 +17,7 @@ import type {
   TimeseriesPoint,
   MetaAudienceOption,
   MetaInterestOption,
+  MetaGeoOption,
   MetaAdAccountsResponse,
   MetaBusiness,
   MetaCustomAudience,
@@ -173,6 +174,39 @@ export const getMetaAccountAudiences = (tenantId: string, accountId: string) =>
 export const searchMetaInterests = (tenantId: string, q: string) =>
   apiFetch<MetaInterestOption[]>(
     `/campaigns/${tenantId}/meta-interest-search?q=${encodeURIComponent(q)}`,
+  )
+
+/**
+ * Live Meta geo search for states/regions and cities. Returns opaque Meta
+ * `key` values — the only thing ad-set targeting accepts — so a picked
+ * location can never drift the way a hardcoded region constant can.
+ * `country` narrows results (e.g. 'IN'); omit to search worldwide.
+ */
+export const searchMetaGeo = (
+  tenantId: string,
+  q: string,
+  type: 'region' | 'city',
+  country?: string,
+) =>
+  apiFetch<MetaGeoOption[]>(
+    `/campaigns/${tenantId}/meta-geo-search?q=${encodeURIComponent(q)}&type=${type}` +
+      (country ? `&country=${encodeURIComponent(country)}` : ''),
+  )
+
+/**
+ * Reverse of searchMetaGeo — turns saved geo keys back into display names, so
+ * a campaign reopened for edit shows "Maharashtra" instead of the stored
+ * "1735". Returns a flat { key: name } map; the backend returns {} rather
+ * than erroring if Meta's lookup fails, so callers can render raw keys.
+ */
+export const resolveMetaGeo = (
+  tenantId: string,
+  regions: string[],
+  cities: string[],
+) =>
+  apiFetch<Record<string, string>>(
+    `/campaigns/${tenantId}/meta-geo-resolve?regions=${encodeURIComponent(regions.join(','))}` +
+      `&cities=${encodeURIComponent(cities.join(','))}`,
   )
 
 /** Verified Meta locale IDs for language targeting — only entries confirmed against Meta's live adlocale search, never guessed. */
