@@ -107,6 +107,46 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   const [selectedGallerySheetId, setSelectedGallerySheetId] = useState('')
   const [gallerySelection, setGallerySelection] = useState<GalleryPickedAsset[]>([])
 
+  // Gallery sheets present in the creative pool, in pool order. Drives the
+  // per-ad-set "Creative sheet" dropdown — one click to give an ad set exactly
+  // that sheet's ads instead of hand-ticking a dozen headlines.
+  const poolSheets = useMemo(() => {
+    const out: Array<{ sheetId: string; sheetName: string; count: number }> = []
+    gallerySelection.forEach(a => {
+      if (!a.sheetId) return
+      const found = out.find(s => s.sheetId === a.sheetId)
+      if (found) found.count++
+      else out.push({ sheetId: a.sheetId, sheetName: a.sheetName, count: 1 })
+    })
+    return out
+  }, [gallerySelection])
+
+  /**
+   * Which sheet an ad set covers EXACTLY — derived from its `ads` indices
+   * rather than stored, so hand-editing the checkboxes below keeps the
+   * dropdown honest (it falls back to "all / custom mix") instead of the two
+   * controls drifting apart.
+   */
+  const assignedSheetIdFor = useCallback((adSet: ManualAdSetInput): string => {
+    if (!adSet.ads?.length || !gallerySelection.length) return ''
+    const sheetIds = new Set(adSet.ads.map(i => gallerySelection[i]?.sheetId).filter(Boolean))
+    if (sheetIds.size !== 1) return ''
+    const sheetId = [...sheetIds][0] as string
+    const sheetTotal = gallerySelection.filter(a => a.sheetId === sheetId).length
+    return adSet.ads.length === sheetTotal ? sheetId : ''
+  }, [gallerySelection])
+
+  const assignSheetToAdSet = useCallback((index: number, sheetId: string) => {
+    setAdSets(prev => prev.map((a, i) => {
+      if (i !== index) return a
+      if (!sheetId) return { ...a, ads: [] }   // empty = every variant
+      const ads = gallerySelection
+        .map((asset, idx) => (asset.sheetId === sheetId ? idx : -1))
+        .filter(idx => idx >= 0)
+      return { ...a, ads }
+    }))
+  }, [gallerySelection])
+
   useEffect(() => {
     let cancelled = false
 
@@ -523,6 +563,9 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                   metaLocales={metaLocales}
                   geoLabels={geoLabels}
                   onLearnLabels={learnGeoLabels}
+                  poolSheets={poolSheets}
+                  assignedSheetId={assignedSheetIdFor(a)}
+                  onAssignSheet={sheetId => assignSheetToAdSet(i, sheetId)}
                   onChange={patch => updateAdSet(i, patch)}
                   onRemove={() => removeAdSet(i)}
                 />
@@ -829,7 +872,7 @@ function TypeCard({ active, onClick, icon, title, subtitle, body }: { active: bo
 }
 
 function AdSetCard({
-  index, adSet, showBudgetSplit, showTargeting, advantagePlus, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, geoLabels, onLearnLabels, onChange, onRemove,
+  index, adSet, showBudgetSplit, showTargeting, advantagePlus, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, geoLabels, onLearnLabels, poolSheets, assignedSheetId, onAssignSheet, onChange, onRemove,
 }: {
   index: number
   adSet: ManualAdSetInput
@@ -854,6 +897,11 @@ function AdSetCard({
   /** Meta geo key → display name, shared across ad sets (keys are globally unique). */
   geoLabels: Record<string, string>
   onLearnLabels: (labels: Record<string, string>) => void
+  /** Gallery sheets represented in the campaign's creative pool, in pool order. */
+  poolSheets: Array<{ sheetId: string; sheetName: string; count: number }>
+  /** Which sheet this ad set currently covers exactly ('' = all / custom mix). */
+  assignedSheetId: string
+  onAssignSheet: (sheetId: string) => void
   onChange: (patch: Partial<ManualAdSetInput>) => void
   onRemove: () => void
 }) {
@@ -1111,6 +1159,27 @@ function AdSetCard({
 
       {showCreativeSplit && copyVariants.length > 1 && (
         <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+          {/* Whole-sheet assignment. The campaign still ships one creative
+              pool — this just bulk-sets `ads` to that sheet's slice of it, so
+              "Marriage sheet → this ad set" is one click instead of ticking
+              14 headlines. Individual checkboxes below still work for tuning. */}
+          {poolSheets.length > 0 && (
+            <label className="block mb-3">
+              <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
+                Creative sheet <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(assigns that sheet&apos;s ads to this ad set)</span>
+              </span>
+              <select
+                value={assignedSheetId}
+                onChange={e => onAssignSheet(e.target.value)}
+                className="input"
+              >
+                <option value="">— all creatives —</option>
+                {poolSheets.map(s => (
+                  <option key={s.sheetId} value={s.sheetId}>{s.sheetName} ({s.count})</option>
+                ))}
+              </select>
+            </label>
+          )}
           <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
             Creatives for this ad set <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(leave all checked to include every variant)</span>
           </span>
@@ -1658,6 +1727,13 @@ function LibraryPicker({
 interface GalleryPickedAsset {
   key: string
   packageId: string
+  /**
+   * Which sheet this asset came from. The campaign still ships ONE creative
+   * pool (ad sets address it by index via `ads`), so sheet identity has to
+   * travel with each asset for an ad set to be able to claim a whole sheet.
+   */
+  sheetId: string
+  sheetName: string
   assetType: 'image' | 'video'
   assetUrl: string
   aspectRatio?: string
@@ -1696,9 +1772,21 @@ function GalleryPicker({
   const [topicsLoading, setTopicsLoading] = useState(true)
   const [sheets, setSheets] = useState<GallerySheetSummary[]>([])
   const [sheetsLoading, setSheetsLoading] = useState(false)
-  const [assets, setAssets] = useState<GalleryPickedAsset[]>([])
   const [assetsLoading, setAssetsLoading] = useState(false)
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // Per-sheet caches. Switching sheets used to replace `assets` wholesale, so a
+  // campaign's creative pool could only ever be ONE sheet — which made it
+  // impossible to give ad set 1 the Marriage sheet and ad set 2 the Career
+  // sheet. These accumulate instead: a visited sheet is fetched once and its
+  // selection survives every later switch, so nothing reloads or resets.
+  const [assetsBySheet, setAssetsBySheet] = useState<Record<string, GalleryPickedAsset[]>>({})
+  const [selectedBySheet, setSelectedBySheet] = useState<Record<string, Set<string>>>({})
+  // First-visit order, so pool indices (which ad sets store in `ads`) stay
+  // stable as more sheets are opened — appending a sheet must never renumber
+  // the assets an earlier ad set already claimed.
+  const [sheetOrder, setSheetOrder] = useState<string[]>([])
+
+  const assets = assetsBySheet[selectedSheetId] ?? []
+  const selectedKeys = selectedBySheet[selectedSheetId] ?? new Set<string>()
 
   useEffect(() => {
     let cancelled = false
@@ -1725,7 +1813,11 @@ function GalleryPicker({
   }, [tenantId, selectedTopicId])
 
   useEffect(() => {
-    if (!selectedSheetId) { setAssets([]); setSelectedKeys(new Set()); return }
+    if (!selectedSheetId) return
+    // Already fetched — reuse the cache. This is what makes switching sheets
+    // free and non-destructive: no network call, no selection reset.
+    if (assetsBySheet[selectedSheetId]) return
+    const sheetName = sheets.find(s => s._id === selectedSheetId)?.name ?? 'Sheet'
     let cancelled = false
     setAssetsLoading(true)
     listGalleryAssets(tenantId, selectedSheetId).then(async rawAssets => {
@@ -1741,6 +1833,8 @@ function GalleryPicker({
         return {
           key: a._id,
           packageId: a.sourcePackageId,
+          sheetId: selectedSheetId,
+          sheetName,
           assetType: a.assetType,
           assetUrl: a.assetUrl,
           aspectRatio: a.aspectRatio,
@@ -1751,25 +1845,36 @@ function GalleryPicker({
           targetLanguage: pkg?.targetLanguage,
         }
       })
-      setAssets(resolved)
+      setAssetsBySheet(prev => ({ ...prev, [selectedSheetId]: resolved }))
       // Every asset in a freshly-opened sheet starts selected — "use all the
       // ads in this sheet" with zero clicks; uncheck individually to exclude one.
-      setSelectedKeys(new Set(resolved.map(a => a.key)))
+      setSelectedBySheet(prev => ({ ...prev, [selectedSheetId]: new Set(resolved.map(a => a.key)) }))
+      setSheetOrder(prev => (prev.includes(selectedSheetId) ? prev : [...prev, selectedSheetId]))
     }).finally(() => { if (!cancelled) setAssetsLoading(false) })
     return () => { cancelled = true }
-  }, [tenantId, selectedSheetId])
-
-  useEffect(() => {
-    onSelectionChange(assets.filter(a => selectedKeys.has(a.key)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assets, selectedKeys])
+  }, [tenantId, selectedSheetId, sheets])
+
+  // The pool is the union across every visited sheet, concatenated in visit
+  // order. Ad sets address it positionally, so this order is load-bearing.
+  useEffect(() => {
+    const pool: GalleryPickedAsset[] = []
+    for (const sheetId of sheetOrder) {
+      const picked = selectedBySheet[sheetId]
+      for (const a of assetsBySheet[sheetId] ?? []) {
+        if (picked?.has(a.key)) pool.push(a)
+      }
+    }
+    onSelectionChange(pool)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetsBySheet, selectedBySheet, sheetOrder])
 
   function toggleAsset(key: string) {
-    setSelectedKeys(prev => {
-      const next = new Set(prev)
+    setSelectedBySheet(prev => {
+      const next = new Set(prev[selectedSheetId] ?? [])
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      return next
+      return { ...prev, [selectedSheetId]: next }
     })
   }
 
@@ -1824,18 +1929,36 @@ function GalleryPicker({
         <div className="flex gap-1 mb-4 flex-wrap items-center" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
           {sheets.map(sheet => {
             const active = selectedSheetId === sheet._id
+            // Sheets already contributing to the pool are marked, so it's
+            // obvious the campaign spans several of them rather than just
+            // whichever tab happens to be open.
+            const inPool = (selectedBySheet[sheet._id]?.size ?? 0)
             return (
               <button
                 key={sheet._id}
                 onClick={() => onSelectSheet(sheet._id)}
-                className="px-3 py-2 text-[12px] font-semibold -mb-px"
+                className="px-3 py-2 text-[12px] font-semibold -mb-px flex items-center gap-1.5"
                 style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
               >
                 {sheet.name}
+                {inPool > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>{inPool}</span>
+                )}
               </button>
             )
           })}
         </div>
+      )}
+
+      {/* Count sheets that actually CONTRIBUTE assets, not every sheet
+          visited — opening a sheet and deselecting it all (or an empty sheet)
+          must not inflate the number. */}
+      {sheetOrder.filter(id => (selectedBySheet[id]?.size ?? 0) > 0).length > 1 && (
+        <p className="text-[11px] mb-3" style={{ color: 'var(--ink-3)' }}>
+          Pool spans {sheetOrder.filter(id => (selectedBySheet[id]?.size ?? 0) > 0).length} sheets
+          — assign each one to an ad set using the
+          <strong> Creative sheet</strong> dropdown on that ad set above.
+        </p>
       )}
 
       {/* Assets */}
