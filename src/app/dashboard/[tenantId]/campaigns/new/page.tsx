@@ -12,6 +12,7 @@ import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAc
 import type { GalleryTopicSummary, GallerySheetSummary } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CampaignFieldGuide } from '@/components/campaign/CampaignFieldGuide'
+import { CreativeEditor } from '@/components/campaign/CreativeEditor'
 import type {
   Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
@@ -106,6 +107,9 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   const [selectedGalleryTopicId, setSelectedGalleryTopicId] = useState('')
   const [selectedGallerySheetId, setSelectedGallerySheetId] = useState('')
   const [gallerySelection, setGallerySelection] = useState<GalleryPickedAsset[]>([])
+  // Creative package attached to the campaign being edited — drives the
+  // in-place CreativeEditor below (edit mode previously had no way to fix copy).
+  const [editCreativePackageId, setEditCreativePackageId] = useState('')
 
   // Gallery sheets present in the creative pool, in pool order. Drives the
   // per-ad-set "Creative sheet" dropdown — one click to give an ad set exactly
@@ -235,6 +239,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
         // (that picker edits `ads` — which variant index each ad set ships —
         // not the copy text itself, so real variant labels are still needed).
         if (c.creativePackageId) {
+          setEditCreativePackageId(c.creativePackageId)
           getCreativePackage(tenantId, c.creativePackageId)
             .then(pkg => {
               if (cancelled || !pkg.copyVariants?.length) return
@@ -575,10 +580,24 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
 
           {/* ── Creative ── */}
           {isEditMode ? (
-            <div className="rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm" style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--info)' }}>
-              <Info size={15} className="mt-0.5 shrink-0" />
-              <span>Creative (copy, image, video) isn&rsquo;t edited here — use the copy variant cards on the campaign page instead.</span>
-            </div>
+            <section className="card p-6">
+              <p className="micro-label mb-4">Creative</p>
+              {editCreativePackageId ? (
+                <CreativeEditor
+                  tenantId={tenantId}
+                  packageId={editCreativePackageId}
+                  // Ad sets ship Stories/Reels-only unless publisherPlatforms is
+                  // overridden, which this form doesn't expose — so the "ships"
+                  // badge assumes vertical, matching what launch actually does.
+                  verticalPlacements
+                />
+              ) : (
+                <div className="rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm" style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--info)' }}>
+                  <Info size={15} className="mt-0.5 shrink-0" />
+                  <span>This campaign has no creative package attached, so there is nothing to edit.</span>
+                </div>
+              )}
+            </section>
           ) : (
           <section className="card p-6">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
