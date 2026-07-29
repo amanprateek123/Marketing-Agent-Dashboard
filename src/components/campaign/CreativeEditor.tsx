@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Check, AlertCircle, Plus } from 'lucide-react'
-import { getCreativePackage, updateCreativePackage } from '@/lib/api'
+import { getCreativePackage, updateCreativePackage, generateCreativeSizes } from '@/lib/api'
 import type { CreativePackage } from '@/types'
 
 const ASPECT_RATIOS = ['9:16', '4:5', '1:1', '16:9'] as const
@@ -64,6 +64,8 @@ export function CreativeEditor({
   const [savingKey, setSavingKey] = useState('')
   const [savedKey, setSavedKey] = useState('')
   const [addingFor, setAddingFor] = useState<number | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [generated, setGenerated] = useState('')
 
   const reload = useCallback(async () => {
     try {
@@ -89,6 +91,33 @@ export function CreativeEditor({
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSavingKey('')
+    }
+  }
+
+  /**
+   * Fill in every missing placement size across the package, derived from the
+   * images already there — no URLs to find, no re-creating the campaign.
+   *
+   * Server-side this is ImageResizerService extending each source image
+   * (content preserved, canvas extended rather than cropped), synchronous and
+   * local-CPU, and purely additive: existing entries are never replaced.
+   */
+  async function generateMissingSizes() {
+    setGenerating(true)
+    setError('')
+    try {
+      const res = await generateCreativeSizes(tenantId, packageId, undefined, [...ASPECT_RATIOS])
+      setGenerated(
+        res.added > 0
+          ? `Generated ${res.added} missing size${res.added === 1 ? '' : 's'}.`
+          : 'Every variant already has all four sizes.',
+      )
+      setTimeout(() => setGenerated(''), 5000)
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Size generation failed')
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -121,11 +150,37 @@ export function CreativeEditor({
         </div>
       )}
 
-      <p className="text-[11px] mb-4" style={{ color: 'var(--ink-4)' }}>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--ink-4)' }}>
         Changes save as you leave each field, and apply to every campaign using this creative package.
         Only the size marked <strong>ships</strong> reaches Meta — one image per ad, chosen to match the
         ad set&rsquo;s placements.
       </p>
+
+      {(() => {
+        const totalMissing = (pkg.copyVariants ?? []).reduce((n, _v, i) => {
+          const have = (pkg.images ?? [])
+            .filter(im => (im.variantIndex ?? 0) === i)
+            .map(im => im.aspectRatio)
+            .filter(Boolean) as string[]
+          return n + ASPECT_RATIOS.filter(r => !have.includes(r)).length
+        }, 0)
+        if (totalMissing === 0 && !generated) return null
+        return (
+          <div className="rounded-lg px-3 py-2 mb-4 flex items-center justify-between gap-3 flex-wrap" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+            <span className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
+              {generated || `${totalMissing} placement size${totalMissing === 1 ? '' : 's'} missing across these variants — they can be generated from the images you already have.`}
+            </span>
+            <button
+              type="button"
+              onClick={generateMissingSizes}
+              disabled={generating}
+              className="btn btn-ghost text-xs shrink-0"
+            >
+              {generating ? <><Loader2 size={11} className="animate-spin" /> Generating…</> : <><Plus size={11} /> Generate missing sizes</>}
+            </button>
+          </div>
+        )
+      })()}
 
       <div className="space-y-4">
         {variants.map((v, i) => {
