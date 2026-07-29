@@ -178,8 +178,14 @@ export default function CreativesPage({ params }: PageProps) {
     async function load() {
       setLoading(true)
       try {
+        // Every one of these is independently optional, so every one needs its own
+        // catch. `getCompany` used to be the odd one out, and because Promise.all
+        // rejects on the FIRST rejection, a tenant with no Company record (404)
+        // skipped every setter below it — leaving the Format and Angles pickers
+        // silently empty even though /creative/formats and /creative/hook-styles
+        // had both answered 200. The lists are not the problem; the abort was.
         const [c, langs, fmts, hooks, hfModels] = await Promise.all([
-          getCompany(tenantId),
+          getCompany(tenantId).catch(() => null),
           getCreativeLanguages().catch(() => []),
           getCreativeFormats().catch(() => []),
           getHookStyles().catch(() => null),
@@ -192,7 +198,7 @@ export default function CreativesPage({ params }: PageProps) {
         setLanguages(langs)
         setFormats(fmts)
         setHookStyles(hooks)
-        const active = c.products?.find(p => p.active !== false) ?? c.products?.[0]
+        const active = c?.products?.find(p => p.active !== false) ?? c?.products?.[0]
         if (active) setProduct(active.name)
       } catch {
         // handled by the empty state below
