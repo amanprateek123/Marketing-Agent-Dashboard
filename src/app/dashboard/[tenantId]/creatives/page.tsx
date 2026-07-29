@@ -5,7 +5,9 @@ import Link from 'next/link'
 import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun } from '@/lib/api'
+import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
+import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
 import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
@@ -140,6 +142,24 @@ export default function CreativesPage({ params }: PageProps) {
   // (CreativeUploadForm), so file-picking, drag-and-drop and multi-size rows
   // behave identically wherever an upload starts.
   const [showUploadForm, setShowUploadForm] = useState(false)
+
+  // ── Custom brief: route this form through the external creative pipeline ──
+  // Purely additive. `engine` stays 'standard' unless the operator flips it, so
+  // every existing path behaves exactly as before.
+  const [engine, setEngine] = useState<'standard' | 'pipeline'>('standard')
+  const [cbOptions, setCbOptions] = useState<CustomBriefOptions | null>(null)
+  const [cbOptionsError, setCbOptionsError] = useState('')
+  const [cbMethod, setCbMethod] = useState<CustomBriefMethod>('create')
+  const [cbTrack, setCbTrack] = useState<CustomBriefTrack>('polished')
+  const [cbCount, setCbCount] = useState('')
+  const [cbPrompt, setCbPrompt] = useState('')
+  const [cbRunId, setCbRunId] = useState<number | null>(null)
+  // What the count field produces for the selected method — creatives fan out into one run each,
+  // research runs once and adds that many ideas to the board. Served by the pipeline so the two
+  // sides can't drift.
+  const cbCountNoun =
+    (cbOptions?.methods.find(m => m.value === cbMethod) as { count_noun?: string } | undefined)
+      ?.count_noun ?? (cbMethod === 'research' ? 'idea' : 'creative')
 
   const loadPackages = useCallback(async () => {
     try {
@@ -285,6 +305,51 @@ export default function CreativesPage({ params }: PageProps) {
     }
   }
 
+  // Options are fetched from the pipeline (via the bridge) rather than hardcoded,
+  // so its formats/angles/languages stay in sync without a deploy here. Loaded
+  // lazily — nobody pays for it unless they flip the engine.
+  useEffect(() => {
+    if (engine !== 'pipeline' || cbOptions) return
+    let cancelled = false
+    getCustomBriefOptions(tenantId)
+      .then(opts => { if (!cancelled) { setCbOptions(opts); setCbOptionsError('') } })
+      .catch(e => {
+        if (!cancelled) {
+          setCbOptionsError(e instanceof Error ? e.message : 'Pipeline unavailable')
+        }
+      })
+    return () => { cancelled = true }
+  }, [engine, cbOptions, tenantId])
+
+  async function handleCustomBriefGenerate() {
+    if (!cbPrompt.trim()) { setError('Describe what you want in the brief box'); return }
+    setError('')
+    setSubmitting(true)
+    try {
+      const res = await startCustomBriefRun(tenantId, {
+        method: cbMethod,
+        prompt: cbPrompt.trim(),
+        // Sent as typed. Empty means "use the pipeline's default" (5) — the
+        // pipeline owns that rule so there is one source of truth, not two.
+        count: cbCount.trim() || undefined,
+        track: cbTrack,
+        domain: 'astro',
+        language: language || undefined,
+        // Whatever was picked in the existing Format / Angles sections rides
+        // along as hints. Unpicked means the pipeline decides, as it does today.
+        format: format || undefined,
+        angles: selectedHookStyles.length ? selectedHookStyles : undefined,
+      })
+      setCbRunId(res.run_id)
+      setShowForm(false)
+      setCbPrompt('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start the pipeline run')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const loadRejectedAssets = useCallback(async () => {
     setRejectedLoading(true)
     try {
@@ -402,8 +467,144 @@ export default function CreativesPage({ params }: PageProps) {
           <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>A few quick choices, then generate.</p>
           {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
 
-          {/* ── 1. Image or video ── */}
+          {/* ── Engine — which system makes this creative ──
+              Additive: 'standard' is the default and leaves every existing
+              path untouched. 'pipeline' hands the same form over to the
+              external creative pipeline instead. */}
           <div className="mb-5">
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Which engine?</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEngine('standard')}
+                className="text-left px-4 py-3 rounded-lg border transition-colors"
+                style={{
+                  borderColor: engine === 'standard' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: engine === 'standard' ? 'var(--accent-bg)' : 'var(--surface)',
+                }}
+              >
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Standard</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The built-in generator. Images, video, carousels.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEngine('pipeline'); selectCreativeType('image') }}
+                className="text-left px-4 py-3 rounded-lg border transition-colors"
+                style={{
+                  borderColor: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: engine === 'pipeline' ? 'var(--accent-bg)' : 'var(--surface)',
+                }}
+              >
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Our creative pipeline</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>Describe it in a sentence — the pipeline handles the rest. Images only.</span>
+              </button>
+            </div>
+          </div>
+
+          {engine === 'pipeline' && (
+            <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+              {cbOptionsError && (
+                <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                  Couldn&rsquo;t reach the pipeline ({cbOptionsError}). You can still submit — it may just be starting up.
+                </p>
+              )}
+
+              {/* Method — create and research are two different jobs. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>What do you want?</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {(cbOptions?.methods ?? [
+                  { value: 'create', label: 'Create', hint: 'Author briefs and generate creatives.' },
+                  { value: 'research', label: 'Research', hint: 'Build the research + idea board creatives draw from.' },
+                ]).map(m => {
+                  const active = cbMethod === m.value
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setCbMethod(m.value as CustomBriefMethod)}
+                      className="text-left px-4 py-3 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{m.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{m.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Style — replaces the pipeline's own classifier with an explicit choice. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Style</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {(cbOptions?.tracks ?? [
+                  { value: 'polished', label: 'Polished', hint: 'A designed ad — the default.' },
+                  { value: 'raw', label: 'Raw', hint: 'An organic-looking post or meme.' },
+                ]).map(t => {
+                  const active = cbTrack === t.value
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setCbTrack(t.value as CustomBriefTrack)}
+                      className="text-left px-4 py-3 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{t.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{t.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Brief + count. */}
+              <div className="grid md:grid-cols-[1fr_160px] gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>
+                    {cbMethod === 'research' ? 'What should we research?' : 'Describe the creative'}
+                  </span>
+                  <textarea
+                    value={cbPrompt}
+                    onChange={e => setCbPrompt(e.target.value)}
+                    rows={3}
+                    className="input"
+                    placeholder={cbMethod === 'research'
+                      ? 'e.g. Nadi report — what people search for before buying'
+                      : 'e.g. a Nadi report ad that opens on the fear of a wrong marriage match'}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>
+                    How many {cbCountNoun}s?
+                  </span>
+                  <input
+                    value={cbCount}
+                    onChange={e => setCbCount(e.target.value)}
+                    inputMode="numeric"
+                    className="input"
+                    placeholder={String(cbOptions?.count.default ?? 5)}
+                  />
+                  <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                    Leave blank for {cbOptions?.count.default ?? 5}.
+                    {cbMethod === 'research' && ' Research runs once — this is how many ideas it adds to the board.'}
+                  </span>
+                </label>
+              </div>
+
+              <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
+                The Format and Angles you pick below are passed through as hints. Leave them
+                unpicked and the pipeline chooses for you.
+              </p>
+            </div>
+          )}
+
+          {/* ── 1. Image or video ──
+              Hidden for the pipeline engine, which produces images only. */}
+          <div className="mb-5" hidden={engine === 'pipeline'}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>1. What are you making?</p>
             <p className="text-[12px] mb-2" style={{ color: 'var(--ink-3)' }}>Image and video creatives need different inputs, so pick one to start.</p>
             <div className="grid grid-cols-2 gap-2">
@@ -720,6 +921,24 @@ export default function CreativesPage({ params }: PageProps) {
 
           {/* ── Summary + Generate ── */}
           <div className="flex items-center justify-between flex-wrap gap-3 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            {engine === 'pipeline' ? (
+              <>
+                <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                  {cbPrompt.trim()
+                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${cbTrack} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{language ? <> in <b>{language}</b></> : ''}.</>
+                    : 'Describe what you want above to get started.'}
+                </p>
+                <button
+                  onClick={handleCustomBriefGenerate}
+                  disabled={submitting || !cbPrompt.trim()}
+                  className="btn btn-primary"
+                >
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {submitting ? 'Starting…' : cbMethod === 'research' ? 'Run research' : 'Generate'}
+                </button>
+              </>
+            ) : (
+            <>
             <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
               {product
                 ? creativeType === 'video'
@@ -731,8 +950,21 @@ export default function CreativesPage({ params }: PageProps) {
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {submitting ? 'Starting…' : 'Generate'}
             </button>
+            </>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Live progress for a Custom-brief run. Finished creatives arrive in the
+          library below on their own — the pipeline pushes them in as ordinary
+          creative packages — so this just reloads the list when the run settles. */}
+      {cbRunId !== null && (
+        <CustomBriefProgress
+          tenantId={tenantId}
+          runId={cbRunId}
+          onFinished={() => { void loadPackages() }}
+        />
       )}
 
       {/* Tab bar — underline style, matching runs/page.tsx's convention */}

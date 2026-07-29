@@ -1364,3 +1364,6 @@ export interface CaseStudy {
 
 // ── Tenant overview (dashboard home) ───────────────────────────────────────
 export * from './overview'
+
+// ── Custom brief: the external creative pipeline ───────────────────────────
+export * from './pipeline'

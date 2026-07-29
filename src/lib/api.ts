@@ -26,6 +26,11 @@ import type {
   CreativePackage,
   DashboardOverview,
   CampaignLaunchReview,
+  CustomBriefOptions,
+  CustomBriefRun,
+  CustomBriefEvents,
+  CustomBriefStarted,
+  StartCustomBriefBody,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -1034,4 +1039,43 @@ export const getIntelligenceCycles = (
 export const getDashboardOverview = (tenantId: string, windowDays = 30) =>
   apiFetch<DashboardOverview>(
     `/dashboard/${tenantId}/overview?windowDays=${windowDays}`,
+  )
+
+// ── Custom brief: the external creative pipeline ───────────────────────────
+// Proxied by the backend's pipeline-bridge module, which holds the pipeline's
+// bearer token server-side. Runs are asynchronous: `startPipelineRun` returns a
+// run id immediately, then poll `getPipelineRunEvents` for progress. Finished
+// creatives are NOT returned here — the pipeline pushes them into the ordinary
+// creative library, so they appear via `listCreativePackages` like any other.
+
+export const getCustomBriefOptions = (tenantId: string) =>
+  apiFetch<CustomBriefOptions>(`/pipeline-bridge/${tenantId}/options`)
+
+export const getCustomBriefHealth = (tenantId: string) =>
+  apiFetch<{ ok: boolean; queue_depth: number; inflight: number; pool_size: number }>(
+    `/pipeline-bridge/${tenantId}/health`,
+  )
+
+export const startCustomBriefRun = (tenantId: string, body: StartCustomBriefBody) =>
+  apiFetch<CustomBriefStarted>(`/pipeline-bridge/${tenantId}/runs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+export const getCustomBriefRun = (tenantId: string, runId: number | string) =>
+  apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/runs/${runId}`)
+
+/**
+ * Cursor-paged progress. Pass the `cursor` from the previous response so each
+ * poll only returns new events. Covers the run and its batch children — a batch
+ * parent stops narrating once authoring ends, so polling the parent alone would
+ * look like the run had frozen.
+ */
+export const getCustomBriefEvents = (
+  tenantId: string,
+  runId: number | string,
+  after = 0,
+) =>
+  apiFetch<CustomBriefEvents>(
+    `/pipeline-bridge/${tenantId}/runs/${runId}/events?after=${after}`,
   )
