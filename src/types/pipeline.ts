@@ -78,6 +78,22 @@ export interface CustomBriefProgress {
   percent: number
 }
 
+/**
+ * Presigned, browser-loadable URLs for what a run has produced so far.
+ *
+ * The pipeline stores these as plain URLs into a PRIVATE S3 bucket, which a
+ * raw `<img src>` cannot load. The API signs them on the way out (1 hour), so
+ * they are safe to render directly but must not be persisted anywhere.
+ */
+export interface CustomBriefArtifacts {
+  /** Appears first, while the run is still generating. */
+  layout_preview_s3?: string
+  final_s3?: string
+  deliverable_s3?: string
+  /** Alternate cuts once the resize cascade has run, keyed by profile. */
+  sizes?: Record<string, string>
+}
+
 export interface CustomBriefRunNode {
   run_id: number
   status: string
@@ -92,7 +108,7 @@ export interface CustomBriefRunNode {
   started_at?: string | null
   heartbeat_at?: string | null
   updated_at?: string | null
-  artifacts?: Record<string, string>
+  artifacts?: CustomBriefArtifacts
 }
 
 export interface CustomBriefRun extends CustomBriefRunNode {

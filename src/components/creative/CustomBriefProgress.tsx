@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, PauseCircle } from 'lucide-react'
 import { getCustomBriefEvents, getCustomBriefRun } from '@/lib/api'
-import type { CustomBriefEvent, CustomBriefRun } from '@/types'
+import type { CustomBriefEvent, CustomBriefRun, CustomBriefRunNode } from '@/types'
 
 /**
  * Live progress for one Custom-brief run.
@@ -34,6 +34,19 @@ const BLOCKED = new Set([
   'validation_failed',
 ])
 const FAILED = new Set(['error', 'cancelled'])
+
+/**
+ * The best image a run can show right now.
+ *
+ * The layout preview appears well before the creative is finished, so a run has
+ * something to show for most of its life rather than only at the end. Later the
+ * finished deliverable replaces it. All of these are presigned by the API —
+ * the underlying bucket is private, so they expire and must not be cached.
+ */
+function previewUrl(node: CustomBriefRunNode): string | undefined {
+  const a = node.artifacts
+  return a?.deliverable_s3 ?? a?.final_s3 ?? a?.layout_preview_s3
+}
 
 function statusChip(status: string): { cls: string; label: string } {
   if (status === 'done') return { cls: 'chip-good', label: 'Done' }
@@ -158,6 +171,22 @@ export function CustomBriefProgress({
         </p>
       )}
 
+      {/* A count-of-1 run has no children — the parent IS the creative, so its
+          preview has to render here or a single run would show no image at all. */}
+      {children.length === 0 && run && previewUrl(run) && (
+        <div
+          className="mb-4 rounded-lg overflow-hidden mx-auto"
+          style={{ maxWidth: 320, aspectRatio: '1 / 1', background: 'var(--surface-warm)' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl(run)}
+            alt="Creative"
+            className="w-full h-full object-contain"
+          />
+        </div>
+      )}
+
       {/* One tile per creative. A batch parent stays at brief_ready forever, so
           the children are the only honest view of what is happening. */}
       {children.length > 0 && (
@@ -170,6 +199,19 @@ export function CustomBriefProgress({
                 className="card-inset px-3 py-2.5"
                 title={child.error ?? undefined}
               >
+                {previewUrl(child) && (
+                  <div
+                    className="w-full mb-2 rounded-md overflow-hidden"
+                    style={{ aspectRatio: '1 / 1', background: 'var(--surface)' }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewUrl(child)}
+                      alt={`Creative ${child.item_index ?? child.run_id}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>
                   #{child.item_index ?? child.run_id}
                 </p>
