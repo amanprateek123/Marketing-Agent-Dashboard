@@ -117,6 +117,7 @@ export function CustomBriefProgress({
   runId,
   statusPhases,
   onFinished,
+  onDismiss,
 }: {
   tenantId: string
   runId: number
@@ -124,6 +125,9 @@ export function CustomBriefProgress({
   statusPhases?: Record<string, string>
   /** Fired once when the run settles, so the page can reload the library. */
   onFinished?: () => void
+  /** Close the panel and forget the run. Only offered once it has settled — dismissing a live run
+   *  would lose the only view of work that is still going. */
+  onDismiss?: () => void
 }) {
   const [run, setRun] = useState<CustomBriefRun | null>(null)
   const [events, setEvents] = useState<CustomBriefEvent[]>([])
@@ -315,11 +319,18 @@ export function CustomBriefProgress({
       </div>
 
       {terminal && (
-        <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
-          {progress && progress.done > 0
-            ? 'Finished creatives have been added to your library below.'
-            : 'This run produced no creatives — check the log above.'}
-        </p>
+        <div className="flex items-center justify-between gap-3 mt-3">
+          <p className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
+            {progress && progress.done > 0
+              ? 'Finished creatives have been added to your library below.'
+              : 'This run produced no creatives — check the log above.'}
+          </p>
+          {onDismiss && (
+            <button type="button" onClick={onDismiss} className="btn btn-ghost">
+              Dismiss
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

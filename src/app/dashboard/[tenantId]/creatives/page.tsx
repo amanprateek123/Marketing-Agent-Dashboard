@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages } from '@/lib/api'
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
+import { ImageDirectionModal } from '@/components/creative/ImageDirectionModal'
 import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
@@ -93,6 +94,7 @@ export default function CreativesPage({ params }: PageProps) {
 
   const [company, setCompany] = useState<Company | null>(null)
   const [packages, setPackages] = useState<CreativePackage[]>([])
+  const [packagesError, setPackagesError] = useState('')
   const [loading, setLoading] = useState(true)
   const [languages, setLanguages] = useState<string[]>([])
   const [formats, setFormats] = useState<CreativeFormatOption[]>([])
@@ -165,10 +167,35 @@ export default function CreativesPage({ params }: PageProps) {
   // button afterwards, but this form has no follow-up turn, so it is asked up front.
   const [cbFiles, setCbFiles] = useState<File[]>([])
   const [cbImageDirection, setCbImageDirection] = useState('')
+  const [cbDirectionOpen, setCbDirectionOpen] = useState(false)
   const [cbUploading, setCbUploading] = useState(false)
 
   const toggleIn = (list: string[], value: string) =>
     list.includes(value) ? list.filter(v => v !== value) : [...list, value]
+
+  /**
+   * A Slack-pipeline run outlives the page.
+   *
+   * `cbRunId` was React state only, so a refresh (or navigating away and back) orphaned an in-flight
+   * run: the pipeline kept working, the operator just lost the only view of it and had no way back.
+   * The run id is persisted per tenant and restored on mount, then cleared once the run settles.
+   * localStorage rather than the URL because the value is per-browser bookkeeping, not something
+   * worth putting in a shareable link — and `slack_runs` remains the source of truth either way.
+   */
+  const runKey = `cb_active_run_${tenantId}`
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(runKey)
+    if (saved && /^\d+$/.test(saved)) setCbRunId(Number(saved))
+  }, [runKey])
+
+  const rememberRun = useCallback((id: number | null) => {
+    setCbRunId(id)
+    if (typeof window === 'undefined') return
+    if (id === null) window.localStorage.removeItem(runKey)
+    else window.localStorage.setItem(runKey, String(id))
+  }, [runKey])
 
   /** Everything the operator typed or ticked, merged into what the API expects. */
   const cbSelectedLanguages = [
@@ -189,8 +216,12 @@ export default function CreativesPage({ params }: PageProps) {
         targetLanguage: filterLanguage || undefined,
       })
       setPackages(list)
-    } catch {
-      // non-fatal — keep showing whatever we already have
+      setPackagesError('')
+    } catch (e) {
+      // Keep whatever is already on screen — a transient failure should not blank the library.
+      // But SAY so: silently swallowing this made "the load failed" and "there is nothing here"
+      // look identical, which is how a working library appeared to lose its creatives.
+      setPackagesError(e instanceof Error ? e.message : 'Could not refresh the library')
     }
   }, [tenantId, filterProduct, filterLanguage])
 
@@ -384,7 +415,7 @@ export default function CreativesPage({ params }: PageProps) {
         image_refs: imageRefs,
         image_direction: imageRefs ? cbImageDirection : undefined,
       })
-      setCbRunId(res.run_id)
+      rememberRun(res.run_id)
       setShowForm(false)
       setCbPrompt('')
       setCbFiles([])
@@ -727,8 +758,9 @@ export default function CreativesPage({ params }: PageProps) {
                 })}
               </div>
 
-              {/* Reference image + what to do with it. Asked together, because the pipeline has no
-                  follow-up turn to ask the direction in the way Slack does. */}
+              {/* Reference image. The direction is asked in a popup the moment a file is chosen —
+                  Slack asks it with buttons on a follow-up message, but this form has no second
+                  turn, so it has to be answered before submit. */}
               <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Reference image</p>
               <input
                 type="file"
@@ -737,38 +769,43 @@ export default function CreativesPage({ params }: PageProps) {
                 onChange={e => {
                   const picked = Array.from(e.target.files ?? [])
                   setCbFiles(picked)
-                  if (picked.length === 0) setCbImageDirection('')
+                  setCbImageDirection('')
+                  setCbDirectionOpen(picked.length > 0)
                 }}
                 className="text-[12.5px]"
                 style={{ color: 'var(--ink-2)' }}
               />
               {cbFiles.length > 0 && (
-                <>
-                  <p className="text-[12px] mt-2 mb-2" style={{ color: 'var(--ink-2)' }}>
-                    {cbFiles.length === 1 ? cbFiles[0].name : `${cbFiles.length} images attached`}
-                    {' — '}<b>what should the pipeline do with it?</b>
-                  </p>
-                  <div className="grid sm:grid-cols-3 gap-2">
-                    {(cbOptions?.image_directions ?? []).map(d => {
-                      const active = cbImageDirection === d.value
-                      return (
-                        <button
-                          key={d.value}
-                          type="button"
-                          onClick={() => setCbImageDirection(d.value)}
-                          className="text-left px-3 py-2.5 rounded-lg border transition-colors"
-                          style={{
-                            borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
-                            background: active ? 'var(--accent-bg)' : 'var(--surface)',
-                          }}
-                        >
-                          <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{d.label}</span>
-                          <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{d.hint}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
+                <p className="text-[12px] mt-2" style={{ color: 'var(--ink-2)' }}>
+                  {cbFiles.length === 1 ? cbFiles[0].name : `${cbFiles.length} images attached`}
+                  {cbImageDirection ? (
+                    <>
+                      {' · '}
+                      <b>{cbOptions?.image_directions?.find(d => d.value === cbImageDirection)?.label ?? cbImageDirection}</b>
+                      {' · '}
+                      <button
+                        type="button"
+                        onClick={() => setCbDirectionOpen(true)}
+                        className="underline"
+                        style={{ color: 'var(--accent-strong)' }}
+                      >
+                        change
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {' — '}
+                      <button
+                        type="button"
+                        onClick={() => setCbDirectionOpen(true)}
+                        className="underline"
+                        style={{ color: 'var(--accent-strong)' }}
+                      >
+                        choose what to do with it
+                      </button>
+                    </>
+                  )}
+                </p>
               )}
             </div>
           )}
@@ -1136,7 +1173,39 @@ export default function CreativesPage({ params }: PageProps) {
           runId={cbRunId}
           statusPhases={cbOptions?.status_phases}
           onFinished={() => { void loadPackages() }}
+          onDismiss={() => rememberRun(null)}
         />
+      )}
+
+      {/* Pops the moment a reference image is chosen. Dismissing drops the attachment, because an
+          image with no direction is not a state the pipeline accepts. */}
+      <ImageDirectionModal
+        open={cbDirectionOpen && cbFiles.length > 0}
+        fileNames={cbFiles.map(f => f.name)}
+        directions={cbOptions?.image_directions ?? []}
+        selected={cbImageDirection}
+        onChoose={value => { setCbImageDirection(value); setCbDirectionOpen(false) }}
+        onDismiss={() => {
+          setCbDirectionOpen(false)
+          if (!cbImageDirection) setCbFiles([])
+        }}
+      />
+
+      {/* A load failure, said out loud. Without this, a failed refresh looks exactly like an empty
+          library — which is how a perfectly intact set of creatives appeared to vanish. */}
+      {packagesError && (
+        <div
+          className="card px-4 py-3 mb-4 flex items-center justify-between gap-3"
+          style={{ borderColor: 'var(--warn-border, var(--hairline))' }}
+        >
+          <p className="text-[12.5px]" style={{ color: 'var(--warn, var(--ink-2))' }}>
+            Couldn&rsquo;t refresh the library ({packagesError}). You&rsquo;re seeing the last
+            version that loaded — nothing has been deleted.
+          </p>
+          <button type="button" onClick={() => { void loadPackages() }} className="btn btn-ghost">
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
       )}
 
       {/* Tab bar — underline style, matching runs/page.tsx's convention */}

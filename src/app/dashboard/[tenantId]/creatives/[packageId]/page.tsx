@@ -3,9 +3,9 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Loader2, RefreshCw, Wand2, Sparkles, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Volume2, XCircle, RotateCcw, Crop, ChevronDown, ChevronUp,
+  ArrowLeft, Loader2, RefreshCw, Wand2, Sparkles, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Volume2, XCircle, RotateCcw, Crop, ChevronDown, ChevronUp, LayoutGrid,
 } from 'lucide-react'
-import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, generateCreativeSizes, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset } from '@/lib/api'
+import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, generateCreativeSizes, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset, resizeCustomBriefPackage } from '@/lib/api'
 import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution, GalleryAssetLocations } from '@/lib/api'
 import type { CreativeImage, CreativePackage } from '@/types'
 import { creativePackageStatus } from '@/lib/utils'
@@ -56,6 +56,9 @@ export default function CreativeDetailPage({ params }: PageProps) {
   // call is synchronous and additive, so the variant's existing image stays
   // usable throughout and shouldn't be greyed out under a spinner overlay.
   const [sizeBusy, setSizeBusy] = useState<Record<number, boolean>>({})
+  // The Slack pipeline's own reframe (true crops), as opposed to the canvas-extend above. Package
+  // level, not per variant: it works from the run's single 1200x1200 base.
+  const [pipelineResize, setPipelineResize] = useState<{ state: 'idle' | 'starting' | 'running'; note: string }>({ state: 'idle', note: '' })
   const [showSizes, setShowSizes] = useState<Record<number, boolean>>({})
   const [imageResolutionDrafts, setImageResolutionDrafts] = useState<Record<number, CreativeImageResolution>>({})
   const [videoAspectDraft, setVideoAspectDraft] = useState<CreativeAspectRatio | null>(null)
@@ -227,6 +230,50 @@ export default function CreativeDetailPage({ params }: PageProps) {
       flash('Failed to generate sizes')
     } finally {
       setSizeBusy(b => ({ ...b, [variantIndex]: false }))
+    }
+  }
+
+  /**
+   * Ask the Slack pipeline for TRUE crops of the same creative.
+   *
+   * Different from handleGenerateSizes above in both mechanism and result: that one canvas-extends
+   * here and finishes in about half a second, this one reframes on the pipeline box with a
+   * Playwright-driven tool and takes minutes. So it cannot reload on resolve — it polls, and the
+   * pipeline attaches each finished size to this package itself.
+   *
+   * 404 is expected and meaningful: it means this package came from the built-in generator, not the
+   * pipeline, so there is no 1200x1200 base of ours to cut from.
+   */
+  async function handlePipelineResize() {
+    setPipelineResize({ state: 'starting', note: '' })
+    try {
+      const res = await resizeCustomBriefPackage(tenantId, packageId)
+      setPipelineResize({
+        state: 'running',
+        note: `Reframing into ${res.sizes.length} sizes — this takes a few minutes.`,
+      })
+      // Poll on the house cadence. Each tick reloads the package, so sizes appear as they land
+      // rather than all at the end.
+      let ticks = 0
+      const tick = async () => {
+        ticks += 1
+        await load()
+        if (ticks < 30) {
+          window.setTimeout(() => { void tick() }, 20_000)
+        } else {
+          setPipelineResize({ state: 'idle', note: '' })
+        }
+      }
+      window.setTimeout(() => { void tick() }, 20_000)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      setPipelineResize({
+        state: 'idle',
+        note: msg.includes('404')
+          ? 'This creative was not made by the Slack pipeline, so it has no base to reframe.'
+          : 'Could not start the resize.',
+      })
+      flash('Could not start the pipeline resize')
     }
   }
 
@@ -506,7 +553,29 @@ export default function CreativeDetailPage({ params }: PageProps) {
         <>
           {/* ── Copy variants + images ── */}
           <section className="card p-6 mb-6">
-            <p className="micro-label mb-4">Copy variants ({pkg.copyVariants?.length ?? 0})</p>
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+              <p className="micro-label" style={{ margin: 0 }}>Copy variants ({pkg.copyVariants?.length ?? 0})</p>
+              {/* True crops from the Slack pipeline, distinct from the per-variant canvas-extend
+                  below. Always offered: whether this package has a pipeline base is a question only
+                  the pipeline can answer, and it says so with a 404 rather than us guessing here. */}
+              <div className="text-right">
+                <button
+                  onClick={handlePipelineResize}
+                  disabled={pipelineResize.state !== 'idle'}
+                  className="btn btn-ghost"
+                  style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                >
+                  {pipelineResize.state === 'idle'
+                    ? <><LayoutGrid size={12} /> Generate all sizes</>
+                    : <><Loader2 size={12} className="animate-spin" /> Reframing…</>}
+                </button>
+                {pipelineResize.note && (
+                  <p className="text-[11px] mt-1.5 max-w-[280px]" style={{ color: 'var(--ink-4)' }}>
+                    {pipelineResize.note}
+                  </p>
+                )}
+              </div>
+            </div>
             <div className="space-y-5">
               {(pkg.copyVariants ?? []).map((variant, i) => {
                 const isPrimary = (pkg.selectedCopyIndex ?? 0) === i

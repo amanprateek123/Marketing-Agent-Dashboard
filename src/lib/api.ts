@@ -1088,6 +1088,20 @@ export const getCustomBriefRun = (tenantId: string, runId: number | string) =>
   apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/runs/${runId}`)
 
 /**
+ * Ask the Slack pipeline to reframe a creative it produced into the other placement sizes.
+ *
+ * True crops, unlike `generateCreativeSizes`, which canvas-extends with blurred margins. Returns as
+ * soon as the job is queued — the cascade takes minutes and the pipeline attaches each finished size
+ * to this package itself, so the caller just reloads the package afterwards. 404 means the pipeline
+ * did not produce this package (e.g. the built-in generator did).
+ */
+export const resizeCustomBriefPackage = (tenantId: string, packageId: string) =>
+  apiFetch<{ run_id: number; package_id: string | null; status: string; sizes: string[] }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/resize`,
+    { method: 'POST' },
+  )
+
+/**
  * Cursor-paged progress. Pass the `cursor` from the previous response so each
  * poll only returns new events. Covers the run and its batch children — a batch
  * parent stops narrating once authoring ends, so polling the parent alone would
