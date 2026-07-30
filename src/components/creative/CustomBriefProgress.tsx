@@ -48,20 +48,80 @@ function previewUrl(node: CustomBriefRunNode): string | undefined {
   return a?.deliverable_s3 ?? a?.final_s3 ?? a?.layout_preview_s3
 }
 
-function statusChip(status: string): { cls: string; label: string } {
+/**
+ * Used only if the pipeline's own `status_phases` map hasn't loaded yet. Kept deliberately short:
+ * the API is the source of truth (api_options.STATUS_PHASES) so a new status needs no deploy here.
+ */
+const FALLBACK_PHASES: Record<string, string> = {
+  queued: 'Queued',
+  authoring: 'Writing the brief',
+  generating: 'Generating the image',
+  resizing: 'Resizing',
+  done: 'Complete',
+  error: 'Failed',
+}
+
+function phaseLabel(status: string | null | undefined, phases: Record<string, string>): string {
+  const key = (status ?? '').trim().toLowerCase()
+  if (!key) return 'Pending'
+  return phases[key] ?? FALLBACK_PHASES[key] ?? key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+}
+
+interface LogLine {
+  key: number
+  text: string
+  kind: CustomBriefEvent['kind']
+  itemIndex: number | null
+}
+
+/**
+ * Turn the raw event stream into something readable.
+ *
+ * Two problems with printing `ev.message` directly. `status` events store the machine value, so the
+ * log read "queued / authoring" instead of prose; and the same status is written more than once
+ * (create_run, then the first update_run), so a run opened with a duplicate "queued". Here status
+ * events become phase labels and only appear when the phase actually CHANGES, while `progress`
+ * events — the same narration the pipeline posts into Slack — pass through verbatim.
+ *
+ * Dedupe is tracked per child, because a batch interleaves its children's events in one stream and
+ * "#2 Generating" must not be swallowed just because "#1 Generating" came first.
+ */
+function toLogLines(events: CustomBriefEvent[], phases: Record<string, string>): LogLine[] {
+  const out: LogLine[] = []
+  const lastPhase = new Map<number, string>()
+  for (const ev of events) {
+    const item = ev.item_index ?? 0
+    if (ev.kind === 'status') {
+      const label = phaseLabel(ev.message, phases)
+      if (lastPhase.get(item) === label) continue
+      lastPhase.set(item, label)
+      out.push({ key: ev.id, text: label, kind: ev.kind, itemIndex: ev.item_index })
+      continue
+    }
+    if (!ev.message) continue // artifact events carry a payload, not always prose
+    out.push({ key: ev.id, text: ev.message, kind: ev.kind, itemIndex: ev.item_index })
+  }
+  return out
+}
+
+function statusChip(status: string, phases: Record<string, string>): { cls: string; label: string } {
   if (status === 'done') return { cls: 'chip-good', label: 'Done' }
   if (FAILED.has(status)) return { cls: 'chip-bad', label: status === 'cancelled' ? 'Cancelled' : 'Failed' }
   if (BLOCKED.has(status)) return { cls: 'chip-warn', label: 'Needs attention' }
-  return { cls: 'chip-accent', label: status.replace(/_/g, ' ') }
+  // In-flight: show the phase, not the machine value — "Generating the image", not "generating".
+  return { cls: 'chip-accent', label: phaseLabel(status, phases) }
 }
 
 export function CustomBriefProgress({
   tenantId,
   runId,
+  statusPhases,
   onFinished,
 }: {
   tenantId: string
   runId: number
+  /** `status_phases` from GET /v1/options — the pipeline's own status→phase vocabulary. */
+  statusPhases?: Record<string, string>
   /** Fired once when the run settles, so the page can reload the library. */
   onFinished?: () => void
 }) {
@@ -192,7 +252,7 @@ export function CustomBriefProgress({
       {children.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
           {children.map(child => {
-            const chip = statusChip(child.status)
+            const chip = statusChip(child.status, statusPhases ?? {})
             return (
               <div
                 key={child.run_id}
@@ -208,7 +268,7 @@ export function CustomBriefProgress({
                     <img
                       src={previewUrl(child)}
                       alt={`Creative ${child.item_index ?? child.run_id}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 )}
@@ -238,16 +298,16 @@ export function CustomBriefProgress({
             Queued — waiting for the pipeline to pick this up…
           </p>
         ) : (
-          events.map(ev => (
+          toLogLines(events, statusPhases ?? {}).map(line => (
             <p
-              key={ev.id}
+              key={line.key}
               className="text-[12px] leading-relaxed"
-              style={{ color: ev.kind === 'error' ? 'var(--bad)' : 'var(--ink-3)' }}
+              style={{ color: line.kind === 'error' ? 'var(--bad)' : 'var(--ink-3)' }}
             >
-              {ev.item_index ? (
-                <span className="mono" style={{ color: 'var(--ink-4)' }}>#{ev.item_index} </span>
+              {line.itemIndex ? (
+                <span className="mono" style={{ color: 'var(--ink-4)' }}>#{line.itemIndex} </span>
               ) : null}
-              {ev.message ?? ev.kind}
+              {line.text}
             </p>
           ))
         )}

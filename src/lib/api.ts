@@ -30,6 +30,7 @@ import type {
   CustomBriefRun,
   CustomBriefEvents,
   CustomBriefStarted,
+  CustomBriefImageRef,
   StartCustomBriefBody,
 } from '@/types'
 
@@ -1061,6 +1062,27 @@ export const startCustomBriefRun = (tenantId: string, body: StartCustomBriefBody
     method: 'POST',
     body: JSON.stringify(body),
   })
+
+/**
+ * Upload reference image(s) for a Custom-brief run, returning refs to pass as `image_refs`.
+ *
+ * Deliberately NOT via apiFetch: that hardcodes `Content-Type: application/json`, and a multipart
+ * body must be left alone so the browser can set its own boundary. Uploading separately from the
+ * run also keeps the run body plain JSON, which is what the NestJS bridge proxies.
+ */
+export const uploadCustomBriefImages = async (tenantId: string, files: File[]) => {
+  const form = new FormData()
+  for (const f of files) form.append('files', f)
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/pipeline-bridge/${tenantId}/uploads`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  return res.json() as Promise<{ refs: CustomBriefImageRef[] }>
+}
 
 export const getCustomBriefRun = (tenantId: string, runId: number | string) =>
   apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/runs/${runId}`)

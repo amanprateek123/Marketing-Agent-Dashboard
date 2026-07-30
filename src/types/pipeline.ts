@@ -38,11 +38,25 @@ export interface CustomBriefOptions {
   delivery_profiles: { value: string; label: string; aspect: number }[]
   models: { model: string; quality: string }[]
   raw_visual_directions: string[]
+  /**
+   * Raw `slack_runs.status` → human phase, e.g. `generating` → "Generating the image".
+   * Served rather than hardcoded so a new pipeline status reads correctly with no deploy here.
+   */
+  status_phases: Record<string, string>
+  /** The three things a person can mean by attaching an image. Served because the form must ask
+   *  this up front — the pipeline has no follow-up turn, so there is no gate to sit in. */
+  image_directions: CustomBriefChoice[]
   count: { default: number; min: number; max: number }
 }
 
 export type CustomBriefMethod = 'create' | 'research'
 export type CustomBriefTrack = 'polished' | 'raw'
+
+/** A reference image already stored by the pipeline, ready to attach to a run. */
+export interface CustomBriefImageRef {
+  filename: string
+  s3_url: string | null
+}
 
 export interface StartCustomBriefBody {
   method: CustomBriefMethod
@@ -52,9 +66,18 @@ export interface StartCustomBriefBody {
   count?: string
   track?: CustomBriefTrack
   domain?: 'astro' | 'automotive'
+  /** Single-language spelling, kept for callers that only ever send one. */
   language?: string
+  /** Several languages SPLIT the run round-robin rather than multiplying it:
+   *  count 5 over 3 languages is 5 creatives, not 15. */
+  languages?: string[]
   format?: string
+  /** Multi-select formats; supersedes the single `format`. */
+  formats?: string[]
   angles?: string[]
+  image_refs?: CustomBriefImageRef[]
+  /** Required whenever `image_refs` is set — the pipeline has no follow-up turn to ask in. */
+  image_direction?: string
   quality?: string
   model?: string
 }

@@ -5,9 +5,9 @@ import Link from 'next/link'
 import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages } from '@/lib/api'
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
-import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack } from '@/types'
+import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
 import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
@@ -154,6 +154,27 @@ export default function CreativesPage({ params }: PageProps) {
   const [cbCount, setCbCount] = useState('')
   const [cbPrompt, setCbPrompt] = useState('')
   const [cbRunId, setCbRunId] = useState<number | null>(null)
+  // Slack-side selections. All multi-select, all optional: this path is prompt-driven, so anything
+  // left unpicked means "the pipeline decides", which is its normal behaviour.
+  const [cbFormats, setCbFormats] = useState<string[]>([])
+  const [cbAngles, setCbAngles] = useState<string[]>([])
+  const [cbLanguages, setCbLanguages] = useState<string[]>([])
+  // Free write-in, for a language that isn't on the served list.
+  const [cbLanguageWriteIn, setCbLanguageWriteIn] = useState('')
+  // Reference image. `cbImageDirection` is REQUIRED once a file is attached — Slack asks it with a
+  // button afterwards, but this form has no follow-up turn, so it is asked up front.
+  const [cbFiles, setCbFiles] = useState<File[]>([])
+  const [cbImageDirection, setCbImageDirection] = useState('')
+  const [cbUploading, setCbUploading] = useState(false)
+
+  const toggleIn = (list: string[], value: string) =>
+    list.includes(value) ? list.filter(v => v !== value) : [...list, value]
+
+  /** Everything the operator typed or ticked, merged into what the API expects. */
+  const cbSelectedLanguages = [
+    ...cbLanguages,
+    ...cbLanguageWriteIn.split(',').map(s => s.trim()).filter(Boolean),
+  ]
   // What the count field produces for the selected method — creatives fan out into one run each,
   // research runs once and adds that many ideas to the board. Served by the pipeline so the two
   // sides can't drift.
@@ -329,9 +350,25 @@ export default function CreativesPage({ params }: PageProps) {
 
   async function handleCustomBriefGenerate() {
     if (!cbPrompt.trim()) { setError('Describe what you want in the brief box'); return }
+    // The pipeline rejects an image with no direction (there is no follow-up turn to ask in), so
+    // catch it here rather than round-tripping for a 400.
+    if (cbFiles.length > 0 && !cbImageDirection) {
+      setError('Choose what the pipeline should do with your image')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {
+      // Upload first: the run body stays plain JSON, which is what the bridge proxies.
+      let imageRefs: CustomBriefImageRef[] | undefined
+      if (cbFiles.length > 0) {
+        setCbUploading(true)
+        try {
+          imageRefs = (await uploadCustomBriefImages(tenantId, cbFiles)).refs
+        } finally {
+          setCbUploading(false)
+        }
+      }
       const res = await startCustomBriefRun(tenantId, {
         method: cbMethod,
         prompt: cbPrompt.trim(),
@@ -340,15 +377,18 @@ export default function CreativesPage({ params }: PageProps) {
         count: cbCount.trim() || undefined,
         track: cbTrack,
         domain: 'astro',
-        language: language || undefined,
-        // Whatever was picked in the existing Format / Angles sections rides
-        // along as hints. Unpicked means the pipeline decides, as it does today.
-        format: format || undefined,
-        angles: selectedHookStyles.length ? selectedHookStyles : undefined,
+        // Several languages SPLIT the run round-robin rather than multiplying it.
+        languages: cbSelectedLanguages.length ? cbSelectedLanguages : undefined,
+        formats: cbFormats.length ? cbFormats : undefined,
+        angles: cbAngles.length ? cbAngles : undefined,
+        image_refs: imageRefs,
+        image_direction: imageRefs ? cbImageDirection : undefined,
       })
       setCbRunId(res.run_id)
       setShowForm(false)
       setCbPrompt('')
+      setCbFiles([])
+      setCbImageDirection('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start the pipeline run')
     } finally {
@@ -602,9 +642,134 @@ export default function CreativesPage({ params }: PageProps) {
               </div>
 
               <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
-                The Format and Angles you pick below are passed through as hints. Leave them
-                unpicked and the pipeline chooses for you.
+                Everything below is optional — leave it all unpicked and the pipeline decides for
+                you from the prompt alone.
               </p>
+
+              {/* Languages. Several SPLIT the run round-robin rather than multiplying it. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Languages</p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {(cbOptions?.languages ?? []).map(lang => {
+                  const active = cbLanguages.includes(lang)
+                  return (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setCbLanguages(l => toggleIn(l, lang))}
+                      className="px-3 py-1.5 rounded-full border text-[12.5px] transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                        color: active ? 'var(--accent-strong)' : 'var(--ink-2)',
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  )
+                })}
+              </div>
+              <input
+                value={cbLanguageWriteIn}
+                onChange={e => setCbLanguageWriteIn(e.target.value)}
+                className="input"
+                placeholder="Or write them in, comma-separated — e.g. Bhojpuri, Konkani"
+              />
+              <p className="text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                {cbSelectedLanguages.length > 1
+                  ? <>Your {cbCount.trim() || cbOptions?.count.default || 5} {cbCountNoun}s will be
+                      <b> split across</b> {cbSelectedLanguages.length} languages — not multiplied by them.</>
+                  : 'Pick several and the run is split across them, round-robin.'}
+              </p>
+
+              {/* Special formats — multi-select, folded into the brief as instructions. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Special formats</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {(cbOptions?.formats ?? []).filter(f => f.value !== 'image').map(f => {
+                  const active = cbFormats.includes(f.value)
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setCbFormats(l => toggleIn(l, f.value))}
+                      className="text-left px-3 py-2.5 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{f.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{f.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Angles — multi-select. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Angles</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {(cbOptions?.angles ?? []).map(a => {
+                  const active = cbAngles.includes(a.value)
+                  return (
+                    <button
+                      key={a.value}
+                      type="button"
+                      onClick={() => setCbAngles(l => toggleIn(l, a.value))}
+                      className="text-left px-3 py-2.5 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{a.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{a.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Reference image + what to do with it. Asked together, because the pipeline has no
+                  follow-up turn to ask the direction in the way Slack does. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Reference image</p>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={e => {
+                  const picked = Array.from(e.target.files ?? [])
+                  setCbFiles(picked)
+                  if (picked.length === 0) setCbImageDirection('')
+                }}
+                className="text-[12.5px]"
+                style={{ color: 'var(--ink-2)' }}
+              />
+              {cbFiles.length > 0 && (
+                <>
+                  <p className="text-[12px] mt-2 mb-2" style={{ color: 'var(--ink-2)' }}>
+                    {cbFiles.length === 1 ? cbFiles[0].name : `${cbFiles.length} images attached`}
+                    {' — '}<b>what should the pipeline do with it?</b>
+                  </p>
+                  <div className="grid sm:grid-cols-3 gap-2">
+                    {(cbOptions?.image_directions ?? []).map(d => {
+                      const active = cbImageDirection === d.value
+                      return (
+                        <button
+                          key={d.value}
+                          type="button"
+                          onClick={() => setCbImageDirection(d.value)}
+                          className="text-left px-3 py-2.5 rounded-lg border transition-colors"
+                          style={{
+                            borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                            background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                          }}
+                        >
+                          <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{d.label}</span>
+                          <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{d.hint}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -642,7 +807,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 2. Product & language ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>2. Product</p>
             <div className="grid md:grid-cols-2 gap-4">
               <label className="block">
@@ -667,7 +832,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 3. Format ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>3. Format</p>
             <div className="space-y-3">
               {GROUP_ORDER.filter(g => formatsForType.some(f => f.group === g)).map(group => {
@@ -735,7 +900,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 4. Angles to test ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>4. Angles to test</p>
             <p className="text-[12px] mb-3" style={{ color: 'var(--ink-3)' }}>
               {creativeType === 'video'
@@ -789,7 +954,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 5. Quality (type-specific) ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>
               5. {creativeType === 'video' ? 'Video settings' : 'Image settings'}
             </p>
@@ -873,7 +1038,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 6. Advanced ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <button
               onClick={() => setShowAdvanced(s => !s)}
               className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide"
@@ -931,16 +1096,16 @@ export default function CreativesPage({ params }: PageProps) {
               <>
                 <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
                   {cbPrompt.trim()
-                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${cbTrack} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{language ? <> in <b>{language}</b></> : ''}.</>
+                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${cbTrack} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{cbSelectedLanguages.length ? <> across <b>{cbSelectedLanguages.join(', ')}</b></> : ''}.</>
                     : 'Describe what you want above to get started.'}
                 </p>
                 <button
                   onClick={handleCustomBriefGenerate}
-                  disabled={submitting || !cbPrompt.trim()}
+                  disabled={submitting || !cbPrompt.trim() || (cbFiles.length > 0 && !cbImageDirection)}
                   className="btn btn-primary"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {submitting ? 'Starting…' : cbMethod === 'research' ? 'Run research' : 'Generate'}
+                  {cbUploading ? 'Uploading…' : submitting ? 'Starting…' : cbMethod === 'research' ? 'Run research' : 'Generate'}
                 </button>
               </>
             ) : (
@@ -969,6 +1134,7 @@ export default function CreativesPage({ params }: PageProps) {
         <CustomBriefProgress
           tenantId={tenantId}
           runId={cbRunId}
+          statusPhases={cbOptions?.status_phases}
           onFinished={() => { void loadPackages() }}
         />
       )}
@@ -1058,9 +1224,14 @@ export default function CreativesPage({ params }: PageProps) {
                 return (
                   <Link key={pkg._id} href={`/dashboard/${tenantId}/creatives/${pkg._id}`} className="card overflow-hidden block">
                     <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                      {/* object-contain, not -cover: the Slack pipeline's base deliverable is
+                          1200x1200 (1:1), so cover would centre-crop a square into this 4:5 box
+                          and eat the headline at both edges. Contain letterboxes against
+                          --surface-warm instead, keeping one card shape for every source ratio
+                          while still showing the whole creative. */}
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-cover" />
+                        <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-contain" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           {isVideo ? <VideoIcon size={22} style={{ color: 'var(--ink-4)' }} /> : <ImageIcon size={22} style={{ color: 'var(--ink-4)' }} />}
