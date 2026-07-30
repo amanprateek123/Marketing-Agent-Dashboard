@@ -489,7 +489,7 @@ export default function CreativesPage({ params }: PageProps) {
                   background: engine === 'standard' ? 'var(--accent-bg)' : 'var(--surface)',
                 }}
               >
-                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Standard</span>
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Original</span>
                 <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The built-in generator. Images, video, carousels.</span>
               </button>
               <button
@@ -501,8 +501,8 @@ export default function CreativesPage({ params }: PageProps) {
                   background: engine === 'pipeline' ? 'var(--accent-bg)' : 'var(--surface)',
                 }}
               >
-                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Our creative pipeline</span>
-                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>Describe it in a sentence — the pipeline handles the rest. Images only.</span>
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Slack</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The Slack pipeline. Describe it in a sentence and it handles the rest. Images only.</span>
               </button>
             </div>
           </div>
@@ -511,7 +511,7 @@ export default function CreativesPage({ params }: PageProps) {
             <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
               {cbOptionsError && (
                 <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                  Couldn&rsquo;t reach the pipeline ({cbOptionsError}). You can still submit — it may just be starting up.
+                  Couldn&rsquo;t reach the Slack pipeline ({cbOptionsError}). You can still submit — it may just be starting up.
                 </p>
               )}
 

@@ -139,7 +139,7 @@ export function CustomBriefProgress({
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-strong)' }} />
           )}
           <p className="micro-label" style={{ margin: 0 }}>
-            Custom brief · run #{runId}
+            Slack pipeline · run #{runId}
           </p>
         </div>
         {progress && (
