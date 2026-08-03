@@ -21,6 +21,7 @@ export interface Product {
   customEventName?: string       // Only when conversionEvent === 'CustomEvent'
   customConversionId?: string    // Custom conversion from Meta Events Manager (takes priority)
   pixelId?: string               // Per-product pixel override (blank = use company default)
+  pageId?: string                // Per-product Facebook Page override (blank = use company default) — which Page this product's ads post as
   conversionValue?: number
   // Decimal 0-1 (e.g. 0.97 = 97% margin after COGS/fulfilment/fees). Drives
   // breakeven ROAS = 1 / contributionMargin in the auditor's loss detection.
@@ -951,6 +952,29 @@ export interface MetaBusiness {
   name: string
 }
 
+/* ─── Meta Pages (settings — Page picker) ─── */
+// Added after a prod incident (2026-07-29): company.meta.pageId was a
+// hand-typed, unvalidated ID and silently pointed ads at the wrong Facebook
+// Page. This lets the settings UI show real Page names instead of a bare ID.
+
+export interface MetaPage {
+  id: string
+  name: string
+  category?: string
+  /** True = token can post ads as this Page right now (from /me/accounts). False = owned by the Business Manager but not yet granted to this token — will fail at launch until access is granted. */
+  accessible: boolean
+  /** True = authorized on THIS tenant's own ad account(s) right now (Meta's promote_pages allowlist) — the exact per-account gate Ads Manager enforces. A Page can be accessible above and still get rejected at launch if it isn't on this list. */
+  promotable: boolean
+  currentlySelected: boolean
+}
+
+export interface MetaPagesResponse {
+  pages: MetaPage[]
+  total: number
+  accessible: number
+  promotable: number
+}
+
 export interface ManualAdSetInput {
   name: string
   budgetPercent: number
@@ -1298,6 +1322,25 @@ export interface Campaign {
   creativeFormat?: CreativeFormat
   weeklyBudgetConsumed?: number
   creativePackage?: CreativePackage
+  pageSwapStatus?: PageSwapStatus | null
+}
+
+/** Progress of an in-place Page swap on a live campaign — same campaign/ad sets/ad IDs, only each ad's creative Page identity changes. Runs in the background; poll the campaign for live progress. */
+export interface PageSwapStatus {
+  status: 'running' | 'complete' | 'failed'
+  targetPageId: string
+  total: number
+  swapped: number
+  failed: number
+  startedAt: string
+  completedAt?: string
+  results: Array<{
+    adSetId: string
+    adId: string
+    status: 'swapped' | 'failed'
+    newCreativeId?: string
+    error?: string
+  }>
 }
 
 export interface FullRunData {

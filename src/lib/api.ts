@@ -20,6 +20,7 @@ import type {
   MetaGeoOption,
   MetaAdAccountsResponse,
   MetaBusiness,
+  MetaPagesResponse,
   MetaCustomAudience,
   CreateManualCampaignDto,
   UpdateManualCampaignConfigDto,
@@ -115,6 +116,10 @@ export const syncMetaAccounts = (tenantId: string, accountIds?: string[]) =>
 /** Business Managers the tenant's access token belongs to — for scoping the ad-account picker to one portfolio. */
 export const getMetaBusinesses = (tenantId: string) =>
   apiFetch<{ businesses: MetaBusiness[] }>(`/companies/${tenantId}/meta-businesses`)
+
+/** Facebook Pages visible to the tenant's stored Meta access token — for the Page picker (company.meta.pageId / product.pageId). */
+export const getMetaPages = (tenantId: string) =>
+  apiFetch<MetaPagesResponse>(`/companies/${tenantId}/meta-pages`)
 
 // ── Campaigns ──────────────────────────────────────────────────────────────
 export const getCampaigns = (tenantId: string) =>
@@ -618,6 +623,112 @@ export const updateCampaignBudget = (
   apiFetch<Campaign>(`/campaigns/${tenantId}/${campaignId}/budget`, {
     method: 'PATCH',
     body: JSON.stringify({ budget }),
+  })
+
+/** Sets a LIVE ad set's daily budget directly on Meta (only endpoint that lets an operator type an arbitrary number for an already-launched ad set, vs accept/reject the AI's own proposed figure). Same TS-side caps as every other budget path. */
+export const updateAdSetBudget = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  dailyBudget: number,
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    oldDailyBudget: number
+    newDailyBudget: number
+    newCampaignBudget: number
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/budget`, {
+    method: 'PATCH',
+    body: JSON.stringify({ dailyBudget }),
+  })
+
+/**
+ * Fixes which Facebook Page a LIVE campaign's ads post as, in place — same
+ * campaign, same ad sets, same ad IDs, only each ad's creative Page identity
+ * changes. Fire-and-forget: returns immediately with status 'started'; poll
+ * getCampaign() and read `pageSwapStatus` for live progress (40 ads × ~3 Meta
+ * calls each can take minutes).
+ */
+export const swapCampaignPage = (
+  tenantId: string,
+  campaignId: string,
+  pageId: string,
+) =>
+  apiFetch<{
+    campaignId: string
+    pageId: string
+    status: string
+    total: number
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/swap-page`, {
+    method: 'POST',
+    body: JSON.stringify({ pageId }),
+  })
+
+/**
+ * Adds a brand-new ad set to an already-live campaign — same campaign, a new
+ * ad set inside it. Clones an EXISTING live ad's copy + image (by `sourceAdId`)
+ * into the new ad set rather than generating anything fresh. Same TS-side
+ * budget caps as every other budget path.
+ */
+export const addAdSet = (
+  tenantId: string,
+  campaignId: string,
+  body: {
+    name?: string
+    audienceType: 'advantage_plus' | 'retarget' | 'lookalike'
+    metaAudienceId?: string
+    dailyBudget: number
+    assetType: 'image' | 'video'
+    mediaUrl: string
+    primaryText: string
+    headline: string
+    cta: string
+  },
+) =>
+  apiFetch<{
+    campaignId: string
+    newAdSetId: string
+    newAdId: string
+    newCampaignBudget: number
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Adds an operator-authored ad (their own copy + their own image/video,
+ * already uploaded via uploadCreativeFile) to an EXISTING live ad set — the
+ * ad set's budget/audience are untouched, only a new ad joins it. Distinct
+ * from the AI's add_creative/replace_creative (which generate creative
+ * themselves) and from backfill-variants (which only re-adds a variant
+ * already sitting in the package).
+ */
+export const addCreativeToAdSet = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  body: {
+    name?: string
+    assetType: 'image' | 'video'
+    mediaUrl: string
+    primaryText: string
+    headline: string
+    cta: string
+  },
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    adId: string
+    creativeId: string
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/creatives`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   })
 
 export const getPendingActions = (tenantId: string, campaignId: string) =>

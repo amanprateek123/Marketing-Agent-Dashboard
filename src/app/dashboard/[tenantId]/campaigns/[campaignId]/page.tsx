@@ -10,18 +10,20 @@ import {
   TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
   Image as ImageIcon, Shield, Clock, Activity, FlameKindling,
   Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink, Info,
-  Pencil,
+  Pencil, Flag, Plus,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
+import { PageSelect } from '@/components/ui/PageSelect'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
-import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences } from '@/lib/api'
+import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences, updateAdSetBudget, getMetaPages, swapCampaignPage, addAdSet, addCreativeToAdSet } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
-import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product } from '@/types'
+import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product, MetaPage } from '@/types'
 import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { CampaignSetup } from '@/components/campaign/CampaignSetup'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
+import { CreativeSourceFields, type CreativeSourceValue } from '@/components/creative/CreativeSourceFields'
 
 /* ─── Local types ─── */
 interface CreativePackage {
@@ -480,19 +482,26 @@ function AdSetRow({
   siblingFormat,
   groupHead,
   tenantId,
+  campaignId,
   proposalsCount,
   onViewAd,
+  onBudgetChanged,
+  onCreativeAdded,
 }: {
   adSet: CampaignAdSet
   formatTag?: 'video' | 'image'
   siblingFormat?: 'video' | 'image'
   groupHead?: boolean
   tenantId?: string
+  campaignId?: string
   proposalsCount?: number
   onViewAd?: (ad: CampaignAd) => void
+  onBudgetChanged?: () => void
+  onCreativeAdded?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [addCreativeOpen, setAddCreativeOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend
@@ -501,6 +510,36 @@ function AdSetRow({
   const conv = adSet.metrics?.conversions ?? adSet.conversions
   const revenue = adSet.metrics?.revenue ?? adSet.revenue
   const impressions = adSet.impressions
+  const adSetId = adSet.id || adSet.metaAdSetId
+
+  const [budgetEditing, setBudgetEditing] = useState(false)
+  const [budgetDraft, setBudgetDraft] = useState(String(adSet.dailyBudget ?? ''))
+  const [budgetState, setBudgetState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [budgetError, setBudgetError] = useState<string | null>(null)
+
+  async function saveBudget() {
+    const parsed = Number(budgetDraft)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setBudgetError('Enter a positive number')
+      return
+    }
+    if (!tenantId || !campaignId || !adSetId) {
+      setBudgetError('Missing tenant/campaign/ad set ID')
+      return
+    }
+    setBudgetState('loading')
+    setBudgetError(null)
+    try {
+      await updateAdSetBudget(tenantId, campaignId, adSetId, parsed)
+      setBudgetEditing(false)
+      setBudgetState('idle')
+      onBudgetChanged?.()
+    } catch (err) {
+      setBudgetState('error')
+      setBudgetError(err instanceof Error ? err.message : 'Failed to update budget')
+    }
+  }
+
   return (
     <>
       <tr
@@ -540,6 +579,48 @@ function AdSetRow({
           </div>
         </td>
         <td>{adSet.status?.trim() ? <StatusBadge status={adSet.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
+        <td className="num" onClick={(e) => e.stopPropagation()}>
+          {budgetEditing ? (
+            <div className="flex items-center gap-1.5 justify-end">
+              <input
+                type="number"
+                value={budgetDraft}
+                onChange={(e) => setBudgetDraft(e.target.value)}
+                className="input mono tabular-nums text-xs"
+                style={{ width: 76, padding: '2px 6px' }}
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') saveBudget(); if (e.key === 'Escape') { setBudgetEditing(false); setBudgetError(null) } }}
+              />
+              <button
+                onClick={saveBudget}
+                disabled={budgetState === 'loading'}
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                style={{ background: C.accent, color: '#fff' }}
+              >
+                {budgetState === 'loading' ? <Loader2 size={10} className="animate-spin" /> : 'Save'}
+              </button>
+              <button
+                onClick={() => { setBudgetEditing(false); setBudgetDraft(String(adSet.dailyBudget ?? '')); setBudgetError(null) }}
+                className="text-[10px]"
+                style={{ color: C.textMuted }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setBudgetEditing(true)}
+              className="inline-flex items-center gap-1 hover:opacity-70"
+              style={{ color: C.textSecondary }}
+              title="Edit daily budget"
+              disabled={!adSetId}
+            >
+              <span className="mono font-medium">{adSet.dailyBudget ? formatCurrency(adSet.dailyBudget) : '—'}</span>
+              {adSetId && <Pencil size={10} style={{ color: C.textFaint }} />}
+            </button>
+          )}
+          {budgetError && <p className="text-[10px] mt-1" style={{ color: C.red }}>{budgetError}</p>}
+        </td>
         <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
         <td className="num mono font-medium" style={{ color: revenue && revenue > 0 ? C.text : C.textFaint }}>{revenue != null && revenue > 0 ? formatCurrency(revenue) : '—'}</td>
         <td className="num mono font-semibold" style={{ color: roas != null && roas > 0 ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null && roas > 0 ? `${roas.toFixed(2)}x` : '—'}</td>
@@ -556,6 +637,16 @@ function AdSetRow({
             >
               <Info size={10} /> Details
             </button>
+            {tenantId && campaignId && adSet.id && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setAddCreativeOpen(v => !v) }}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-70"
+                style={{ background: addCreativeOpen ? C.accentLight : C.surfaceMuted, color: addCreativeOpen ? C.accent : C.textMuted, border: `1px solid ${addCreativeOpen ? C.accentBorder : C.borderLight}` }}
+                title="Add your own ad (copy + image/video) to this ad set"
+              >
+                <Plus size={10} /> Add Creative
+              </button>
+            )}
             {tenantId && adSet.id && proposalsCount && proposalsCount > 0 && (
               <Link
                 href={`/dashboard/${tenantId}/proposed-actions?targetId=${adSet.id}`}
@@ -575,13 +666,98 @@ function AdSetRow({
           <AllFieldsPanel kind="adset" data={adSet} onClose={() => setDetailsOpen(false)} />
         </AnchoredPortal>
       )}
+      {addCreativeOpen && tenantId && campaignId && adSet.id && (
+        <AnchoredPortal anchorRef={rowRef} onClose={() => setAddCreativeOpen(false)}>
+          <AddCreativePanel
+            tenantId={tenantId}
+            campaignId={campaignId}
+            adSetId={adSet.id}
+            adSetName={adSet.name}
+            onClose={() => setAddCreativeOpen(false)}
+            onAdded={() => onCreativeAdded?.()}
+          />
+        </AnchoredPortal>
+      )}
       {open && ads.length > 0 && (
-        <tr><td colSpan={8} style={{ background: C.surfaceMuted }}>
+        <tr><td colSpan={9} style={{ background: C.surfaceMuted }}>
           <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
           <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} onViewAd={onViewAd} />)}</tbody></table>
         </td></tr>
       )}
     </>
+  )
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   ADD CREATIVE — operator writes their own copy + uploads their own
+   image/video, added as a new ad to an EXISTING live ad set. Distinct from
+   the AI's add_creative/replace_creative (which generate creative
+   themselves) and backfill-variants (which only re-adds a variant already
+   sitting in the package).
+   ═════════════════════════════════════════════════════════════════ */
+
+function AddCreativePanel({
+  tenantId,
+  campaignId,
+  adSetId,
+  adSetName,
+  onClose,
+  onAdded,
+}: {
+  tenantId: string
+  campaignId: string
+  adSetId: string
+  adSetName?: string
+  onClose: () => void
+  onAdded: () => void
+}) {
+  const [creative, setCreative] = useState<CreativeSourceValue>({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+  const [name, setName] = useState('')
+  const [submitState, setSubmitState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit() {
+    if (!creative.mediaUrl) { setError(`Pick or upload a${creative.assetType === 'image' ? 'n image' : ' video'} first`); return }
+    if (!creative.primaryText.trim() || !creative.headline.trim()) { setError('Primary text and headline are required'); return }
+    setSubmitState('loading')
+    setError(null)
+    try {
+      await addCreativeToAdSet(tenantId, campaignId, adSetId, {
+        name: name.trim() || undefined,
+        ...creative,
+      })
+      onAdded()
+      onClose()
+    } catch (err) {
+      setSubmitState('error')
+      setError(err instanceof Error ? err.message : 'Failed to add creative')
+    }
+  }
+
+  return (
+    <div
+      className="relative rounded-xl px-5 py-4 z-30"
+      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 480, maxWidth: 520 }}
+    >
+      <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
+        <XCircle size={16} />
+      </button>
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 pr-6" style={{ color: C.textMuted }}>
+        Add creative · {adSetName || adSetId}
+      </p>
+      <div className="space-y-2.5">
+        <CreativeSourceFields tenantId={tenantId} onChange={setCreative} />
+        <div>
+          <p className="micro-label mb-1">Ad name <span className="font-normal normal-case" style={{ color: C.textFaint }}>(optional)</span></p>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input text-sm w-full" placeholder="auto" />
+        </div>
+        {error && <p className="text-xs" style={{ color: C.red }}>{error}</p>}
+        <button onClick={handleSubmit} disabled={submitState === 'loading'} className="btn btn-accent w-full">
+          {submitState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+          {submitState === 'loading' ? 'Adding…' : 'Add Creative'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -1189,6 +1365,24 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [products, setProducts] = useState<Product[]>([])
   const launchBlocked = !!review && !review.ready
 
+  const [swapPanelOpen, setSwapPanelOpen] = useState(false)
+  const [metaPages, setMetaPages] = useState<MetaPage[]>([])
+  const [metaPagesState, setMetaPagesState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [swapPageId, setSwapPageId] = useState('')
+  const [swapState, setSwapState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [swapError, setSwapError] = useState<string | null>(null)
+
+  const [addAdSetOpen, setAddAdSetOpen] = useState(false)
+  const [accountAudiences, setAccountAudiences] = useState<MetaCustomAudience[]>([])
+  const [accountAudiencesState, setAccountAudiencesState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [newAdSetName, setNewAdSetName] = useState('')
+  const [newAdSetAudienceType, setNewAdSetAudienceType] = useState<'advantage_plus' | 'retarget' | 'lookalike'>('advantage_plus')
+  const [newAdSetAudienceId, setNewAdSetAudienceId] = useState('')
+  const [newAdSetBudget, setNewAdSetBudget] = useState('')
+  const [newAdSetCreative, setNewAdSetCreative] = useState<CreativeSourceValue>({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+  const [newAdSetState, setNewAdSetState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [newAdSetError, setNewAdSetError] = useState<string | null>(null)
+
   const flash = (m: string, t: 'success' | 'error') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 4000) }
 
   /* ─── Creative helpers ─── */
@@ -1256,6 +1450,86 @@ export default function CampaignDetailPage({ params }: PageProps) {
     }
     setTimeout(poll, POLL_MS)
   }
+
+  /** Runs in the background on the server (40 ads × ~3 Meta calls can take minutes) — this just re-polls the campaign while the status field says it's still going, and stops itself once it flips to complete/failed. */
+  useEffect(() => {
+    if (campaign?.pageSwapStatus?.status !== 'running') return
+    const t = setTimeout(() => { fetchCampaign() }, 4000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.pageSwapStatus?.status, campaign?.pageSwapStatus?.swapped, campaign?.pageSwapStatus?.failed])
+
+  async function openSwapPanel() {
+    setSwapPanelOpen(v => !v)
+    if (metaPages.length === 0 && metaPagesState === 'idle') {
+      setMetaPagesState('loading')
+      try {
+        const res = await getMetaPages(tenantId)
+        setMetaPages(res.pages)
+        setMetaPagesState('idle')
+      } catch {
+        setMetaPagesState('error')
+      }
+    }
+  }
+
+  async function doSwapPage() {
+    if (!swapPageId) { setSwapError('Pick a Page first'); return }
+    setSwapState('loading')
+    setSwapError(null)
+    try {
+      const res = await swapCampaignPage(tenantId, campaignId, swapPageId)
+      flash(res.message, 'success')
+      setSwapState('idle')
+      fetchCampaign()
+    } catch (err) {
+      setSwapState('error')
+      setSwapError(err instanceof Error ? err.message : 'Failed to start Page swap')
+    }
+  }
+
+  async function openAddAdSetPanel() {
+    setAddAdSetOpen(v => !v)
+    if (accountAudiences.length === 0 && accountAudiencesState === 'idle' && campaign?.metaAccountId) {
+      setAccountAudiencesState('loading')
+      try {
+        const auds = await getMetaAccountAudiences(tenantId, campaign.metaAccountId)
+        setAccountAudiences(auds)
+        setAccountAudiencesState('idle')
+      } catch {
+        setAccountAudiencesState('error')
+      }
+    }
+  }
+
+  async function doAddAdSet() {
+    const budget = Number(newAdSetBudget)
+    if (!Number.isFinite(budget) || budget <= 0) { setNewAdSetError('Enter a positive daily budget'); return }
+    if (!newAdSetCreative.mediaUrl) { setNewAdSetError(`Pick or upload a${newAdSetCreative.assetType === 'image' ? 'n image' : ' video'} first`); return }
+    if (!newAdSetCreative.primaryText.trim() || !newAdSetCreative.headline.trim()) { setNewAdSetError('Primary text and headline are required'); return }
+    if (newAdSetAudienceType !== 'advantage_plus' && !newAdSetAudienceId) { setNewAdSetError('Pick an audience'); return }
+    setNewAdSetState('loading')
+    setNewAdSetError(null)
+    try {
+      const res = await addAdSet(tenantId, campaignId, {
+        name: newAdSetName.trim() || undefined,
+        audienceType: newAdSetAudienceType,
+        metaAudienceId: newAdSetAudienceType !== 'advantage_plus' ? newAdSetAudienceId : undefined,
+        dailyBudget: budget,
+        ...newAdSetCreative,
+      })
+      flash(res.message, 'success')
+      setNewAdSetState('idle')
+      setAddAdSetOpen(false)
+      setNewAdSetName(''); setNewAdSetBudget(''); setNewAdSetAudienceId('')
+      setNewAdSetCreative({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+      fetchCampaign()
+    } catch (err) {
+      setNewAdSetState('error')
+      setNewAdSetError(err instanceof Error ? err.message : 'Failed to add ad set')
+    }
+  }
+
   useEffect(() => {
     fetchCampaign()
     setSnapsLoading(true)
@@ -1398,10 +1672,86 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
               {syncing ? 'Syncing…' : 'Refresh'}
             </button>
+            {campaign.metaCampaignId && (
+              <button
+                onClick={openSwapPanel}
+                className="btn"
+                style={swapPanelOpen ? { background: C.accentLight, border: `1px solid ${C.accentBorder}`, color: C.accent } : { background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}
+                title="Fix which Facebook Page this campaign's live ads post as, in place — same campaign, same ad sets, same ad IDs"
+              >
+                <Flag size={14} /> Swap Page
+              </button>
+            )}
             {campaign.status === 'active' && <button onClick={doPause} disabled={pauseState !== 'idle'} className="btn" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>{pauseState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Pause size={14} />}{pauseState === 'loading' ? 'Pausing…' : 'Pause'}</button>}
             {campaign.status === 'paused' && <button onClick={doResume} className="btn btn-accent"><Play size={14} fill="currentColor" />Resume</button>}
           </div>
         </div>
+
+        {/* Swap Page panel */}
+        {swapPanelOpen && campaign.metaCampaignId && (
+          <div className="card p-4 mb-5">
+            <p className="micro-label mb-1">Swap Facebook Page</p>
+            <p className="text-xs mb-3" style={{ color: C.textMuted }}>
+              Clones every live ad&apos;s creative with the corrected Page and points the ad at it — same campaign, same {live.reduce((n, a) => n + (a.ads?.length ?? 0), 0)} ads keep their IDs. The target Page must already be authorized on this campaign&apos;s ad account ({campaign.metaAccountId || '—'}) or Meta will reject every ad.
+            </p>
+            {metaPagesState === 'loading' && <p className="text-xs" style={{ color: C.textMuted }}>Loading Pages…</p>}
+            {metaPagesState === 'error' && <p className="text-xs" style={{ color: C.red }}>Failed to load Pages — is a Meta access token configured?</p>}
+            {metaPagesState === 'idle' && metaPages.length > 0 && !campaign.pageSwapStatus && (
+              <div className="space-y-2.5">
+                <PageSelect pages={metaPages} value={swapPageId} onChange={setSwapPageId} />
+                {swapError && <p className="text-xs" style={{ color: C.red }}>{swapError}</p>}
+                <button
+                  onClick={doSwapPage}
+                  disabled={swapState === 'loading' || !swapPageId}
+                  className="btn btn-accent"
+                >
+                  {swapState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Flag size={13} />}
+                  {swapState === 'loading' ? 'Starting…' : 'Swap Page'}
+                </button>
+              </div>
+            )}
+            {campaign.pageSwapStatus && (
+              <div className="card-inset p-3 mt-1">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <p className="text-sm font-semibold" style={{ color: C.text }}>
+                    {campaign.pageSwapStatus.status === 'running' ? 'Swapping…' : campaign.pageSwapStatus.status === 'complete' ? 'Done' : 'Failed'}
+                  </p>
+                  <p className="text-xs mono" style={{ color: C.textMuted }}>
+                    {campaign.pageSwapStatus.swapped} swapped · {campaign.pageSwapStatus.failed} failed · {campaign.pageSwapStatus.total} total
+                  </p>
+                </div>
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: C.surfaceMuted }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.round(((campaign.pageSwapStatus.swapped + campaign.pageSwapStatus.failed) / Math.max(1, campaign.pageSwapStatus.total)) * 100)}%`,
+                      background: campaign.pageSwapStatus.failed > 0 ? C.amber : C.accent,
+                    }}
+                  />
+                </div>
+                {campaign.pageSwapStatus.status !== 'running' && (
+                  <button
+                    onClick={() => { setSwapPageId(''); setCampaign(c => c ? { ...c, pageSwapStatus: null } : c) }}
+                    className="text-xs font-medium mt-2.5"
+                    style={{ color: C.accent }}
+                  >
+                    Swap a different Page
+                  </button>
+                )}
+                {campaign.pageSwapStatus.results.filter(r => r.status === 'failed').length > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-xs cursor-pointer" style={{ color: C.textMuted }}>View failures</summary>
+                    <div className="mt-1.5 space-y-1">
+                      {campaign.pageSwapStatus.results.filter(r => r.status === 'failed').map(r => (
+                        <p key={r.adId} className="text-[11px] mono" style={{ color: C.red }}>{r.adId}: {r.error}</p>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Syncing-from-Meta banner — stays up for the whole poll window */}
         {syncing && (
@@ -1667,12 +2017,83 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
           {/* ── AD SETS ── */}
           <Tabs.Content value="adsets">
+            {!usePlanned && campaign.metaCampaignId && (
+              <div className="flex justify-end mb-3">
+                <button
+                  onClick={openAddAdSetPanel}
+                  className="btn"
+                  style={addAdSetOpen ? { background: C.accentLight, border: `1px solid ${C.accentBorder}`, color: C.accent } : { background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}
+                >
+                  <Plus size={14} /> Add Ad Set
+                </button>
+              </div>
+            )}
+            {addAdSetOpen && (
+              <div className="card p-4 mb-4">
+                <p className="micro-label mb-1">Add Ad Set</p>
+                <p className="text-xs mb-3" style={{ color: C.textMuted }}>
+                  Creates a new ad set in this same live campaign, with a creative you pick from the library or upload fresh.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <p className="micro-label mb-1">Name <span className="font-normal normal-case" style={{ color: C.textFaint }}>(optional — auto-generated if blank)</span></p>
+                    <input value={newAdSetName} onChange={e => setNewAdSetName(e.target.value)} placeholder={`${newAdSetAudienceType.toUpperCase()}_${new Date().toISOString().split('T')[0]}`} className="input mono text-sm w-full" />
+                  </div>
+                  <div>
+                    <p className="micro-label mb-1.5">Audience</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {([{ value: 'advantage_plus', label: 'Advantage+' }, { value: 'retarget', label: 'Retarget' }, { value: 'lookalike', label: 'Lookalike' }] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => { setNewAdSetAudienceType(opt.value); setNewAdSetAudienceId('') }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                          style={newAdSetAudienceType === opt.value ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textSecondary, border: `1px solid ${C.border}` }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {newAdSetAudienceType !== 'advantage_plus' && (
+                    <div>
+                      <p className="micro-label mb-1">{newAdSetAudienceType === 'retarget' ? 'Custom audience' : 'Lookalike audience'}</p>
+                      {accountAudiencesState === 'loading' && <p className="text-xs" style={{ color: C.textMuted }}>Loading audiences…</p>}
+                      {accountAudiencesState === 'error' && <p className="text-xs" style={{ color: C.red }}>Failed to load audiences for {campaign.metaAccountId}</p>}
+                      {accountAudiencesState === 'idle' && (
+                        <select value={newAdSetAudienceId} onChange={e => setNewAdSetAudienceId(e.target.value)} className="input text-sm w-full">
+                          <option value="">Select an audience…</option>
+                          {accountAudiences.filter(a => newAdSetAudienceType === 'retarget' ? a.type === 'custom' : a.type === 'lookalike').map(a => (
+                            <option key={a.id} value={a.id}>{a.name}{a.approxSizeLower ? ` (~${a.approxSizeLower.toLocaleString()}–${a.approxSizeUpper?.toLocaleString()})` : ''}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <p className="micro-label mb-1.5">Creative</p>
+                    <CreativeSourceFields tenantId={tenantId} onChange={setNewAdSetCreative} />
+                  </div>
+                  <div className="w-40">
+                    <p className="micro-label mb-1">Daily budget</p>
+                    <div className="flex items-stretch overflow-hidden" style={{ border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface }}>
+                      <span className="flex items-center px-2.5 text-xs font-medium mono" style={{ background: C.surfaceMuted, color: C.textMuted, borderRight: `1px solid ${C.border}` }}>₹</span>
+                      <input type="number" value={newAdSetBudget} onChange={e => setNewAdSetBudget(e.target.value)} placeholder="1000" className="flex-1 min-w-0 px-3 py-2 text-sm tabular-nums outline-none mono bg-transparent" style={{ color: C.text }} />
+                    </div>
+                  </div>
+                  {newAdSetError && <p className="text-xs" style={{ color: C.red }}>{newAdSetError}</p>}
+                  <button onClick={doAddAdSet} disabled={newAdSetState === 'loading'} className="btn btn-accent">
+                    {newAdSetState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                    {newAdSetState === 'loading' ? 'Creating…' : 'Create Ad Set'}
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="card overflow-hidden">
               {usePlanned ? (
                 <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} onViewAd={setViewAd} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Budget', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} campaignId={campaignId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} onViewAd={setViewAd} onBudgetChanged={fetchCampaign} onCreativeAdded={fetchCampaign} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>
