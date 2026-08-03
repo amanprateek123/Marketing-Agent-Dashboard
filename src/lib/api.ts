@@ -1102,6 +1102,61 @@ export const resizeCustomBriefPackage = (tenantId: string, packageId: string) =>
   )
 
 /**
+ * Which engine made this creative?
+ *
+ * Resolves to the pipeline run behind a package, or **throws 404 when the built-in generator made
+ * it** — which is a legitimate answer, not a failure. The creative detail page probes this once on
+ * load so its Rewrite / Edit / Retry buttons drive the right engine.
+ */
+export const getCustomBriefPackage = (tenantId: string, packageId: string) =>
+  apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/packages/${packageId}`)
+
+/**
+ * Re-author the brief from an instruction and regenerate — the pipeline's "Rewrite".
+ *
+ * Returns a **new** run id: the pipeline revises a clone so this creative keeps its own artifacts,
+ * and the revision arrives in the library as its own package. Poll the returned run, then reload
+ * the library rather than this package.
+ */
+export const reviseCustomBriefPackage = (
+  tenantId: string,
+  packageId: string,
+  instruction: string,
+) =>
+  apiFetch<{ run_id: number; source_run_id: number; package_id: string | null; status: string }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/revise`,
+    { method: 'POST', body: JSON.stringify({ instruction }) },
+  )
+
+/**
+ * Edit the delivered image in place from free text — the pipeline's "Edit". Same package.
+ *
+ * A 409 means the pipeline's ChatGPT session is logged out; surface it rather than polling into a
+ * wait that will never resolve.
+ */
+export const regenerateCustomBriefPackage = (
+  tenantId: string,
+  packageId: string,
+  instruction: string,
+  tag?: string,
+) =>
+  apiFetch<{ run_id: number; package_id: string | null; status: string; tag: string }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/regenerate`,
+    { method: 'POST', body: JSON.stringify({ instruction, ...(tag ? { tag } : {}) }) },
+  )
+
+/** Answer the question a stalled revise asked, so it can continue. Addressed by run, not package. */
+export const clarifyCustomBriefRun = (
+  tenantId: string,
+  runId: number | string,
+  answer: string,
+) =>
+  apiFetch<{ run_id: number; status: string; rounds: number }>(
+    `/pipeline-bridge/${tenantId}/runs/${runId}/clarify`,
+    { method: 'POST', body: JSON.stringify({ answer }) },
+  )
+
+/**
  * Cursor-paged progress. Pass the `cursor` from the previous response so each
  * poll only returns new events. Covers the run and its batch children — a batch
  * parent stops narrating once authoring ends, so polling the parent alone would

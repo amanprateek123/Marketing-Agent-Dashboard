@@ -137,6 +137,14 @@ export interface CustomBriefRunNode {
 export interface CustomBriefRun extends CustomBriefRunNode {
   progress: CustomBriefProgress
   children: CustomBriefRunNode[]
+  /** The dashboard package this run was pushed into, when it has been pushed. */
+  package_id?: string | null
+  /**
+   * Set only while a revise is parked waiting on an answer. The brief editor could not pinpoint
+   * the edit and asked this; answering it via `clarifyCustomBriefRun` is the only way the run
+   * continues, so it must be shown rather than left looking merely slow.
+   */
+  pending_question?: string | null
 }
 
 export interface CustomBriefEvent {

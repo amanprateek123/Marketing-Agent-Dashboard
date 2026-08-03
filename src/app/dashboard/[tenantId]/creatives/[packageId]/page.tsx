@@ -5,9 +5,9 @@ import Link from 'next/link'
 import {
   ArrowLeft, Loader2, RefreshCw, Wand2, Sparkles, CheckCircle2, Image as ImageIcon, Video as VideoIcon, Volume2, XCircle, RotateCcw, Crop, ChevronDown, ChevronUp, LayoutGrid,
 } from 'lucide-react'
-import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, generateCreativeSizes, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset, resizeCustomBriefPackage } from '@/lib/api'
+import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, generateCreativeSizes, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset, resizeCustomBriefPackage, getCustomBriefPackage, reviseCustomBriefPackage, regenerateCustomBriefPackage, clarifyCustomBriefRun } from '@/lib/api'
 import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution, GalleryAssetLocations } from '@/lib/api'
-import type { CreativeImage, CreativePackage } from '@/types'
+import type { CreativeImage, CreativePackage, CustomBriefRun } from '@/types'
 import { creativePackageStatus } from '@/lib/utils'
 
 interface PageProps {
@@ -59,6 +59,13 @@ export default function CreativeDetailPage({ params }: PageProps) {
   // The Slack pipeline's own reframe (true crops), as opposed to the canvas-extend above. Package
   // level, not per variant: it works from the run's single 1200x1200 base.
   const [pipelineResize, setPipelineResize] = useState<{ state: 'idle' | 'starting' | 'running'; note: string }>({ state: 'idle', note: '' })
+
+  // ── Which engine made this creative? ──
+  // A CreativePackage carries no provenance field, so the only honest way to know is to ask the
+  // pipeline. `null` = made by the built-in generator (the probe 404s), which is a legitimate
+  // answer. Everything below routes Rewrite/Edit/Retry on this: same buttons, right engine.
+  const [pipelineRun, setPipelineRun] = useState<CustomBriefRun | null>(null)
+  const [clarifyDraft, setClarifyDraft] = useState('')
   const [showSizes, setShowSizes] = useState<Record<number, boolean>>({})
   const [imageResolutionDrafts, setImageResolutionDrafts] = useState<Record<number, CreativeImageResolution>>({})
   const [videoAspectDraft, setVideoAspectDraft] = useState<CreativeAspectRatio | null>(null)
@@ -101,6 +108,12 @@ export default function CreativeDetailPage({ params }: PageProps) {
       setLoading(false)
     }
     getPackageAssetLocations(tenantId, packageId).then(setAssetLocations).catch(() => {})
+    // Provenance probe. A 404 is the expected answer for a package the built-in generator made, so
+    // it clears the state rather than surfacing an error — the buttons simply keep their existing
+    // behaviour. Re-run on every load so a revise parked on a question shows it as soon as it asks.
+    getCustomBriefPackage(tenantId, packageId)
+      .then(setPipelineRun)
+      .catch(() => setPipelineRun(null))
   }, [tenantId, packageId])
 
   useEffect(() => { load() }, [load])
@@ -151,6 +164,22 @@ export default function CreativeDetailPage({ params }: PageProps) {
   }
 
   async function handleRegenImage(variantIndex: number) {
+    // Pipeline creative → Revise with a "different take" instruction.
+    //
+    // Retry means "same prompt, new roll", which the pipeline has no direct equivalent for: it does
+    // not keep a re-runnable imagePrompt, it keeps a brief. Re-authoring with an explicit
+    // vary-it instruction is the nearest honest thing. (Before this, Retry hit the built-in
+    // endpoint, which returned 200 with an {error} body because a pushed package has no
+    // imagePrompt — the UI then span for three minutes and gave up silently.)
+    if (pipelineRun) {
+      await runPipelineAction(
+        variantIndex,
+        () => reviseCustomBriefPackage(tenantId, packageId,
+          'Produce a different take on this creative — keep the same message and product, but change the visual treatment and wording.'),
+        { failure: 'Could not start a new take', producesNewPackage: true },
+      )
+      return
+    }
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
       await regenerateCreativeImage(tenantId, packageId, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
@@ -167,6 +196,19 @@ export default function CreativeDetailPage({ params }: PageProps) {
   }
 
   async function handleRewriteImage(variantIndex: number) {
+    // Pipeline creative → Revise. This is the closest of the three: the built-in Rewrite
+    // re-derives the image prompt from the brief, and a pipeline Revise re-authors the brief
+    // itself and regenerates from it. Both go back to the source of truth rather than editing
+    // pixels — which is what separates this from Edit above.
+    if (pipelineRun) {
+      await runPipelineAction(
+        variantIndex,
+        () => reviseCustomBriefPackage(tenantId, packageId,
+          'Re-author this creative from its brief — rewrite the copy and the visual direction, keeping the same product and core message.'),
+        { failure: 'Could not start the rewrite', producesNewPackage: true },
+      )
+      return
+    }
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
       await rewriteCreativeImagePrompt(tenantId, packageId, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
@@ -182,9 +224,67 @@ export default function CreativeDetailPage({ params }: PageProps) {
     }
   }
 
+  /**
+   * Run a pipeline action and poll it to completion.
+   *
+   * Both pipeline actions are asynchronous and slow (minutes, not the ~20s the built-in generator
+   * takes), so neither can wait on the call. `producesNewPackage` distinguishes the two: a revise
+   * runs on a clone and lands as a NEW package, so there is nothing here to poll for; a regenerate
+   * edits this package in place, so polling this page is exactly right.
+   */
+  async function runPipelineAction(
+    variantIndex: number,
+    start: () => Promise<{ run_id: number }>,
+    opts: { failure: string; producesNewPackage?: boolean },
+  ) {
+    setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
+    try {
+      await start()
+      if (opts.producesNewPackage) {
+        // A revise runs on a CLONE so this creative keeps its own artifacts — which means the
+        // result never lands on this page. Polling here would wait forever for a change that
+        // arrives somewhere else, so say where it went and stop.
+        setImageBusy(b => ({ ...b, [variantIndex]: null }))
+        flash('Revising — the new version will appear in your library in a few minutes, alongside this one.')
+        return
+      }
+      setImageBusy(b => ({ ...b, [variantIndex]: 'polling' }))
+      let ticks = 0
+      const tick = async () => {
+        ticks += 1
+        await load()
+        if (ticks >= 30) {
+          setImageBusy(b => ({ ...b, [variantIndex]: null }))
+          return
+        }
+        window.setTimeout(() => { void tick() }, 20_000)
+      }
+      window.setTimeout(() => { void tick() }, 20_000)
+    } catch (e) {
+      setImageBusy(b => ({ ...b, [variantIndex]: null }))
+      const msg = e instanceof Error ? e.message : ''
+      // 409 is the logged-out ChatGPT session — a real, recurring state that must read as an
+      // instruction, not a failure to retry.
+      flash(msg.includes('409')
+        ? 'Image editing is paused — the pipeline needs to be logged in again.'
+        : opts.failure)
+    }
+  }
+
   async function handleEditImage(variantIndex: number) {
     const instruction = editDrafts[variantIndex]?.trim()
     if (!instruction) return
+    // Pipeline creative → Regenerate (Playwright edit-in-place). Same intent as the built-in Edit:
+    // free text applied to the delivered image, no brief change.
+    if (pipelineRun) {
+      setEditDrafts(d => ({ ...d, [variantIndex]: '' }))
+      await runPipelineAction(
+        variantIndex,
+        () => regenerateCustomBriefPackage(tenantId, packageId, instruction),
+        { failure: 'Could not start the edit' },
+      )
+      return
+    }
     setImageBusy(b => ({ ...b, [variantIndex]: 'loading' }))
     try {
       await editCreativeImage(tenantId, packageId, instruction, variantIndex, { aspectRatio: getImageAspect(variantIndex), resolution: getImageResolution(variantIndex) })
@@ -521,6 +621,42 @@ export default function CreativeDetailPage({ params }: PageProps) {
       {toast && (
         <div className="rounded-xl px-4 py-2.5 mb-5 text-[13px]" style={{ background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }}>
           {toast}
+        </div>
+      )}
+
+      {/* A revise that could not pinpoint the edit asks a question and waits. In Slack that is a
+          thread reply; here it would hang forever unless we show it and let you answer. */}
+      {pipelineRun?.pending_question && (
+        <div className="rounded-xl px-4 py-3 mb-5" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
+          <p className="text-[13px] font-semibold mb-2" style={{ color: 'var(--warn)' }}>
+            {pipelineRun.pending_question}
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              value={clarifyDraft}
+              onChange={e => setClarifyDraft(e.target.value)}
+              className="input flex-1"
+              placeholder="Answer to continue the revision…"
+            />
+            <button
+              className="btn btn-accent"
+              disabled={!clarifyDraft.trim()}
+              onClick={async () => {
+                const answer = clarifyDraft.trim()
+                if (!answer) return
+                setClarifyDraft('')
+                try {
+                  await clarifyCustomBriefRun(tenantId, pipelineRun.run_id, answer)
+                  flash('Got it — applying with that detail.')
+                  await load()
+                } catch {
+                  flash('Could not send that answer')
+                }
+              }}
+            >
+              Send
+            </button>
+          </div>
         </div>
       )}
 
