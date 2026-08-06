@@ -579,6 +579,15 @@ export interface CreativePackage {
   createdAt?: string
 }
 
+/** Which Meta surfaces an ad set can serve on. Undefined -> 'vertical', the long-standing default (backend: placement-presets.ts). */
+export type PlacementPreset = 'vertical' | 'vertical_feed' | 'everywhere'
+
+export const PLACEMENT_PRESET_OPTIONS: { value: PlacementPreset; label: string }[] = [
+  { value: 'vertical', label: 'Vertical only (Stories & Reels)' },
+  { value: 'vertical_feed', label: 'Vertical + Feed' },
+  { value: 'everywhere', label: 'Everywhere (Facebook + Instagram)' },
+]
+
 export interface AdSetConfig {
   name: string
   budgetPercent: number
@@ -598,6 +607,7 @@ export interface AdSetConfig {
   interests?: string[]
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed' | 'carousel'
+  placementPreset?: PlacementPreset
   ads?: number[]
 }
 
@@ -999,6 +1009,7 @@ export interface ManualAdSetInput {
   interests?: Array<{ id: string; name: string }>
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
+  placementPreset?: PlacementPreset
   /** Which copy-variant indices this ad set ships as ads. Omit/empty = all variants (default, unchanged behavior). Every variant must be covered by at least one ad set across the campaign. */
   ads?: number[]
 }

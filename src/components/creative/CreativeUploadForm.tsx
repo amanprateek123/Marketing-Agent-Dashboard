@@ -134,11 +134,8 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
     setRows(r => r.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
-  // Videos can't carry extra sizes — a package holds a single video, so the
-  // backend rejects them. Drop any already added rather than submitting a
-  // request we know fails.
   function setAssetType(index: number, assetType: 'image' | 'video') {
-    updateRow(index, { assetType, ...(assetType === 'video' ? { sizes: [] } : {}) })
+    updateRow(index, { assetType })
   }
 
   function addSize(rowIndex: number) {
@@ -288,6 +285,7 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
       <div className="space-y-4 mb-4">
         {rows.map((row, i) => {
           const result = results?.[i]
+          const isImageRow = row.assetType === 'image'
           return (
             <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
               <div className="flex items-center justify-between mb-3">
@@ -336,75 +334,75 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
                 />
               </div>
 
-              {row.assetType === 'image' && (
-                <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface)', border: '1px dashed var(--hairline)' }}>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: 'var(--ink-3)' }}>
-                      <Crop size={12} /> Other sizes of this same creative {row.sizes.length > 0 && `(${row.sizes.length})`}
-                    </span>
-                    <button type="button" onClick={() => addSize(i)} disabled={uploading} className="text-[11px] font-semibold flex items-center gap-1" style={{ color: 'var(--accent-strong)' }}>
-                      <Plus size={11} /> Add size
-                    </button>
-                  </div>
-                  <p className="text-[11px] mb-2" style={{ color: 'var(--ink-4)' }}>
-                    Optional. Already have this ad cut to 1:1, 9:16 and so on? Add them here and they file under this one creative, so each placement gets the size made for it instead of Meta cropping one asset to fit. The ratio is read off each image as you add it — the dropdown is only there to correct it. Leave this empty and we can auto-resize from the creative&apos;s own page later.
-                  </p>
-                  {row.sizes.length > 0 && (
-                    <div className="space-y-2">
-                      {row.sizes.map((size, si) => (
-                        <div key={si} className="flex items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <AssetSourceField
-                              // The ratio tag lives in the field's own header
-                              // row, which keeps it on the same line as the
-                              // upload/URL toggle instead of floating above a
-                              // field that starts 20px lower.
-                              label={
-                                <select
-                                  value={size.aspectRatio}
-                                  onChange={e => updateSize(i, si, { aspectRatio: e.target.value })}
-                                  className="input"
-                                  style={{ height: 24, padding: '0 6px', fontSize: 11, width: 148 }}
-                                  disabled={uploading}
-                                  title="Filled in from the image itself — change it only to correct a detection"
-                                >
-                                  <option value="">Ratio — auto</option>
-                                  {SIZE_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
-                                </select>
-                              }
-                              source={size}
-                              accept="image/*"
-                              disabled={uploading}
-                              compact
-                              onPatch={patch => updateSize(i, si, patch)}
-                              onFile={file => handleFileSelected(
-                                patch => updateSize(i, si, patch),
-                                file,
-                                { isImage: true, onRatio: ratio => updateSize(i, si, { aspectRatio: ratio }) },
-                              )}
-                              onUrlSettled={url => handleUrlSettled(
-                                patch => updateSize(i, si, patch),
-                                url,
-                                { isImage: true, onRatio: ratio => updateSize(i, si, { aspectRatio: ratio }) },
-                              )}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeSize(i, si)}
-                            disabled={uploading}
-                            className="p-1 rounded-md shrink-0"
-                            style={{ color: 'var(--bad)' }}
-                            aria-label="Remove size"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface)', border: '1px dashed var(--hairline)' }}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: 'var(--ink-3)' }}>
+                    <Crop size={12} /> Other sizes of this same creative {row.sizes.length > 0 && `(${row.sizes.length})`}
+                  </span>
+                  <button type="button" onClick={() => addSize(i)} disabled={uploading} className="text-[11px] font-semibold flex items-center gap-1" style={{ color: 'var(--accent-strong)' }}>
+                    <Plus size={11} /> Add size
+                  </button>
                 </div>
-              )}
+                <p className="text-[11px] mb-2" style={{ color: 'var(--ink-4)' }}>
+                  {isImageRow
+                    ? <>Optional. Already have this ad cut to 1:1, 9:16 and so on? Add them here and they file under this one creative, so each placement gets the size made for it instead of Meta cropping one asset to fit. The ratio is read off each image as you add it — the dropdown is only there to correct it. Leave this empty and we can auto-resize from the creative&apos;s own page later.</>
+                    : <>Optional. Already have this ad cut to 1:1, 9:16, 16:9 and so on? Add them here and they file under this one creative, so each placement gets the size made for it instead of Meta cropping one video to fit. Pick the ratio yourself for each — it can&apos;t be read off a video file the way it can off an image.</>}
+                </p>
+                {row.sizes.length > 0 && (
+                  <div className="space-y-2">
+                    {row.sizes.map((size, si) => (
+                      <div key={si} className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <AssetSourceField
+                            // The ratio tag lives in the field's own header
+                            // row, which keeps it on the same line as the
+                            // upload/URL toggle instead of floating above a
+                            // field that starts 20px lower.
+                            label={
+                              <select
+                                value={size.aspectRatio}
+                                onChange={e => updateSize(i, si, { aspectRatio: e.target.value })}
+                                className="input"
+                                style={{ height: 24, padding: '0 6px', fontSize: 11, width: 148 }}
+                                disabled={uploading}
+                                title={isImageRow ? 'Filled in from the image itself — change it only to correct a detection' : 'Pick the ratio this cut was made at'}
+                              >
+                                <option value="">{isImageRow ? 'Ratio — auto' : 'Ratio'}</option>
+                                {SIZE_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
+                              </select>
+                            }
+                            source={size}
+                            accept={isImageRow ? 'image/*' : 'video/*'}
+                            disabled={uploading}
+                            compact
+                            onPatch={patch => updateSize(i, si, patch)}
+                            onFile={file => handleFileSelected(
+                              patch => updateSize(i, si, patch),
+                              file,
+                              { isImage: isImageRow, onRatio: ratio => updateSize(i, si, { aspectRatio: ratio }) },
+                            )}
+                            onUrlSettled={url => handleUrlSettled(
+                              patch => updateSize(i, si, patch),
+                              url,
+                              { isImage: isImageRow, onRatio: ratio => updateSize(i, si, { aspectRatio: ratio }) },
+                            )}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSize(i, si)}
+                          disabled={uploading}
+                          className="p-1 rounded-md shrink-0"
+                          style={{ color: 'var(--bad)' }}
+                          aria-label="Remove size"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="grid md:grid-cols-2 gap-3 mb-3">
                 <label className="block">

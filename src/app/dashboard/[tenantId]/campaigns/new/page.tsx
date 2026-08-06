@@ -16,13 +16,14 @@ import { CreativeEditor } from '@/components/campaign/CreativeEditor'
 import type {
   Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
+import { PLACEMENT_PRESET_OPTIONS } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
 const OBJECTIVE_OPTIONS = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC']
 const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS']
 
 function emptyAdSet(name = ''): ManualAdSetInput {
-  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image' }
+  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image', placementPreset: 'vertical' }
 }
 function emptyCopy(): ManualCopyVariant {
   return { primaryText: '', headline: '', cta: 'LEARN_MORE' }
@@ -1002,6 +1003,15 @@ function AdSetCard({
                   campaign type — so one campaign can run it alongside
                   hand-targeted ad sets and A/B them on the same creative. */}
               <option value="advantage_plus">Advantage+ (Meta finds the audience)</option>
+            </select>
+          </label>
+
+          <label className="block mb-3">
+            <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Placements</span>
+            <select value={adSet.placementPreset ?? 'vertical'} onChange={e => onChange({ placementPreset: e.target.value as ManualAdSetInput['placementPreset'] })} className="input">
+              {PLACEMENT_PRESET_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
           </label>
 

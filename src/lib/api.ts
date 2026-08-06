@@ -27,6 +27,7 @@ import type {
   CreativePackage,
   DashboardOverview,
   CampaignLaunchReview,
+  PlacementPreset,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -352,11 +353,11 @@ export interface UploadCreativeItem {
   aspectRatio?: string
   resolution?: string
   /**
-   * Ready-made alternate sizes of the SAME image — your own 1:1/9:16 cuts of
-   * one ad, filed under one creative so launch serves the right size per
-   * placement instead of letting Meta centre-crop it. Image-only: a package
-   * holds a single video, so extra video sizes are rejected. A size that
-   * fails to upload doesn't fail the creative — it comes back in `sizeErrors`.
+   * Ready-made alternate sizes of the SAME creative — your own 1:1/9:16/16:9
+   * cuts of one ad, filed under one creative so launch serves the right size
+   * per placement instead of letting Meta centre-crop it. Works for both
+   * images and video. A size that fails to upload doesn't fail the
+   * creative — it comes back in `sizeErrors`.
    */
   sizes?: { sourceUrl: string; aspectRatio?: string; resolution?: string }[]
 }
@@ -644,6 +645,23 @@ export const updateAdSetBudget = (
     body: JSON.stringify({ dailyBudget }),
   })
 
+/** Changes which Meta surfaces a LIVE ad set can serve on — the manual counterpart to the AI audit loop's narrow-placement action, but broadening as well as narrowing. */
+export const updateAdSetPlacement = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  placementPreset: PlacementPreset,
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    placementPreset: PlacementPreset
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/placement`, {
+    method: 'PATCH',
+    body: JSON.stringify({ placementPreset }),
+  })
+
 /**
  * Fixes which Facebook Page a LIVE campaign's ads post as, in place — same
  * campaign, same ad sets, same ad IDs, only each ad's creative Page identity
@@ -667,11 +685,31 @@ export const swapCampaignPage = (
     body: JSON.stringify({ pageId }),
   })
 
+/** Per-ad outcome when creating several ads at once (whole-sheet mode) — one bad asset doesn't block the rest. */
+export interface BulkAdsResult {
+  createdAds: Array<{
+    adId: string
+    creativeId: string
+    headline: string
+    assetType: 'image' | 'video'
+  }>
+  failed: Array<{ headline?: string; error: string }>
+  /** Carousel cards in the sheet, if any — a card is a slide inside one multi-card ad, not a standalone ad, so it's skipped rather than attached. */
+  skippedCarousel: number
+}
+
+/** Either a single operator-supplied creative, or a whole Gallery sheet — every usable asset in it becomes its own ad. */
+export type AdSetCreativeSource =
+  | { assetType: 'image' | 'video'; mediaUrl: string; primaryText: string; headline: string; cta: string }
+  | { sheetId: string; excludeAssetIds?: string[] }
+
 /**
  * Adds a brand-new ad set to an already-live campaign — same campaign, a new
- * ad set inside it. Clones an EXISTING live ad's copy + image (by `sourceAdId`)
- * into the new ad set rather than generating anything fresh. Same TS-side
- * budget caps as every other budget path.
+ * ad set inside it. Accepts either one operator-supplied creative or a whole
+ * Gallery sheet (every usable asset in it becomes its own ad in the new ad
+ * set, copy pulled from each asset's own source package). Same TS-side
+ * budget caps as every other budget path — unaffected by which mode is used,
+ * since Meta ad set budget is per-ad-set, not per-ad.
  */
 export const addAdSet = (
   tenantId: string,
@@ -681,20 +719,18 @@ export const addAdSet = (
     audienceType: 'advantage_plus' | 'retarget' | 'lookalike'
     metaAudienceId?: string
     dailyBudget: number
-    assetType: 'image' | 'video'
-    mediaUrl: string
-    primaryText: string
-    headline: string
-    cta: string
-  },
+    placementPreset?: PlacementPreset
+  } & AdSetCreativeSource,
 ) =>
-  apiFetch<{
-    campaignId: string
-    newAdSetId: string
-    newAdId: string
-    newCampaignBudget: number
-    message: string
-  }>(`/campaigns/${tenantId}/${campaignId}/adsets`, {
+  apiFetch<
+    {
+      campaignId: string
+      newAdSetId: string
+      newAdId: string
+      newCampaignBudget: number
+      message: string
+    } & BulkAdsResult
+  >(`/campaigns/${tenantId}/${campaignId}/adsets`, {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -727,6 +763,30 @@ export const addCreativeToAdSet = (
     creativeId: string
     message: string
   }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/creatives`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Whole-sheet counterpart to addCreativeToAdSet — attaches every usable
+ * asset in a Gallery sheet to this EXISTING live ad set as its own new ad,
+ * copy pulled from each asset's own source package instead of typed once.
+ */
+export const addCreativesSheetToAdSet = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  body: { sheetId: string; excludeAssetIds?: string[] },
+) =>
+  apiFetch<
+    {
+      campaignId: string
+      adSetId: string
+      adId: string
+      creativeId: string
+      message: string
+    } & BulkAdsResult
+  >(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/creatives/bulk`, {
     method: 'POST',
     body: JSON.stringify(body),
   })

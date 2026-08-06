@@ -10,20 +10,23 @@ import {
   TrendingUp, DollarSign, BarChart3, RefreshCw, Target, ChevronDown,
   Image as ImageIcon, Shield, Clock, Activity, FlameKindling,
   Sparkles, ArrowRightLeft, History, Zap, Ban, Layers, ExternalLink, Info,
-  Pencil, Flag, Plus,
+  Pencil, Flag, Plus, AlertTriangle,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { PageSelect } from '@/components/ui/PageSelect'
 import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
-import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences, updateAdSetBudget, getMetaPages, swapCampaignPage, addAdSet, addCreativeToAdSet } from '@/lib/api'
+import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences, updateAdSetBudget, updateAdSetPlacement, getMetaPages, swapCampaignPage, addAdSet, addCreativeToAdSet, addCreativesSheetToAdSet } from '@/lib/api'
+import type { BulkAdsResult } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
-import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product, MetaPage } from '@/types'
+import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product, MetaPage, PlacementPreset } from '@/types'
+import { PLACEMENT_PRESET_OPTIONS } from '@/types'
 import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { CampaignSetup } from '@/components/campaign/CampaignSetup'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
 import { CreativeSourceFields, type CreativeSourceValue } from '@/components/creative/CreativeSourceFields'
+import { SheetAttachPicker, type SheetAttachSelection } from '@/components/creative/SheetAttachPicker'
 
 /* ─── Local types ─── */
 interface CreativePackage {
@@ -502,6 +505,7 @@ function AdSetRow({
   const [open, setOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [addCreativeOpen, setAddCreativeOpen] = useState(false)
+  const [placementOpen, setPlacementOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend
@@ -647,6 +651,16 @@ function AdSetRow({
                 <Plus size={10} /> Add Creative
               </button>
             )}
+            {tenantId && campaignId && adSet.id && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setPlacementOpen(v => !v) }}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-opacity hover:opacity-70"
+                style={{ background: placementOpen ? C.accentLight : C.surfaceMuted, color: placementOpen ? C.accent : C.textMuted, border: `1px solid ${placementOpen ? C.accentBorder : C.borderLight}` }}
+                title="Change which Meta surfaces this ad set can serve on"
+              >
+                <Layers size={10} /> Placements
+              </button>
+            )}
             {tenantId && adSet.id && proposalsCount && proposalsCount > 0 && (
               <Link
                 href={`/dashboard/${tenantId}/proposed-actions?targetId=${adSet.id}`}
@@ -675,6 +689,18 @@ function AdSetRow({
             adSetName={adSet.name}
             onClose={() => setAddCreativeOpen(false)}
             onAdded={() => onCreativeAdded?.()}
+          />
+        </AnchoredPortal>
+      )}
+      {placementOpen && tenantId && campaignId && adSet.id && (
+        <AnchoredPortal anchorRef={rowRef} onClose={() => setPlacementOpen(false)}>
+          <ChangePlacementsPanel
+            tenantId={tenantId}
+            campaignId={campaignId}
+            adSetId={adSet.id}
+            adSetName={adSet.name}
+            onClose={() => setPlacementOpen(false)}
+            onChanged={() => onCreativeAdded?.()}
           />
         </AnchoredPortal>
       )}
@@ -711,16 +737,41 @@ function AddCreativePanel({
   onClose: () => void
   onAdded: () => void
 }) {
+  // Whole sheet is the default — attaching every creative in a Gallery sheet
+  // at once is the common case; "Single creative" stays for the occasional
+  // one-off ad.
+  const [sourceMode, setSourceMode] = useState<'sheet' | 'single'>('sheet')
+  const [sheetSelection, setSheetSelection] = useState<SheetAttachSelection | null>(null)
   const [creative, setCreative] = useState<CreativeSourceValue>({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
   const [name, setName] = useState('')
   const [submitState, setSubmitState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<BulkAdsResult | null>(null)
 
   async function handleSubmit() {
+    setError(null)
+    setResult(null)
+    if (sourceMode === 'sheet') {
+      if (!sheetSelection || sheetSelection.selectedCount === 0) { setError('Pick at least one creative from the sheet'); return }
+      setSubmitState('loading')
+      try {
+        const res = await addCreativesSheetToAdSet(tenantId, campaignId, adSetId, {
+          sheetId: sheetSelection.sheetId,
+          excludeAssetIds: sheetSelection.excludeAssetIds,
+        })
+        setResult(res)
+        onAdded()
+        if (res.failed.length === 0) onClose()
+        else setSubmitState('idle')
+      } catch (err) {
+        setSubmitState('error')
+        setError(err instanceof Error ? err.message : 'Failed to add creatives')
+      }
+      return
+    }
     if (!creative.mediaUrl) { setError(`Pick or upload a${creative.assetType === 'image' ? 'n image' : ' video'} first`); return }
     if (!creative.primaryText.trim() || !creative.headline.trim()) { setError('Primary text and headline are required'); return }
     setSubmitState('loading')
-    setError(null)
     try {
       await addCreativeToAdSet(tenantId, campaignId, adSetId, {
         name: name.trim() || undefined,
@@ -737,7 +788,7 @@ function AddCreativePanel({
   return (
     <div
       className="relative rounded-xl px-5 py-4 z-30"
-      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 480, maxWidth: 520 }}
+      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 480, maxWidth: 560 }}
     >
       <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
         <XCircle size={16} />
@@ -745,16 +796,118 @@ function AddCreativePanel({
       <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 pr-6" style={{ color: C.textMuted }}>
         Add creative · {adSetName || adSetId}
       </p>
+      <div className="flex gap-1.5 mb-3">
+        {([{ value: 'sheet', label: 'Whole sheet' }, { value: 'single', label: 'Single creative' }] as const).map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setSourceMode(opt.value)}
+            className="px-2.5 py-1 rounded-lg text-[11.5px] font-semibold"
+            style={sourceMode === opt.value ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textSecondary, border: `1px solid ${C.border}` }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
       <div className="space-y-2.5">
-        <CreativeSourceFields tenantId={tenantId} onChange={setCreative} />
-        <div>
-          <p className="micro-label mb-1">Ad name <span className="font-normal normal-case" style={{ color: C.textFaint }}>(optional)</span></p>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="input text-sm w-full" placeholder="auto" />
-        </div>
+        {sourceMode === 'sheet' ? (
+          <SheetAttachPicker tenantId={tenantId} onChange={setSheetSelection} />
+        ) : (
+          <>
+            <CreativeSourceFields tenantId={tenantId} onChange={setCreative} />
+            <div>
+              <p className="micro-label mb-1">Ad name <span className="font-normal normal-case" style={{ color: C.textFaint }}>(optional)</span></p>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="input text-sm w-full" placeholder="auto" />
+            </div>
+          </>
+        )}
+        {result?.failed.length ? (
+          <p className="text-[11px] flex items-start gap-1" style={{ color: C.amber }}>
+            <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+            <span>{result.createdAds.length} ad(s) added, but {result.failed.length} failed: {result.failed.map((f) => f.error).join('; ')}</span>
+          </p>
+        ) : null}
         {error && <p className="text-xs" style={{ color: C.red }}>{error}</p>}
         <button onClick={handleSubmit} disabled={submitState === 'loading'} className="btn btn-accent w-full">
           {submitState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-          {submitState === 'loading' ? 'Adding…' : 'Add Creative'}
+          {submitState === 'loading'
+            ? (sourceMode === 'sheet' ? 'Creating ads — this can take a few minutes if the sheet has video…' : 'Adding…')
+            : sourceMode === 'sheet' && sheetSelection
+              ? `Add ${sheetSelection.selectedCount} creative${sheetSelection.selectedCount === 1 ? '' : 's'}`
+              : 'Add Creative'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   CHANGE PLACEMENTS — operator switches which Meta surfaces an
+   EXISTING live ad set can serve on. Manual counterpart to the AI
+   audit loop's narrow_placement action, but broadening as well as
+   narrowing, and expressed as the same fixed preset used at ad-set
+   creation rather than raw Facebook/Instagram position arrays.
+   ═════════════════════════════════════════════════════════════════ */
+function ChangePlacementsPanel({
+  tenantId,
+  campaignId,
+  adSetId,
+  adSetName,
+  onClose,
+  onChanged,
+}: {
+  tenantId: string
+  campaignId: string
+  adSetId: string
+  adSetName?: string
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [preset, setPreset] = useState<PlacementPreset>('vertical')
+  const [submitState, setSubmitState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit() {
+    setSubmitState('loading')
+    setError(null)
+    try {
+      await updateAdSetPlacement(tenantId, campaignId, adSetId, preset)
+      onChanged()
+      onClose()
+    } catch (err) {
+      setSubmitState('error')
+      setError(err instanceof Error ? err.message : 'Failed to update placements')
+    }
+  }
+
+  return (
+    <div
+      className="relative rounded-xl px-5 py-4 z-30"
+      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 380, maxWidth: 420 }}
+    >
+      <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
+        <XCircle size={16} />
+      </button>
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 pr-6" style={{ color: C.textMuted }}>
+        Change placements · {adSetName || adSetId}
+      </p>
+      <div className="space-y-2.5">
+        <div className="flex gap-2 flex-wrap">
+          {PLACEMENT_PRESET_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setPreset(opt.value)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={preset === opt.value ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textSecondary, border: `1px solid ${C.border}` }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-xs" style={{ color: C.red }}>{error}</p>}
+        <button onClick={handleSubmit} disabled={submitState === 'loading'} className="btn btn-accent w-full">
+          {submitState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Layers size={13} />}
+          {submitState === 'loading' ? 'Updating…' : 'Update Placements'}
         </button>
       </div>
     </div>
@@ -1380,8 +1533,15 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [newAdSetAudienceId, setNewAdSetAudienceId] = useState('')
   const [newAdSetBudget, setNewAdSetBudget] = useState('')
   const [newAdSetCreative, setNewAdSetCreative] = useState<CreativeSourceValue>({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+  // Whole sheet is the default — attaching every creative in a Gallery sheet
+  // at once is the common case; "Single creative" stays for the occasional
+  // one-off ad set.
+  const [newAdSetSourceMode, setNewAdSetSourceMode] = useState<'sheet' | 'single'>('sheet')
+  const [newAdSetSheetSelection, setNewAdSetSheetSelection] = useState<SheetAttachSelection | null>(null)
   const [newAdSetState, setNewAdSetState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [newAdSetError, setNewAdSetError] = useState<string | null>(null)
+  const [newAdSetResult, setNewAdSetResult] = useState<BulkAdsResult | null>(null)
+  const [newAdSetPlacementPreset, setNewAdSetPlacementPreset] = useState<PlacementPreset>('vertical')
 
   const flash = (m: string, t: 'success' | 'error') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 4000) }
 
@@ -1505,24 +1665,37 @@ export default function CampaignDetailPage({ params }: PageProps) {
   async function doAddAdSet() {
     const budget = Number(newAdSetBudget)
     if (!Number.isFinite(budget) || budget <= 0) { setNewAdSetError('Enter a positive daily budget'); return }
-    if (!newAdSetCreative.mediaUrl) { setNewAdSetError(`Pick or upload a${newAdSetCreative.assetType === 'image' ? 'n image' : ' video'} first`); return }
-    if (!newAdSetCreative.primaryText.trim() || !newAdSetCreative.headline.trim()) { setNewAdSetError('Primary text and headline are required'); return }
+    if (newAdSetSourceMode === 'sheet') {
+      if (!newAdSetSheetSelection || newAdSetSheetSelection.selectedCount === 0) { setNewAdSetError('Pick at least one creative from the sheet'); return }
+    } else {
+      if (!newAdSetCreative.mediaUrl) { setNewAdSetError(`Pick or upload a${newAdSetCreative.assetType === 'image' ? 'n image' : ' video'} first`); return }
+      if (!newAdSetCreative.primaryText.trim() || !newAdSetCreative.headline.trim()) { setNewAdSetError('Primary text and headline are required'); return }
+    }
     if (newAdSetAudienceType !== 'advantage_plus' && !newAdSetAudienceId) { setNewAdSetError('Pick an audience'); return }
     setNewAdSetState('loading')
     setNewAdSetError(null)
+    setNewAdSetResult(null)
     try {
       const res = await addAdSet(tenantId, campaignId, {
         name: newAdSetName.trim() || undefined,
         audienceType: newAdSetAudienceType,
         metaAudienceId: newAdSetAudienceType !== 'advantage_plus' ? newAdSetAudienceId : undefined,
         dailyBudget: budget,
-        ...newAdSetCreative,
+        placementPreset: newAdSetPlacementPreset,
+        ...(newAdSetSourceMode === 'sheet'
+          ? { sheetId: newAdSetSheetSelection!.sheetId, excludeAssetIds: newAdSetSheetSelection!.excludeAssetIds }
+          : newAdSetCreative),
       })
       flash(res.message, 'success')
+      setNewAdSetResult(res)
       setNewAdSetState('idle')
-      setAddAdSetOpen(false)
-      setNewAdSetName(''); setNewAdSetBudget(''); setNewAdSetAudienceId('')
-      setNewAdSetCreative({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+      if (res.failed.length === 0) {
+        setAddAdSetOpen(false)
+        setNewAdSetName(''); setNewAdSetBudget(''); setNewAdSetAudienceId('')
+        setNewAdSetCreative({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
+        setNewAdSetSheetSelection(null)
+        setNewAdSetPlacementPreset('vertical')
+      }
       fetchCampaign()
     } catch (err) {
       setNewAdSetState('error')
@@ -2032,9 +2205,24 @@ export default function CampaignDetailPage({ params }: PageProps) {
               <div className="card p-4 mb-4">
                 <p className="micro-label mb-1">Add Ad Set</p>
                 <p className="text-xs mb-3" style={{ color: C.textMuted }}>
-                  Creates a new ad set in this same live campaign, with a creative you pick from the library or upload fresh.
+                  Creates a new ad set in this same live campaign, seeded with a whole Gallery sheet&rsquo;s worth of ads or a single creative you pick or upload fresh.
                 </p>
                 <div className="space-y-3">
+                  <div>
+                    <p className="micro-label mb-1.5">Creative source</p>
+                    <div className="flex gap-1.5">
+                      {([{ value: 'sheet', label: 'Whole sheet' }, { value: 'single', label: 'Single creative' }] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setNewAdSetSourceMode(opt.value)}
+                          className="px-2.5 py-1 rounded-lg text-[11.5px] font-semibold"
+                          style={newAdSetSourceMode === opt.value ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textSecondary, border: `1px solid ${C.border}` }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div>
                     <p className="micro-label mb-1">Name <span className="font-normal normal-case" style={{ color: C.textFaint }}>(optional — auto-generated if blank)</span></p>
                     <input value={newAdSetName} onChange={e => setNewAdSetName(e.target.value)} placeholder={`${newAdSetAudienceType.toUpperCase()}_${new Date().toISOString().split('T')[0]}`} className="input mono text-sm w-full" />
@@ -2070,8 +2258,27 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     </div>
                   )}
                   <div>
+                    <p className="micro-label mb-1.5">Placements</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {PLACEMENT_PRESET_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setNewAdSetPlacementPreset(opt.value)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                          style={newAdSetPlacementPreset === opt.value ? { background: C.accent, color: '#fff' } : { background: C.surface, color: C.textSecondary, border: `1px solid ${C.border}` }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
                     <p className="micro-label mb-1.5">Creative</p>
-                    <CreativeSourceFields tenantId={tenantId} onChange={setNewAdSetCreative} />
+                    {newAdSetSourceMode === 'sheet' ? (
+                      <SheetAttachPicker tenantId={tenantId} onChange={setNewAdSetSheetSelection} />
+                    ) : (
+                      <CreativeSourceFields tenantId={tenantId} onChange={setNewAdSetCreative} />
+                    )}
                   </div>
                   <div className="w-40">
                     <p className="micro-label mb-1">Daily budget</p>
@@ -2080,10 +2287,20 @@ export default function CampaignDetailPage({ params }: PageProps) {
                       <input type="number" value={newAdSetBudget} onChange={e => setNewAdSetBudget(e.target.value)} placeholder="1000" className="flex-1 min-w-0 px-3 py-2 text-sm tabular-nums outline-none mono bg-transparent" style={{ color: C.text }} />
                     </div>
                   </div>
+                  {newAdSetResult?.failed.length ? (
+                    <p className="text-[11px] flex items-start gap-1" style={{ color: C.amber }}>
+                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                      <span>{newAdSetResult.createdAds.length} ad(s) created, but {newAdSetResult.failed.length} failed: {newAdSetResult.failed.map(f => f.error).join('; ')}</span>
+                    </p>
+                  ) : null}
                   {newAdSetError && <p className="text-xs" style={{ color: C.red }}>{newAdSetError}</p>}
                   <button onClick={doAddAdSet} disabled={newAdSetState === 'loading'} className="btn btn-accent">
                     {newAdSetState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                    {newAdSetState === 'loading' ? 'Creating…' : 'Create Ad Set'}
+                    {newAdSetState === 'loading'
+                      ? (newAdSetSourceMode === 'sheet' ? 'Creating ads — this can take a few minutes if the sheet has video…' : 'Creating…')
+                      : newAdSetSourceMode === 'sheet' && newAdSetSheetSelection
+                        ? `Create Ad Set (${newAdSetSheetSelection.selectedCount} ad${newAdSetSheetSelection.selectedCount === 1 ? '' : 's'})`
+                        : 'Create Ad Set'}
                   </button>
                 </div>
               </div>
