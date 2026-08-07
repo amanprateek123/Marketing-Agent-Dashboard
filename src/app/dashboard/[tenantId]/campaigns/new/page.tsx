@@ -1835,6 +1835,18 @@ function GalleryPicker({
   // the assets an earlier ad set already claimed.
   const [sheetOrder, setSheetOrder] = useState<string[]>([])
 
+  // Different TOPICS are almost always unrelated products/campaigns — pooling
+  // silently across them mixed 9 correct "wish letter" variants with 29
+  // unrelated Nadi Report ones in production (2026-08-07), because the
+  // sheet caches above never reset on topic switch. Pooling across SHEETS
+  // within the same topic is still intentional (see the comment above), so
+  // this only clears the pool when the topic itself changes.
+  useEffect(() => {
+    setAssetsBySheet({})
+    setSelectedBySheet({})
+    setSheetOrder([])
+  }, [selectedTopicId])
+
   const assets = assetsBySheet[selectedSheetId] ?? []
   const selectedKeys = selectedBySheet[selectedSheetId] ?? new Set<string>()
 
@@ -2001,17 +2013,28 @@ function GalleryPicker({
             // whichever tab happens to be open.
             const inPool = (selectedBySheet[sheet._id]?.size ?? 0)
             return (
-              <button
-                key={sheet._id}
-                onClick={() => onSelectSheet(sheet._id)}
-                className="px-3 py-2 text-[12px] font-semibold -mb-px flex items-center gap-1.5"
-                style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
-              >
-                {sheet.name}
+              <div key={sheet._id} className="flex items-center gap-1 -mb-px">
+                <button
+                  onClick={() => onSelectSheet(sheet._id)}
+                  className="px-3 py-2 text-[12px] font-semibold flex items-center gap-1.5"
+                  style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
+                >
+                  {sheet.name}
+                  {inPool > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>{inPool}</span>
+                  )}
+                </button>
                 {inPool > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>{inPool}</span>
+                  <button
+                    onClick={() => setSelectedBySheet(prev => ({ ...prev, [sheet._id]: new Set() }))}
+                    title={`Remove "${sheet.name}" from the pool`}
+                    className="text-[12px] font-bold px-1.5 rounded hover:opacity-70"
+                    style={{ color: 'var(--ink-3)' }}
+                  >
+                    ×
+                  </button>
                 )}
-              </button>
+              </div>
             )
           })}
         </div>
