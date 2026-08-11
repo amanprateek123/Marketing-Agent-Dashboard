@@ -20,6 +20,7 @@ import type {
   MetaGeoOption,
   MetaAdAccountsResponse,
   MetaBusiness,
+  MetaPagesResponse,
   MetaCustomAudience,
   CreateManualCampaignDto,
   UpdateManualCampaignConfigDto,
@@ -32,6 +33,7 @@ import type {
   CustomBriefStarted,
   CustomBriefImageRef,
   StartCustomBriefBody,
+  PlacementPreset,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -121,6 +123,10 @@ export const syncMetaAccounts = (tenantId: string, accountIds?: string[]) =>
 /** Business Managers the tenant's access token belongs to — for scoping the ad-account picker to one portfolio. */
 export const getMetaBusinesses = (tenantId: string) =>
   apiFetch<{ businesses: MetaBusiness[] }>(`/companies/${tenantId}/meta-businesses`)
+
+/** Facebook Pages visible to the tenant's stored Meta access token — for the Page picker (company.meta.pageId / product.pageId). */
+export const getMetaPages = (tenantId: string) =>
+  apiFetch<MetaPagesResponse>(`/companies/${tenantId}/meta-pages`)
 
 // ── Campaigns ──────────────────────────────────────────────────────────────
 export const getCampaigns = (tenantId: string) =>
@@ -353,11 +359,11 @@ export interface UploadCreativeItem {
   aspectRatio?: string
   resolution?: string
   /**
-   * Ready-made alternate sizes of the SAME image — your own 1:1/9:16 cuts of
-   * one ad, filed under one creative so launch serves the right size per
-   * placement instead of letting Meta centre-crop it. Image-only: a package
-   * holds a single video, so extra video sizes are rejected. A size that
-   * fails to upload doesn't fail the creative — it comes back in `sizeErrors`.
+   * Ready-made alternate sizes of the SAME creative — your own 1:1/9:16/16:9
+   * cuts of one ad, filed under one creative so launch serves the right size
+   * per placement instead of letting Meta centre-crop it. Works for both
+   * images and video. A size that fails to upload doesn't fail the
+   * creative — it comes back in `sizeErrors`.
    */
   sizes?: { sourceUrl: string; aspectRatio?: string; resolution?: string }[]
 }
@@ -624,6 +630,171 @@ export const updateCampaignBudget = (
   apiFetch<Campaign>(`/campaigns/${tenantId}/${campaignId}/budget`, {
     method: 'PATCH',
     body: JSON.stringify({ budget }),
+  })
+
+/** Sets a LIVE ad set's daily budget directly on Meta (only endpoint that lets an operator type an arbitrary number for an already-launched ad set, vs accept/reject the AI's own proposed figure). Same TS-side caps as every other budget path. */
+export const updateAdSetBudget = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  dailyBudget: number,
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    oldDailyBudget: number
+    newDailyBudget: number
+    newCampaignBudget: number
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/budget`, {
+    method: 'PATCH',
+    body: JSON.stringify({ dailyBudget }),
+  })
+
+/** Changes which Meta surfaces a LIVE ad set can serve on — the manual counterpart to the AI audit loop's narrow-placement action, but broadening as well as narrowing. */
+export const updateAdSetPlacement = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  placementPreset: PlacementPreset,
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    placementPreset: PlacementPreset
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/placement`, {
+    method: 'PATCH',
+    body: JSON.stringify({ placementPreset }),
+  })
+
+/**
+ * Fixes which Facebook Page a LIVE campaign's ads post as, in place — same
+ * campaign, same ad sets, same ad IDs, only each ad's creative Page identity
+ * changes. Fire-and-forget: returns immediately with status 'started'; poll
+ * getCampaign() and read `pageSwapStatus` for live progress (40 ads × ~3 Meta
+ * calls each can take minutes).
+ */
+export const swapCampaignPage = (
+  tenantId: string,
+  campaignId: string,
+  pageId: string,
+) =>
+  apiFetch<{
+    campaignId: string
+    pageId: string
+    status: string
+    total: number
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/swap-page`, {
+    method: 'POST',
+    body: JSON.stringify({ pageId }),
+  })
+
+/** Per-ad outcome when creating several ads at once (whole-sheet mode) — one bad asset doesn't block the rest. */
+export interface BulkAdsResult {
+  createdAds: Array<{
+    adId: string
+    creativeId: string
+    headline: string
+    assetType: 'image' | 'video'
+  }>
+  failed: Array<{ headline?: string; error: string }>
+  /** Carousel cards in the sheet, if any — a card is a slide inside one multi-card ad, not a standalone ad, so it's skipped rather than attached. */
+  skippedCarousel: number
+}
+
+/** Either a single operator-supplied creative, or a whole Gallery sheet — every usable asset in it becomes its own ad. */
+export type AdSetCreativeSource =
+  | { assetType: 'image' | 'video'; mediaUrl: string; primaryText: string; headline: string; cta: string }
+  | { sheetId: string; excludeAssetIds?: string[] }
+
+/**
+ * Adds a brand-new ad set to an already-live campaign — same campaign, a new
+ * ad set inside it. Accepts either one operator-supplied creative or a whole
+ * Gallery sheet (every usable asset in it becomes its own ad in the new ad
+ * set, copy pulled from each asset's own source package). Same TS-side
+ * budget caps as every other budget path — unaffected by which mode is used,
+ * since Meta ad set budget is per-ad-set, not per-ad.
+ */
+export const addAdSet = (
+  tenantId: string,
+  campaignId: string,
+  body: {
+    name?: string
+    audienceType: 'advantage_plus' | 'retarget' | 'lookalike'
+    metaAudienceId?: string
+    dailyBudget: number
+    placementPreset?: PlacementPreset
+  } & AdSetCreativeSource,
+) =>
+  apiFetch<
+    {
+      campaignId: string
+      newAdSetId: string
+      newAdId: string
+      newCampaignBudget: number
+      message: string
+    } & BulkAdsResult
+  >(`/campaigns/${tenantId}/${campaignId}/adsets`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Adds an operator-authored ad (their own copy + their own image/video,
+ * already uploaded via uploadCreativeFile) to an EXISTING live ad set — the
+ * ad set's budget/audience are untouched, only a new ad joins it. Distinct
+ * from the AI's add_creative/replace_creative (which generate creative
+ * themselves) and from backfill-variants (which only re-adds a variant
+ * already sitting in the package).
+ */
+export const addCreativeToAdSet = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  body: {
+    name?: string
+    assetType: 'image' | 'video'
+    mediaUrl: string
+    primaryText: string
+    headline: string
+    cta: string
+  },
+) =>
+  apiFetch<{
+    campaignId: string
+    adSetId: string
+    adId: string
+    creativeId: string
+    message: string
+  }>(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/creatives`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Whole-sheet counterpart to addCreativeToAdSet — attaches every usable
+ * asset in a Gallery sheet to this EXISTING live ad set as its own new ad,
+ * copy pulled from each asset's own source package instead of typed once.
+ */
+export const addCreativesSheetToAdSet = (
+  tenantId: string,
+  campaignId: string,
+  adSetId: string,
+  body: { sheetId: string; excludeAssetIds?: string[] },
+) =>
+  apiFetch<
+    {
+      campaignId: string
+      adSetId: string
+      adId: string
+      creativeId: string
+      message: string
+    } & BulkAdsResult
+  >(`/campaigns/${tenantId}/${campaignId}/adsets/${adSetId}/creatives/bulk`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   })
 
 export const getPendingActions = (tenantId: string, campaignId: string) =>

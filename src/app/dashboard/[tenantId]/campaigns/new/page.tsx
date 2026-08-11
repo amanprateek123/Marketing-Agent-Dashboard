@@ -16,13 +16,14 @@ import { CreativeEditor } from '@/components/campaign/CreativeEditor'
 import type {
   Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
+import { PLACEMENT_PRESET_OPTIONS } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
 const OBJECTIVE_OPTIONS = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC']
 const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS']
 
 function emptyAdSet(name = ''): ManualAdSetInput {
-  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image' }
+  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image', placementPreset: 'vertical' }
 }
 function emptyCopy(): ManualCopyVariant {
   return { primaryText: '', headline: '', cta: 'LEARN_MORE' }
@@ -1005,6 +1006,15 @@ function AdSetCard({
             </select>
           </label>
 
+          <label className="block mb-3">
+            <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Placements</span>
+            <select value={adSet.placementPreset ?? 'vertical'} onChange={e => onChange({ placementPreset: e.target.value as ManualAdSetInput['placementPreset'] })} className="input">
+              {PLACEMENT_PRESET_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+
           {needsAudience && (
             <label className="block mb-3">
               <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Meta audience</span>
@@ -1825,6 +1835,18 @@ function GalleryPicker({
   // the assets an earlier ad set already claimed.
   const [sheetOrder, setSheetOrder] = useState<string[]>([])
 
+  // Different TOPICS are almost always unrelated products/campaigns — pooling
+  // silently across them mixed 9 correct "wish letter" variants with 29
+  // unrelated Nadi Report ones in production (2026-08-07), because the
+  // sheet caches above never reset on topic switch. Pooling across SHEETS
+  // within the same topic is still intentional (see the comment above), so
+  // this only clears the pool when the topic itself changes.
+  useEffect(() => {
+    setAssetsBySheet({})
+    setSelectedBySheet({})
+    setSheetOrder([])
+  }, [selectedTopicId])
+
   const assets = assetsBySheet[selectedSheetId] ?? []
   const selectedKeys = selectedBySheet[selectedSheetId] ?? new Set<string>()
 
@@ -1991,17 +2013,28 @@ function GalleryPicker({
             // whichever tab happens to be open.
             const inPool = (selectedBySheet[sheet._id]?.size ?? 0)
             return (
-              <button
-                key={sheet._id}
-                onClick={() => onSelectSheet(sheet._id)}
-                className="px-3 py-2 text-[12px] font-semibold -mb-px flex items-center gap-1.5"
-                style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
-              >
-                {sheet.name}
+              <div key={sheet._id} className="flex items-center gap-1 -mb-px">
+                <button
+                  onClick={() => onSelectSheet(sheet._id)}
+                  className="px-3 py-2 text-[12px] font-semibold flex items-center gap-1.5"
+                  style={active ? { color: 'var(--accent-strong)', borderBottom: '2px solid var(--accent-strong)' } : { color: 'var(--ink-3)', borderBottom: '2px solid transparent' }}
+                >
+                  {sheet.name}
+                  {inPool > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>{inPool}</span>
+                  )}
+                </button>
                 {inPool > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>{inPool}</span>
+                  <button
+                    onClick={() => setSelectedBySheet(prev => ({ ...prev, [sheet._id]: new Set() }))}
+                    title={`Remove "${sheet.name}" from the pool`}
+                    className="text-[12px] font-bold px-1.5 rounded hover:opacity-70"
+                    style={{ color: 'var(--ink-3)' }}
+                  >
+                    ×
+                  </button>
                 )}
-              </button>
+              </div>
             )
           })}
         </div>

@@ -7,10 +7,11 @@ import {
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
   ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X, FlaskConical, Trophy,
 } from 'lucide-react'
-import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness } from '@/types'
-import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses } from '@/lib/api'
+import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness, MetaPage } from '@/types'
+import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses, getMetaPages } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
 import { Term, GLOSSARY } from '@/components/plain/Term'
+import { PageSelect } from '@/components/ui/PageSelect'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 interface PageProps { params: Promise<{ tenantId: string }> }
@@ -159,10 +160,11 @@ function StatusPill({ active }: { active: boolean }) {
   )
 }
 
+
 // ── Conversion tracking ──────────────────────────────────────────────────────
 const STANDARD_EVENTS = ['Purchase', 'Lead', 'CompleteRegistration', 'Subscribe']
 
-function ConversionTracking({ product, onChange }: { product: Product; onChange: (p: Product) => void }) {
+function ConversionTracking({ product, onChange, metaPages }: { product: Product; onChange: (p: Product) => void; metaPages: MetaPage[] }) {
   type Mode = 'standard' | 'custom_event' | 'custom_conversion'
   const [mode, setModeState] = useState<Mode>(() =>
     product.customConversionId ? 'custom_conversion' : product.conversionEvent === 'CustomEvent' ? 'custom_event' : 'standard'
@@ -182,12 +184,20 @@ function ConversionTracking({ product, onChange }: { product: Product; onChange:
             style={mode === opt.value ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
         ))}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {mode === 'standard' && <div><FieldLabel>Event</FieldLabel><select value={product.conversionEvent || 'Purchase'} onChange={e => onChange({ ...product, conversionEvent: e.target.value })}
           className="input">{STANDARD_EVENTS.map(ev => <option key={ev}>{ev}</option>)}</select></div>}
         {mode === 'custom_event' && <div><FieldLabel>Event Name</FieldLabel><TextInput value={product.customEventName || ''} onChange={v => onChange({ ...product, customEventName: v })} placeholder="MY_CUSTOM_EVENT" mono /></div>}
         {mode === 'custom_conversion' && <div><FieldLabel>Conversion ID</FieldLabel><TextInput value={product.customConversionId || ''} onChange={v => onChange({ ...product, customConversionId: v })} placeholder="1940441453551274" mono /></div>}
         <div><FieldLabel>Pixel ID <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>
+        <div>
+          <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel>
+          {metaPages.length > 0 ? (
+            <PageSelect pages={metaPages} value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} allowBlank="— Use company default —" />
+          ) : (
+            <TextInput value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} placeholder="No Pages discovered yet — paste a Page ID" mono />
+          )}
+        </div>
       </div>
     </div>
   )
@@ -339,7 +349,7 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
   )
 }
 
-function ProductCard({ product, index, onChange, onRemove, tenantId }: { product: Product; index: number; onChange: (p: Product) => void; onRemove: () => void; tenantId: string }) {
+function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }: { product: Product; index: number; onChange: (p: Product) => void; onRemove: () => void; tenantId: string; metaPages: MetaPage[] }) {
   const [open, setOpen] = useState(index === 0)
   const isActive = product.active !== false
   function set<K extends keyof Product>(key: K, val: Product[K]) { onChange({ ...product, [key]: val }) }
@@ -444,7 +454,7 @@ function ProductCard({ product, index, onChange, onRemove, tenantId }: { product
               </button>
             </div>
           </div>
-          <ConversionTracking product={product} onChange={onChange} />
+          <ConversionTracking product={product} onChange={onChange} metaPages={metaPages} />
           <div><FieldLabel>Landing URL</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
           <LandingPageTestSection tenantId={tenantId} productName={product.name} defaultControlUrl={product.landingUrl || ''} />
           <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>
@@ -508,13 +518,16 @@ export default function SettingsPage({ params }: PageProps) {
   const [marketing, setMarketing] = useState({ platforms: [] as string[], preferredFormats: [] as string[], forbiddenTopics: [] as string[], campaignsPerRun: '', runFrequency: '' })
   const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false, teamMode: '' as string })
   const [delivery, setDelivery] = useState({ slackWebhook: '', whatsappNumber: '', email: '', notionDatabaseId: '' })
-  const [meta, setMeta] = useState({ pixelId: '', businessId: '' })
+  const [meta, setMeta] = useState({ pixelId: '', businessId: '', pageId: '' })
   const [metaAccounts, setMetaAccounts] = useState<MetaAdAccount[]>([])
   const [metaAccountsState, setMetaAccountsState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null)
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
   const [metaSyncState, setMetaSyncState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [metaBusinesses, setMetaBusinesses] = useState<MetaBusiness[]>([])
+  const [metaPages, setMetaPages] = useState<MetaPage[]>([])
+  const [metaPagesState, setMetaPagesState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [metaPagesError, setMetaPagesError] = useState<string | null>(null)
   // The token's Business Manager spans multiple unrelated brands (e.g. an
   // agency-shared portfolio) — default to showing only the accounts already
   // selected for this tenant instead of dumping all discovered accounts.
@@ -564,7 +577,7 @@ export default function SettingsPage({ params }: PageProps) {
       setMarketing({ platforms: data.marketing?.platforms || [], preferredFormats: data.marketing?.preferredFormats || [], forbiddenTopics: data.marketing?.forbiddenTopics || [], campaignsPerRun: data.marketing?.campaignsPerRun != null ? String(data.marketing.campaignsPerRun) : '', runFrequency: data.marketing?.runFrequency || '' })
       setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
       setDelivery({ slackWebhook: data.delivery?.slackWebhook || '', whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
-      setMeta({ pixelId: data.meta?.pixelId || '', businessId: data.meta?.businessId || '' })
+      setMeta({ pixelId: data.meta?.pixelId || '', businessId: data.meta?.businessId || '', pageId: data.meta?.pageId || '' })
       setSelectedAccountIds(data.meta?.accountIds?.length ? data.meta.accountIds : data.meta?.accountId ? [data.meta.accountId] : [])
       // Handle competitors as either string[] (old) or object (new)
       const comp = data.competitors
@@ -615,14 +628,29 @@ export default function SettingsPage({ params }: PageProps) {
     }
   }
 
+  async function fetchMetaPages() {
+    setMetaPagesState('loading')
+    setMetaPagesError(null)
+    try {
+      const res = await getMetaPages(tenantId)
+      setMetaPages(res.pages)
+      setMetaPagesState('idle')
+    } catch (err) {
+      setMetaPages([])
+      setMetaPagesState('error')
+      setMetaPagesError(err instanceof Error ? err.message : 'Failed to load Pages')
+    }
+  }
+
   // Only discoverable once an access token is on file — the endpoint calls
   // Meta live and 400s without one. Re-runs when businessId changes (saving
-  // a new scope should immediately re-narrow the account list) — settings
+  // a new scope should immediately re-narrow the account/page list) — settings
   // is only refetched after a save, so this fires right after that lands.
   useEffect(() => {
     if (settings?.meta?.accessToken) {
       fetchMetaAccounts()
       fetchMetaBusinesses()
+      fetchMetaPages()
     }
   }, [tenantId, settings?.meta?.accessToken, settings?.meta?.businessId]) // eslint-disable-line
 
@@ -709,6 +737,7 @@ export default function SettingsPage({ params }: PageProps) {
   )
 
   const metaConnected = !!(settings?.meta?.accessToken)
+  const currentPage = metaPages.find(p => p.id === settings?.meta?.pageId)
 
   return (
     <div className="px-8 py-8 max-w-4xl mx-auto stagger">
@@ -774,7 +803,7 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {products.map((p, i) => <ProductCard key={i} product={p} index={i} tenantId={tenantId} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
+              {products.map((p, i) => <ProductCard key={i} product={p} index={i} tenantId={tenantId} metaPages={metaPages} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
             </div>
           )}
           {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save Products" /></div>}
@@ -897,23 +926,25 @@ export default function SettingsPage({ params }: PageProps) {
         <SectionCard>
           <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} title="Meta Ads" subtitle="Access token and account details" right={<StatusPill active={metaConnected} />} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
-            {[{ label: 'Access Token', value: maskToken(settings?.meta?.accessToken), active: !!settings?.meta?.accessToken },
-              { label: 'Ad Account ID', value: settings?.meta?.accountId || '—', active: !!settings?.meta?.accountId },
-              { label: 'Page ID', value: settings?.meta?.pageId || '—', active: !!settings?.meta?.pageId }
+            {[{ label: 'Access Token', value: maskToken(settings?.meta?.accessToken), sub: undefined as string | undefined, active: !!settings?.meta?.accessToken, warn: false },
+              { label: 'Ad Account ID', value: settings?.meta?.accountId || '—', sub: undefined as string | undefined, active: !!settings?.meta?.accountId, warn: false },
+              { label: 'Page', value: currentPage ? currentPage.name : (settings?.meta?.pageId || '—'), sub: currentPage ? settings?.meta?.pageId : undefined, active: !!settings?.meta?.pageId, warn: !!settings?.meta?.pageId && !currentPage && metaPages.length > 0 }
             ].map(f => (
               <div key={f.label}>
                 <p className="micro-label mb-1.5">{f.label}</p>
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.active ? 'var(--good)' : 'var(--ink-4)' }} />
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.warn ? 'var(--bad)' : f.active ? 'var(--good)' : 'var(--ink-4)' }} />
                   <p className="text-sm mono truncate" style={{ color: 'var(--ink)' }}>{f.value}</p>
                 </div>
+                {f.sub && <p className="text-[11px] mono truncate mt-0.5" style={{ color: 'var(--ink-4)' }}>{f.sub}</p>}
+                {f.warn && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>Not found in discovered Pages — verify below</p>}
               </div>
             ))}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mb-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div><FieldLabel>Pixel ID</FieldLabel><TextInput value={meta.pixelId} onChange={v => setMeta(s => ({ ...s, pixelId: v }))} placeholder="123456789" mono /></div>
             <div>
-              <FieldLabel>Business Manager <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(scopes ad-account discovery below)</span></FieldLabel>
+              <FieldLabel>Business Manager <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(scopes ad-account/Page discovery below)</span></FieldLabel>
               {metaBusinesses.length > 0 ? (
                 <select value={meta.businessId} onChange={e => setMeta(s => ({ ...s, businessId: e.target.value }))} className="input">
                   <option value="">All businesses (unscoped — may show other brands&apos; accounts)</option>
@@ -924,7 +955,23 @@ export default function SettingsPage({ params }: PageProps) {
               )}
             </div>
           </div>
-          <div className="mb-5"><SaveBtn state={metaState} onClick={() => saveSection({ meta: { pixelId: meta.pixelId.trim() || undefined, businessId: meta.businessId.trim() || undefined } }, setMetaState)} label="Save Meta Settings" /></div>
+          <div className="pt-1 pb-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>— which Page these ads post as. Wrong here means ads run under the wrong brand.</span></FieldLabel>
+              <button onClick={fetchMetaPages} disabled={!metaConnected || metaPagesState === 'loading'} className="btn btn-ghost shrink-0">
+                <RefreshCw size={11} className={metaPagesState === 'loading' ? 'animate-spin' : ''} /> Discover from Meta
+              </button>
+            </div>
+            {!metaConnected && <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Add an access token above to discover Pages.</p>}
+            {metaPagesState === 'error' && <p className="text-xs mb-1" style={{ color: 'var(--bad)' }}>{metaPagesError}</p>}
+            {metaConnected && metaPages.length === 0 && metaPagesState === 'idle' && (
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>No Pages found for this token.</p>
+            )}
+            {metaPages.length > 0 && (
+              <PageSelect pages={metaPages} value={meta.pageId} onChange={v => setMeta(s => ({ ...s, pageId: v }))} />
+            )}
+          </div>
+          <div className="mb-5"><SaveBtn state={metaState} onClick={() => saveSection({ meta: { pixelId: meta.pixelId.trim() || undefined, businessId: meta.businessId.trim() || undefined, pageId: meta.pageId.trim() || undefined } }, setMetaState)} label="Save Meta Settings" /></div>
 
           <div className="pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div className="flex items-center justify-between mb-3">
