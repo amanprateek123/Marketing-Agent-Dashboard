@@ -27,6 +27,12 @@ import type {
   CreativePackage,
   DashboardOverview,
   CampaignLaunchReview,
+  CustomBriefOptions,
+  CustomBriefRun,
+  CustomBriefEvents,
+  CustomBriefStarted,
+  CustomBriefImageRef,
+  StartCustomBriefBody,
   PlacementPreset,
 } from '@/types'
 
@@ -1205,4 +1211,133 @@ export const getIntelligenceCycles = (
 export const getDashboardOverview = (tenantId: string, windowDays = 30) =>
   apiFetch<DashboardOverview>(
     `/dashboard/${tenantId}/overview?windowDays=${windowDays}`,
+  )
+
+// ── Custom brief: the external creative pipeline ───────────────────────────
+// Proxied by the backend's pipeline-bridge module, which holds the pipeline's
+// bearer token server-side. Runs are asynchronous: `startPipelineRun` returns a
+// run id immediately, then poll `getPipelineRunEvents` for progress. Finished
+// creatives are NOT returned here — the pipeline pushes them into the ordinary
+// creative library, so they appear via `listCreativePackages` like any other.
+
+export const getCustomBriefOptions = (tenantId: string) =>
+  apiFetch<CustomBriefOptions>(`/pipeline-bridge/${tenantId}/options`)
+
+export const getCustomBriefHealth = (tenantId: string) =>
+  apiFetch<{ ok: boolean; queue_depth: number; inflight: number; pool_size: number }>(
+    `/pipeline-bridge/${tenantId}/health`,
+  )
+
+export const startCustomBriefRun = (tenantId: string, body: StartCustomBriefBody) =>
+  apiFetch<CustomBriefStarted>(`/pipeline-bridge/${tenantId}/runs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Upload reference image(s) for a Custom-brief run, returning refs to pass as `image_refs`.
+ *
+ * Deliberately NOT via apiFetch: that hardcodes `Content-Type: application/json`, and a multipart
+ * body must be left alone so the browser can set its own boundary. Uploading separately from the
+ * run also keeps the run body plain JSON, which is what the NestJS bridge proxies.
+ */
+export const uploadCustomBriefImages = async (tenantId: string, files: File[]) => {
+  const form = new FormData()
+  for (const f of files) form.append('files', f)
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/pipeline-bridge/${tenantId}/uploads`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  return res.json() as Promise<{ refs: CustomBriefImageRef[] }>
+}
+
+export const getCustomBriefRun = (tenantId: string, runId: number | string) =>
+  apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/runs/${runId}`)
+
+/**
+ * Ask the Slack pipeline to reframe a creative it produced into the other placement sizes.
+ *
+ * True crops, unlike `generateCreativeSizes`, which canvas-extends with blurred margins. Returns as
+ * soon as the job is queued — the cascade takes minutes and the pipeline attaches each finished size
+ * to this package itself, so the caller just reloads the package afterwards. 404 means the pipeline
+ * did not produce this package (e.g. the built-in generator did).
+ */
+export const resizeCustomBriefPackage = (tenantId: string, packageId: string) =>
+  apiFetch<{ run_id: number; package_id: string | null; status: string; sizes: string[] }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/resize`,
+    { method: 'POST' },
+  )
+
+/**
+ * Which engine made this creative?
+ *
+ * Resolves to the pipeline run behind a package, or **throws 404 when the built-in generator made
+ * it** — which is a legitimate answer, not a failure. The creative detail page probes this once on
+ * load so its Rewrite / Edit / Retry buttons drive the right engine.
+ */
+export const getCustomBriefPackage = (tenantId: string, packageId: string) =>
+  apiFetch<CustomBriefRun>(`/pipeline-bridge/${tenantId}/packages/${packageId}`)
+
+/**
+ * Re-author the brief from an instruction and regenerate — the pipeline's "Rewrite".
+ *
+ * Returns a **new** run id: the pipeline revises a clone so this creative keeps its own artifacts,
+ * and the revision arrives in the library as its own package. Poll the returned run, then reload
+ * the library rather than this package.
+ */
+export const reviseCustomBriefPackage = (
+  tenantId: string,
+  packageId: string,
+  instruction: string,
+) =>
+  apiFetch<{ run_id: number; source_run_id: number; package_id: string | null; status: string }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/revise`,
+    { method: 'POST', body: JSON.stringify({ instruction }) },
+  )
+
+/**
+ * Edit the delivered image in place from free text — the pipeline's "Edit". Same package.
+ *
+ * A 409 means the pipeline's ChatGPT session is logged out; surface it rather than polling into a
+ * wait that will never resolve.
+ */
+export const regenerateCustomBriefPackage = (
+  tenantId: string,
+  packageId: string,
+  instruction: string,
+  tag?: string,
+) =>
+  apiFetch<{ run_id: number; package_id: string | null; status: string; tag: string }>(
+    `/pipeline-bridge/${tenantId}/packages/${packageId}/regenerate`,
+    { method: 'POST', body: JSON.stringify({ instruction, ...(tag ? { tag } : {}) }) },
+  )
+
+/** Answer the question a stalled revise asked, so it can continue. Addressed by run, not package. */
+export const clarifyCustomBriefRun = (
+  tenantId: string,
+  runId: number | string,
+  answer: string,
+) =>
+  apiFetch<{ run_id: number; status: string; rounds: number }>(
+    `/pipeline-bridge/${tenantId}/runs/${runId}/clarify`,
+    { method: 'POST', body: JSON.stringify({ answer }) },
+  )
+
+/**
+ * Cursor-paged progress. Pass the `cursor` from the previous response so each
+ * poll only returns new events. Covers the run and its batch children — a batch
+ * parent stops narrating once authoring ends, so polling the parent alone would
+ * look like the run had frozen.
+ */
+export const getCustomBriefEvents = (
+  tenantId: string,
+  runId: number | string,
+  after = 0,
+) =>
+  apiFetch<CustomBriefEvents>(
+    `/pipeline-bridge/${tenantId}/runs/${runId}/events?after=${after}`,
   )

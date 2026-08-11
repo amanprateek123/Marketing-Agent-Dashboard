@@ -5,7 +5,10 @@ import Link from 'next/link'
 import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages } from '@/lib/api'
+import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
+import { ImageDirectionModal } from '@/components/creative/ImageDirectionModal'
+import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
 import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
@@ -91,6 +94,7 @@ export default function CreativesPage({ params }: PageProps) {
 
   const [company, setCompany] = useState<Company | null>(null)
   const [packages, setPackages] = useState<CreativePackage[]>([])
+  const [packagesError, setPackagesError] = useState('')
   const [loading, setLoading] = useState(true)
   const [languages, setLanguages] = useState<string[]>([])
   const [formats, setFormats] = useState<CreativeFormatOption[]>([])
@@ -141,6 +145,70 @@ export default function CreativesPage({ params }: PageProps) {
   // behave identically wherever an upload starts.
   const [showUploadForm, setShowUploadForm] = useState(false)
 
+  // ── Custom brief: route this form through the external creative pipeline ──
+  // Purely additive. `engine` stays 'standard' unless the operator flips it, so
+  // every existing path behaves exactly as before.
+  const [engine, setEngine] = useState<'standard' | 'pipeline'>('standard')
+  const [cbOptions, setCbOptions] = useState<CustomBriefOptions | null>(null)
+  const [cbOptionsError, setCbOptionsError] = useState('')
+  const [cbMethod, setCbMethod] = useState<CustomBriefMethod>('create')
+  const [cbTrack, setCbTrack] = useState<CustomBriefTrack>('polished')
+  const [cbCount, setCbCount] = useState('')
+  const [cbPrompt, setCbPrompt] = useState('')
+  const [cbRunId, setCbRunId] = useState<number | null>(null)
+  // Slack-side selections. All multi-select, all optional: this path is prompt-driven, so anything
+  // left unpicked means "the pipeline decides", which is its normal behaviour.
+  const [cbFormats, setCbFormats] = useState<string[]>([])
+  const [cbAngles, setCbAngles] = useState<string[]>([])
+  const [cbLanguages, setCbLanguages] = useState<string[]>([])
+  // Free write-in, for a language that isn't on the served list.
+  const [cbLanguageWriteIn, setCbLanguageWriteIn] = useState('')
+  // Reference image. `cbImageDirection` is REQUIRED once a file is attached — Slack asks it with a
+  // button afterwards, but this form has no follow-up turn, so it is asked up front.
+  const [cbFiles, setCbFiles] = useState<File[]>([])
+  const [cbImageDirection, setCbImageDirection] = useState('')
+  const [cbDirectionOpen, setCbDirectionOpen] = useState(false)
+  const [cbUploading, setCbUploading] = useState(false)
+
+  const toggleIn = (list: string[], value: string) =>
+    list.includes(value) ? list.filter(v => v !== value) : [...list, value]
+
+  /**
+   * A Slack-pipeline run outlives the page.
+   *
+   * `cbRunId` was React state only, so a refresh (or navigating away and back) orphaned an in-flight
+   * run: the pipeline kept working, the operator just lost the only view of it and had no way back.
+   * The run id is persisted per tenant and restored on mount, then cleared once the run settles.
+   * localStorage rather than the URL because the value is per-browser bookkeeping, not something
+   * worth putting in a shareable link — and `slack_runs` remains the source of truth either way.
+   */
+  const runKey = `cb_active_run_${tenantId}`
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(runKey)
+    if (saved && /^\d+$/.test(saved)) setCbRunId(Number(saved))
+  }, [runKey])
+
+  const rememberRun = useCallback((id: number | null) => {
+    setCbRunId(id)
+    if (typeof window === 'undefined') return
+    if (id === null) window.localStorage.removeItem(runKey)
+    else window.localStorage.setItem(runKey, String(id))
+  }, [runKey])
+
+  /** Everything the operator typed or ticked, merged into what the API expects. */
+  const cbSelectedLanguages = [
+    ...cbLanguages,
+    ...cbLanguageWriteIn.split(',').map(s => s.trim()).filter(Boolean),
+  ]
+  // What the count field produces for the selected method — creatives fan out into one run each,
+  // research runs once and adds that many ideas to the board. Served by the pipeline so the two
+  // sides can't drift.
+  const cbCountNoun =
+    (cbOptions?.methods.find(m => m.value === cbMethod) as { count_noun?: string } | undefined)
+      ?.count_noun ?? (cbMethod === 'research' ? 'idea' : 'creative')
+
   const loadPackages = useCallback(async () => {
     try {
       const list = await listCreativePackages(tenantId, {
@@ -148,8 +216,12 @@ export default function CreativesPage({ params }: PageProps) {
         targetLanguage: filterLanguage || undefined,
       })
       setPackages(list)
-    } catch {
-      // non-fatal — keep showing whatever we already have
+      setPackagesError('')
+    } catch (e) {
+      // Keep whatever is already on screen — a transient failure should not blank the library.
+      // But SAY so: silently swallowing this made "the load failed" and "there is nothing here"
+      // look identical, which is how a working library appeared to lose its creatives.
+      setPackagesError(e instanceof Error ? e.message : 'Could not refresh the library')
     }
   }, [tenantId, filterProduct, filterLanguage])
 
@@ -158,8 +230,14 @@ export default function CreativesPage({ params }: PageProps) {
     async function load() {
       setLoading(true)
       try {
+        // Every one of these is independently optional, so every one needs its own
+        // catch. `getCompany` used to be the odd one out, and because Promise.all
+        // rejects on the FIRST rejection, a tenant with no Company record (404)
+        // skipped every setter below it — leaving the Format and Angles pickers
+        // silently empty even though /creative/formats and /creative/hook-styles
+        // had both answered 200. The lists are not the problem; the abort was.
         const [c, langs, fmts, hooks, hfModels] = await Promise.all([
-          getCompany(tenantId),
+          getCompany(tenantId).catch(() => null),
           getCreativeLanguages().catch(() => []),
           getCreativeFormats().catch(() => []),
           getHookStyles().catch(() => null),
@@ -172,7 +250,7 @@ export default function CreativesPage({ params }: PageProps) {
         setLanguages(langs)
         setFormats(fmts)
         setHookStyles(hooks)
-        const active = c.products?.find(p => p.active !== false) ?? c.products?.[0]
+        const active = c?.products?.find(p => p.active !== false) ?? c?.products?.[0]
         if (active) setProduct(active.name)
       } catch {
         // handled by the empty state below
@@ -280,6 +358,70 @@ export default function CreativesPage({ params }: PageProps) {
       await loadPackages()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start generation')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Options are fetched from the pipeline (via the bridge) rather than hardcoded,
+  // so its formats/angles/languages stay in sync without a deploy here. Loaded
+  // lazily — nobody pays for it unless they flip the engine.
+  useEffect(() => {
+    if (engine !== 'pipeline' || cbOptions) return
+    let cancelled = false
+    getCustomBriefOptions(tenantId)
+      .then(opts => { if (!cancelled) { setCbOptions(opts); setCbOptionsError('') } })
+      .catch(e => {
+        if (!cancelled) {
+          setCbOptionsError(e instanceof Error ? e.message : 'Pipeline unavailable')
+        }
+      })
+    return () => { cancelled = true }
+  }, [engine, cbOptions, tenantId])
+
+  async function handleCustomBriefGenerate() {
+    if (!cbPrompt.trim()) { setError('Describe what you want in the brief box'); return }
+    // The pipeline rejects an image with no direction (there is no follow-up turn to ask in), so
+    // catch it here rather than round-tripping for a 400.
+    if (cbFiles.length > 0 && !cbImageDirection) {
+      setError('Choose what the pipeline should do with your image')
+      return
+    }
+    setError('')
+    setSubmitting(true)
+    try {
+      // Upload first: the run body stays plain JSON, which is what the bridge proxies.
+      let imageRefs: CustomBriefImageRef[] | undefined
+      if (cbFiles.length > 0) {
+        setCbUploading(true)
+        try {
+          imageRefs = (await uploadCustomBriefImages(tenantId, cbFiles)).refs
+        } finally {
+          setCbUploading(false)
+        }
+      }
+      const res = await startCustomBriefRun(tenantId, {
+        method: cbMethod,
+        prompt: cbPrompt.trim(),
+        // Sent as typed. Empty means "use the pipeline's default" (5) — the
+        // pipeline owns that rule so there is one source of truth, not two.
+        count: cbCount.trim() || undefined,
+        track: cbTrack,
+        domain: 'astro',
+        // Several languages SPLIT the run round-robin rather than multiplying it.
+        languages: cbSelectedLanguages.length ? cbSelectedLanguages : undefined,
+        formats: cbFormats.length ? cbFormats : undefined,
+        angles: cbAngles.length ? cbAngles : undefined,
+        image_refs: imageRefs,
+        image_direction: imageRefs ? cbImageDirection : undefined,
+      })
+      rememberRun(res.run_id)
+      setShowForm(false)
+      setCbPrompt('')
+      setCbFiles([])
+      setCbImageDirection('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start the pipeline run')
     } finally {
       setSubmitting(false)
     }
@@ -402,8 +544,275 @@ export default function CreativesPage({ params }: PageProps) {
           <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>A few quick choices, then generate.</p>
           {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
 
-          {/* ── 1. Image or video ── */}
+          {/* ── Engine — which system makes this creative ──
+              Additive: 'standard' is the default and leaves every existing
+              path untouched. 'pipeline' hands the same form over to the
+              external creative pipeline instead. */}
           <div className="mb-5">
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Which engine?</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEngine('standard')}
+                className="text-left px-4 py-3 rounded-lg border transition-colors"
+                style={{
+                  borderColor: engine === 'standard' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: engine === 'standard' ? 'var(--accent-bg)' : 'var(--surface)',
+                }}
+              >
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Original</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The built-in generator. Images, video, carousels.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEngine('pipeline'); selectCreativeType('image') }}
+                className="text-left px-4 py-3 rounded-lg border transition-colors"
+                style={{
+                  borderColor: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--hairline)',
+                  background: engine === 'pipeline' ? 'var(--accent-bg)' : 'var(--surface)',
+                }}
+              >
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Slack</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The Slack pipeline. Describe it in a sentence and it handles the rest. Images only.</span>
+              </button>
+            </div>
+          </div>
+
+          {engine === 'pipeline' && (
+            <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+              {cbOptionsError && (
+                <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                  Couldn&rsquo;t reach the Slack pipeline ({cbOptionsError}). You can still submit — it may just be starting up.
+                </p>
+              )}
+
+              {/* Method — create and research are two different jobs. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>What do you want?</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {(cbOptions?.methods ?? [
+                  { value: 'create', label: 'Create', hint: 'Author briefs and generate creatives.' },
+                  { value: 'research', label: 'Research', hint: 'Build the research + idea board creatives draw from.' },
+                ]).map(m => {
+                  const active = cbMethod === m.value
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setCbMethod(m.value as CustomBriefMethod)}
+                      className="text-left px-4 py-3 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{m.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{m.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Style — replaces the pipeline's own classifier with an explicit choice. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Style</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {(cbOptions?.tracks ?? [
+                  { value: 'polished', label: 'Polished', hint: 'A designed ad — the default.' },
+                  { value: 'raw', label: 'Raw', hint: 'An organic-looking post or meme.' },
+                ]).map(t => {
+                  const active = cbTrack === t.value
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setCbTrack(t.value as CustomBriefTrack)}
+                      className="text-left px-4 py-3 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{t.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{t.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Brief + count. */}
+              <div className="grid md:grid-cols-[1fr_160px] gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>
+                    {cbMethod === 'research' ? 'What should we research?' : 'Describe the creative'}
+                  </span>
+                  <textarea
+                    value={cbPrompt}
+                    onChange={e => setCbPrompt(e.target.value)}
+                    rows={3}
+                    className="input"
+                    placeholder={cbMethod === 'research'
+                      ? 'e.g. Nadi report — what people search for before buying'
+                      : 'e.g. a Nadi report ad that opens on the fear of a wrong marriage match'}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>
+                    How many {cbCountNoun}s?
+                  </span>
+                  <input
+                    value={cbCount}
+                    onChange={e => setCbCount(e.target.value)}
+                    inputMode="numeric"
+                    className="input"
+                    placeholder={String(cbOptions?.count.default ?? 5)}
+                  />
+                  <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                    Leave blank for {cbOptions?.count.default ?? 5}.
+                    {cbMethod === 'research' && ' Research runs once — this is how many ideas it adds to the board.'}
+                  </span>
+                </label>
+              </div>
+
+              <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
+                Everything below is optional — leave it all unpicked and the pipeline decides for
+                you from the prompt alone.
+              </p>
+
+              {/* Languages. Several SPLIT the run round-robin rather than multiplying it. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Languages</p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {(cbOptions?.languages ?? []).map(lang => {
+                  const active = cbLanguages.includes(lang)
+                  return (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setCbLanguages(l => toggleIn(l, lang))}
+                      className="px-3 py-1.5 rounded-full border text-[12.5px] transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                        color: active ? 'var(--accent-strong)' : 'var(--ink-2)',
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  )
+                })}
+              </div>
+              <input
+                value={cbLanguageWriteIn}
+                onChange={e => setCbLanguageWriteIn(e.target.value)}
+                className="input"
+                placeholder="Or write them in, comma-separated — e.g. Bhojpuri, Konkani"
+              />
+              <p className="text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                {cbSelectedLanguages.length > 1
+                  ? <>Your {cbCount.trim() || cbOptions?.count.default || 5} {cbCountNoun}s will be
+                      <b> split across</b> {cbSelectedLanguages.length} languages — not multiplied by them.</>
+                  : 'Pick several and the run is split across them, round-robin.'}
+              </p>
+
+              {/* Special formats — multi-select, folded into the brief as instructions. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Special formats</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {(cbOptions?.formats ?? []).filter(f => f.value !== 'image').map(f => {
+                  const active = cbFormats.includes(f.value)
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setCbFormats(l => toggleIn(l, f.value))}
+                      className="text-left px-3 py-2.5 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{f.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{f.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Angles — multi-select. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Angles</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {(cbOptions?.angles ?? []).map(a => {
+                  const active = cbAngles.includes(a.value)
+                  return (
+                    <button
+                      key={a.value}
+                      type="button"
+                      onClick={() => setCbAngles(l => toggleIn(l, a.value))}
+                      className="text-left px-3 py-2.5 rounded-lg border transition-colors"
+                      style={{
+                        borderColor: active ? 'var(--accent-strong)' : 'var(--hairline)',
+                        background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                      }}
+                    >
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{a.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{a.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Reference image. The direction is asked in a popup the moment a file is chosen —
+                  Slack asks it with buttons on a follow-up message, but this form has no second
+                  turn, so it has to be answered before submit. */}
+              <p className="text-[11px] font-bold uppercase tracking-wide mt-5 mb-2" style={{ color: 'var(--accent-strong)' }}>Reference image</p>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={e => {
+                  const picked = Array.from(e.target.files ?? [])
+                  setCbFiles(picked)
+                  setCbImageDirection('')
+                  setCbDirectionOpen(picked.length > 0)
+                }}
+                className="text-[12.5px]"
+                style={{ color: 'var(--ink-2)' }}
+              />
+              {cbFiles.length > 0 && (
+                <p className="text-[12px] mt-2" style={{ color: 'var(--ink-2)' }}>
+                  {cbFiles.length === 1 ? cbFiles[0].name : `${cbFiles.length} images attached`}
+                  {cbImageDirection ? (
+                    <>
+                      {' · '}
+                      <b>{cbOptions?.image_directions?.find(d => d.value === cbImageDirection)?.label ?? cbImageDirection}</b>
+                      {' · '}
+                      <button
+                        type="button"
+                        onClick={() => setCbDirectionOpen(true)}
+                        className="underline"
+                        style={{ color: 'var(--accent-strong)' }}
+                      >
+                        change
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {' — '}
+                      <button
+                        type="button"
+                        onClick={() => setCbDirectionOpen(true)}
+                        className="underline"
+                        style={{ color: 'var(--accent-strong)' }}
+                      >
+                        choose what to do with it
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── 1. Image or video ──
+              Hidden for the pipeline engine, which produces images only. */}
+          <div className="mb-5" hidden={engine === 'pipeline'}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>1. What are you making?</p>
             <p className="text-[12px] mb-2" style={{ color: 'var(--ink-3)' }}>Image and video creatives need different inputs, so pick one to start.</p>
             <div className="grid grid-cols-2 gap-2">
@@ -435,7 +844,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 2. Product & language ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>2. Product</p>
             <div className="grid md:grid-cols-2 gap-4">
               <label className="block">
@@ -460,7 +869,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 3. Format ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>3. Format</p>
             <div className="space-y-3">
               {GROUP_ORDER.filter(g => formatsForType.some(f => f.group === g)).map(group => {
@@ -528,7 +937,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 4. Angles to test ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>4. Angles to test</p>
             <p className="text-[12px] mb-3" style={{ color: 'var(--ink-3)' }}>
               {creativeType === 'video'
@@ -582,7 +991,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 5. Quality (type-specific) ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>
               5. {creativeType === 'video' ? 'Video settings' : 'Image settings'}
             </p>
@@ -666,7 +1075,7 @@ export default function CreativesPage({ params }: PageProps) {
           </div>
 
           {/* ── 6. Advanced ── */}
-          <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="mb-5 pt-5" hidden={engine === 'pipeline'} style={{ borderTop: '1px solid var(--hairline)' }}>
             <button
               onClick={() => setShowAdvanced(s => !s)}
               className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide"
@@ -720,6 +1129,24 @@ export default function CreativesPage({ params }: PageProps) {
 
           {/* ── Summary + Generate ── */}
           <div className="flex items-center justify-between flex-wrap gap-3 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
+            {engine === 'pipeline' ? (
+              <>
+                <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
+                  {cbPrompt.trim()
+                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${cbTrack} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{cbSelectedLanguages.length ? <> across <b>{cbSelectedLanguages.join(', ')}</b></> : ''}.</>
+                    : 'Describe what you want above to get started.'}
+                </p>
+                <button
+                  onClick={handleCustomBriefGenerate}
+                  disabled={submitting || !cbPrompt.trim() || (cbFiles.length > 0 && !cbImageDirection)}
+                  className="btn btn-primary"
+                >
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {cbUploading ? 'Uploading…' : submitting ? 'Starting…' : cbMethod === 'research' ? 'Run research' : 'Generate'}
+                </button>
+              </>
+            ) : (
+            <>
             <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
               {product
                 ? creativeType === 'video'
@@ -731,7 +1158,53 @@ export default function CreativesPage({ params }: PageProps) {
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {submitting ? 'Starting…' : 'Generate'}
             </button>
+            </>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Live progress for a Custom-brief run. Finished creatives arrive in the
+          library below on their own — the pipeline pushes them in as ordinary
+          creative packages — so this just reloads the list when the run settles. */}
+      {cbRunId !== null && (
+        <CustomBriefProgress
+          tenantId={tenantId}
+          runId={cbRunId}
+          statusPhases={cbOptions?.status_phases}
+          onFinished={() => { void loadPackages() }}
+          onDismiss={() => rememberRun(null)}
+        />
+      )}
+
+      {/* Pops the moment a reference image is chosen. Dismissing drops the attachment, because an
+          image with no direction is not a state the pipeline accepts. */}
+      <ImageDirectionModal
+        open={cbDirectionOpen && cbFiles.length > 0}
+        fileNames={cbFiles.map(f => f.name)}
+        directions={cbOptions?.image_directions ?? []}
+        selected={cbImageDirection}
+        onChoose={value => { setCbImageDirection(value); setCbDirectionOpen(false) }}
+        onDismiss={() => {
+          setCbDirectionOpen(false)
+          if (!cbImageDirection) setCbFiles([])
+        }}
+      />
+
+      {/* A load failure, said out loud. Without this, a failed refresh looks exactly like an empty
+          library — which is how a perfectly intact set of creatives appeared to vanish. */}
+      {packagesError && (
+        <div
+          className="card px-4 py-3 mb-4 flex items-center justify-between gap-3"
+          style={{ borderColor: 'var(--warn-border, var(--hairline))' }}
+        >
+          <p className="text-[12.5px]" style={{ color: 'var(--warn, var(--ink-2))' }}>
+            Couldn&rsquo;t refresh the library ({packagesError}). You&rsquo;re seeing the last
+            version that loaded — nothing has been deleted.
+          </p>
+          <button type="button" onClick={() => { void loadPackages() }} className="btn btn-ghost">
+            <RefreshCw size={13} /> Retry
+          </button>
         </div>
       )}
 
@@ -820,9 +1293,14 @@ export default function CreativesPage({ params }: PageProps) {
                 return (
                   <Link key={pkg._id} href={`/dashboard/${tenantId}/creatives/${pkg._id}`} className="card overflow-hidden block">
                     <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                      {/* object-contain, not -cover: the Slack pipeline's base deliverable is
+                          1200x1200 (1:1), so cover would centre-crop a square into this 4:5 box
+                          and eat the headline at both edges. Contain letterboxes against
+                          --surface-warm instead, keeping one card shape for every source ratio
+                          while still showing the whole creative. */}
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-cover" />
+                        <img src={thumb} alt={selected?.headline ?? pkg.productName ?? 'Creative'} className="w-full h-full object-contain" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           {isVideo ? <VideoIcon size={22} style={{ color: 'var(--ink-4)' }} /> : <ImageIcon size={22} style={{ color: 'var(--ink-4)' }} />}
