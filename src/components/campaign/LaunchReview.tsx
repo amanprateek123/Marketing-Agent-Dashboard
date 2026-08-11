@@ -70,6 +70,8 @@ const ISSUE_TITLE: Record<string, string> = {
   video_missing: 'Video was requested but none exists',
   optimization_goal_overridden: "The product's optimisation goal will win",
   custom_conversion_account_scoped: 'Optimising toward a custom conversion',
+  app_promotion_no_store_url: 'No app store URL set (fine for App Engagement)',
+  app_promotion_platform_store_url_missing: 'A platform-split ad group has no matching store URL',
 }
 
 const AUDIENCE_LABEL: Record<string, string> = {
@@ -90,6 +92,7 @@ const RESOLVED_VIA: Record<string, { chip: string; label: string }> = {
 function trackingLabel(t: NonNullable<CampaignLaunchReview['product']>['conversionTracking']) {
   if (t.type === 'custom_conversion') return { k: 'Custom conversion', v: t.id }
   if (t.type === 'custom_event') return { k: 'Custom event', v: t.name }
+  if (t.type === 'app_event') return { k: 'App event', v: `${t.event} (App ${t.applicationId})` }
   return { k: 'Conversion event', v: t.event }
 }
 
@@ -263,12 +266,14 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
           >
             {[
               { k: trackingLabel(product.conversionTracking).k, v: trackingLabel(product.conversionTracking).v, mono: true },
-              {
-                k: 'Meta Pixel',
-                v: product.pixelId || '—',
-                sub: product.pixelSource === 'product' ? 'from this product' : 'company default',
-                mono: true,
-              },
+              product.conversionTracking.type === 'app_event'
+                ? { k: 'Meta App ID', v: product.applicationId || '—', sub: 'native app, not a website pixel', mono: true }
+                : {
+                    k: 'Meta Pixel',
+                    v: product.pixelId || '—',
+                    sub: product.pixelSource === 'product' ? 'from this product' : 'company default',
+                    mono: true,
+                  },
               {
                 k: 'Worth per sale',
                 v: formatCurrency(product.conversionValueNet),
@@ -429,6 +434,7 @@ function AdSetRow({ adSet, showSplit }: { adSet: LaunchReviewAdSet; showSplit: b
   else if (adSet.effectiveGeoLayer === 'regions' && adSet.geoStates?.length)
     facts.push(['Location', `${adSet.geoStates.length} state(s) — country targeting dropped`])
   else if (adSet.geoLocations.length) facts.push(['Location', adSet.geoLocations.join(', ')])
+  if (adSet.userOs?.length) facts.push(['Device', adSet.userOs.join(' + ')])
   if (adSet.interestIds.length) facts.push(['Interests', `${adSet.interestIds.length} selected`])
   if (adSet.optimizationGoal)
     facts.push(['Optimising for', adSet.optimizationGoal.replace(/_/g, ' ').toLowerCase()])

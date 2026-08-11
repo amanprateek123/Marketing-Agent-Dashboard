@@ -153,13 +153,18 @@ export function CampaignSetup({
         {[
           product && {
             k: product.conversionTracking.type === 'custom_conversion' ? 'Buying this conversion'
-              : product.conversionTracking.type === 'custom_event' ? 'Custom event' : 'Conversion event',
+              : product.conversionTracking.type === 'custom_event' ? 'Custom event'
+                : product.conversionTracking.type === 'app_event' ? 'App event' : 'Conversion event',
             v: product.conversionTracking.type === 'custom_conversion' ? product.conversionTracking.id
               : product.conversionTracking.type === 'custom_event' ? product.conversionTracking.name
                 : product.conversionTracking.event,
             mono: true,
           },
-          product && { k: 'Meta Pixel', v: product.pixelId || '—', sub: product.pixelSource === 'product' ? 'from this product' : 'company default', mono: true },
+          product && (
+            product.conversionTracking.type === 'app_event'
+              ? { k: 'Meta App ID', v: product.applicationId || '—', sub: 'native app, not a website pixel', mono: true }
+              : { k: 'Meta Pixel', v: product.pixelId || '—', sub: product.pixelSource === 'product' ? 'from this product' : 'company default', mono: true }
+          ),
           product && { k: 'Worth per sale', v: formatCurrency(product.conversionValueNet), sub: product.refundRatePercent ? `after ${product.refundRatePercent}% refunds` : 'no refunds expected' },
           breakevenCPA != null && { k: 'Break even at', v: formatCurrency(Math.round(breakevenCPA)) + ' / sale', sub: `ROAS ${product?.breakevenROAS?.toFixed(2) ?? '—'}x` },
           bidCap != null && {

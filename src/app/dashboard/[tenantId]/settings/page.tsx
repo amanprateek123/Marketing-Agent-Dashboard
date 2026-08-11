@@ -165,31 +165,48 @@ function StatusPill({ active }: { active: boolean }) {
 const STANDARD_EVENTS = ['Purchase', 'Lead', 'CompleteRegistration', 'Subscribe']
 
 function ConversionTracking({ product, onChange, metaPages }: { product: Product; onChange: (p: Product) => void; metaPages: MetaPage[] }) {
-  type Mode = 'standard' | 'custom_event' | 'custom_conversion'
+  type Mode = 'standard' | 'custom_event' | 'custom_conversion' | 'app_event'
   const [mode, setModeState] = useState<Mode>(() =>
-    product.customConversionId ? 'custom_conversion' : product.conversionEvent === 'CustomEvent' ? 'custom_event' : 'standard'
+    product.metaAppId ? 'app_event' : product.customConversionId ? 'custom_conversion' : product.conversionEvent === 'CustomEvent' ? 'custom_event' : 'standard'
   )
+  // Clearing every other mode's fields on switch keeps a product from ending
+  // up with e.g. both customConversionId and metaAppId set — the backend
+  // treats applicationId as taking priority silently, so a stale field here
+  // would look configured in this form but do nothing at launch.
   function setMode(m: Mode) {
     setModeState(m)
-    if (m === 'standard') onChange({ ...product, conversionEvent: product.conversionEvent && product.conversionEvent !== 'CustomEvent' ? product.conversionEvent : 'Purchase', customEventName: undefined, customConversionId: undefined })
-    else if (m === 'custom_event') onChange({ ...product, conversionEvent: 'CustomEvent', customConversionId: undefined })
-    else onChange({ ...product, customConversionId: product.customConversionId || '', conversionEvent: undefined, customEventName: undefined })
+    const clearApp = { metaAppId: undefined, metaAppStoreUrl: undefined, metaAppStoreUrlIos: undefined, metaAppStoreUrlAndroid: undefined }
+    if (m === 'standard') onChange({ ...product, ...clearApp, conversionEvent: product.conversionEvent && product.conversionEvent !== 'CustomEvent' ? product.conversionEvent : 'Purchase', customEventName: undefined, customConversionId: undefined })
+    else if (m === 'custom_event') onChange({ ...product, ...clearApp, conversionEvent: 'CustomEvent', customConversionId: undefined })
+    else if (m === 'custom_conversion') onChange({ ...product, ...clearApp, customConversionId: product.customConversionId || '', conversionEvent: undefined, customEventName: undefined })
+    else onChange({ ...product, metaAppId: product.metaAppId || '', conversionEvent: product.conversionEvent && product.conversionEvent !== 'CustomEvent' ? product.conversionEvent : '', customEventName: undefined, customConversionId: undefined })
   }
   return (
     <div className="card-inset p-4 space-y-3">
       <p className="micro-label">Conversion Tracking</p>
       <div className="flex gap-2 flex-wrap">
-        {([{ value: 'standard', label: 'Standard Event' }, { value: 'custom_event', label: 'Custom Event' }, { value: 'custom_conversion', label: 'Custom Conversion' }] as const).map(opt => (
+        {([{ value: 'standard', label: 'Standard Event' }, { value: 'custom_event', label: 'Custom Event' }, { value: 'custom_conversion', label: 'Custom Conversion' }, { value: 'app_event', label: 'App Event' }] as const).map(opt => (
           <button key={opt.value} onClick={() => setMode(opt.value)} className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             style={mode === opt.value ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
         ))}
       </div>
+      {mode === 'app_event' && (
+        <p className="text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+          For native-app products (react-native-fbsdk-next / Facebook SDK) — tracks a Meta App Event instead of a website pixel. Use this for App Promotion / App Engagement campaigns, e.g. optimizing toward an in-app event like <code className="mono">chat_success</code>.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {mode === 'standard' && <div><FieldLabel>Event</FieldLabel><select value={product.conversionEvent || 'Purchase'} onChange={e => onChange({ ...product, conversionEvent: e.target.value })}
           className="input">{STANDARD_EVENTS.map(ev => <option key={ev}>{ev}</option>)}</select></div>}
         {mode === 'custom_event' && <div><FieldLabel>Event Name</FieldLabel><TextInput value={product.customEventName || ''} onChange={v => onChange({ ...product, customEventName: v })} placeholder="MY_CUSTOM_EVENT" mono /></div>}
         {mode === 'custom_conversion' && <div><FieldLabel>Conversion ID</FieldLabel><TextInput value={product.customConversionId || ''} onChange={v => onChange({ ...product, customConversionId: v })} placeholder="1940441453551274" mono /></div>}
-        <div><FieldLabel>Pixel ID <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>
+        {mode === 'app_event' && (
+          <>
+            <div><FieldLabel>Meta App ID</FieldLabel><TextInput value={product.metaAppId || ''} onChange={v => onChange({ ...product, metaAppId: v })} placeholder="935762695083961" mono /></div>
+            <div><FieldLabel>App Event Name</FieldLabel><TextInput value={product.conversionEvent || ''} onChange={v => onChange({ ...product, conversionEvent: v })} placeholder="chat_success" mono /></div>
+          </>
+        )}
+        {mode !== 'app_event' && <div><FieldLabel>Pixel ID <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>}
         <div>
           <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel>
           {metaPages.length > 0 ? (
@@ -199,6 +216,13 @@ function ConversionTracking({ product, onChange, metaPages }: { product: Product
           )}
         </div>
       </div>
+      {mode === 'app_event' && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(default / fallback)</span></FieldLabel><TextInput value={product.metaAppStoreUrl || ''} onChange={v => onChange({ ...product, metaAppStoreUrl: v || undefined })} placeholder="Used when an ad set doesn't split by OS" mono /></div>
+          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(iOS)</span></FieldLabel><TextInput value={product.metaAppStoreUrlIos || ''} onChange={v => onChange({ ...product, metaAppStoreUrlIos: v || undefined })} placeholder="https://apps.apple.com/app/id…" mono /></div>
+          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(Android)</span></FieldLabel><TextInput value={product.metaAppStoreUrlAndroid || ''} onChange={v => onChange({ ...product, metaAppStoreUrlAndroid: v || undefined })} placeholder="https://play.google.com/store/apps/details?id=…" mono /></div>
+        </div>
+      )}
     </div>
   )
 }

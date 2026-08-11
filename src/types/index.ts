@@ -21,6 +21,13 @@ export interface Product {
   customEventName?: string       // Only when conversionEvent === 'CustomEvent'
   customConversionId?: string    // Custom conversion from Meta Events Manager (takes priority)
   pixelId?: string               // Per-product pixel override (blank = use company default)
+  // App Promotion/Engagement — native-app counterpart to pixelId. Set together
+  // with conversionEvent (read as an App Event name, e.g. "chat_success").
+  // Mutually exclusive with pixelId/customConversionId in practice.
+  metaAppId?: string
+  metaAppStoreUrl?: string        // Default/fallback store URL — used when an ad set doesn't split by OS
+  metaAppStoreUrlIos?: string     // App Store URL — used when an ad set's userOs targets iOS only
+  metaAppStoreUrlAndroid?: string // Play Store URL — used when an ad set's userOs targets Android only
   pageId?: string                // Per-product Facebook Page override (blank = use company default) — which Page this product's ads post as
   conversionValue?: number
   // Decimal 0-1 (e.g. 0.97 = 97% margin after COGS/fulfilment/fees). Drives
@@ -1006,6 +1013,8 @@ export interface ManualAdSetInput {
   geoCities?: string[]
   /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — filters delivery to users whose platform language matches. */
   locales?: number[]
+  /** Device OS targeting — 'iOS'/'Android' to split an App Promotion/Engagement campaign into per-platform ad sets with independent budgets/reporting. Omit for no OS filter (ships to both). */
+  userOs?: ('iOS' | 'Android')[]
   interests?: Array<{ id: string; name: string }>
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
@@ -1101,8 +1110,12 @@ export interface LaunchReviewProduct {
     | { type: 'custom_conversion'; id: string }
     | { type: 'custom_event'; name: string }
     | { type: 'standard_event'; event: string }
+    | { type: 'app_event'; event: string; applicationId: string }
   pixelId: string
   pixelSource: 'product' | 'company_default'
+  /** Set when conversionTracking.type === 'app_event' — same value as conversionTracking.applicationId. */
+  applicationId: string | null
+  appStoreUrl: string | null
   metaOptimizationGoal: string | null
   languages: string[]
 }
@@ -1126,6 +1139,8 @@ export interface LaunchReviewAdSet {
   /** Which geo layer Meta actually receives — the narrowest one that's set. */
   effectiveGeoLayer: 'countries' | 'regions' | 'cities'
   locales: number[]
+  /** Device OS targeting — 'iOS'/'Android' when this ad set splits an App Promotion/Engagement campaign by platform. */
+  userOs: ('iOS' | 'Android')[]
   interestIds: string[]
   optimizationGoal: string
   creativeFormat: string

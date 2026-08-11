@@ -19,8 +19,32 @@ import type {
 import { PLACEMENT_PRESET_OPTIONS } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
-const OBJECTIVE_OPTIONS = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC']
+const OBJECTIVE_OPTIONS = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC', 'OUTCOME_APP_PROMOTION']
+const OBJECTIVE_LABELS: Record<string, string> = {
+  OUTCOME_SALES: 'Sales',
+  OUTCOME_LEADS: 'Leads',
+  OUTCOME_ENGAGEMENT: 'Engagement',
+  OUTCOME_AWARENESS: 'Awareness',
+  OUTCOME_TRAFFIC: 'Traffic',
+  OUTCOME_APP_PROMOTION: 'App Promotion',
+}
 const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS']
+const OPTIMIZATION_LABELS: Record<string, string> = {
+  OFFSITE_CONVERSIONS: 'Offsite Conversions',
+  LINK_CLICKS: 'Link Clicks',
+  LANDING_PAGE_VIEWS: 'Landing Page Views',
+  REACH: 'Reach',
+  IMPRESSIONS: 'Impressions',
+}
+// Shown instead of OPTIMIZATION_OPTIONS when the campaign objective is App
+// Promotion — the web-oriented goals above don't apply to an app product, and
+// mixing them in makes it too easy to pick a combination the backend has to
+// silently downgrade (see VALID_OPTIMIZATION_GOALS in campaign-creator.service.ts).
+const APP_OPTIMIZATION_OPTIONS = ['APP_INSTALLS', 'OFFSITE_CONVERSIONS']
+const APP_OPTIMIZATION_LABELS: Record<string, string> = {
+  APP_INSTALLS: 'App Installs',
+  OFFSITE_CONVERSIONS: 'App Engagement (in-app event)',
+}
 
 function emptyAdSet(name = ''): ManualAdSetInput {
   return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image', placementPreset: 'vertical' }
@@ -517,8 +541,26 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
               </label>
               <label className="block">
                 <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>Objective</span>
-                <select value={objective} onChange={e => setObjective(e.target.value)} className="input">
-                  {OBJECTIVE_OPTIONS.map(o => <option key={o} value={o}>{o.replace('OUTCOME_', '')}</option>)}
+                <select
+                  value={objective}
+                  onChange={e => {
+                    const next = e.target.value
+                    // Crossing the App Promotion boundary invalidates the ad
+                    // sets' optimization goal — APP_INSTALLS only exists in
+                    // the app-goal list, OFFSITE_CONVERSIONS carries a
+                    // different meaning (website vs. app engagement) on
+                    // either side of it. Reset to the new list's default so a
+                    // stale goal can't silently ride along to launch.
+                    const wasApp = objective === 'OUTCOME_APP_PROMOTION'
+                    const isApp = next === 'OUTCOME_APP_PROMOTION'
+                    if (wasApp !== isApp) {
+                      setAdSets(prev => prev.map(a => ({ ...a, optimizationGoal: 'OFFSITE_CONVERSIONS' })))
+                    }
+                    setObjective(next)
+                  }}
+                  className="input"
+                >
+                  {OBJECTIVE_OPTIONS.map(o => <option key={o} value={o}>{OBJECTIVE_LABELS[o] ?? o}</option>)}
                 </select>
               </label>
             </div>
@@ -569,6 +611,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                   key={i}
                   index={i}
                   adSet={a}
+                  objective={objective}
                   showBudgetSplit={adSets.length > 1}
                   showTargeting={campaignType === 'custom'}
                   advantagePlus={campaignType === 'advantage_plus'}
@@ -905,10 +948,12 @@ function TypeCard({ active, onClick, icon, title, subtitle, body }: { active: bo
 }
 
 function AdSetCard({
-  index, adSet, showBudgetSplit, showTargeting, advantagePlus, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, geoLabels, onLearnLabels, poolSheets, assignedSheetId, onAssignSheet, onChange, onRemove,
+  index, adSet, objective, showBudgetSplit, showTargeting, advantagePlus, showRemove, audiences, audiencesLoading, audiencesError, tenantId, copyVariants, showCreativeSplit, metaLocales, geoLabels, onLearnLabels, poolSheets, assignedSheetId, onAssignSheet, onChange, onRemove,
 }: {
   index: number
   adSet: ManualAdSetInput
+  /** Campaign-level objective (e.g. OUTCOME_APP_PROMOTION) — narrows which optimization goals make sense for this ad set. */
+  objective: string
   showBudgetSplit: boolean
   showTargeting: boolean
   /**
@@ -1109,6 +1154,8 @@ function AdSetCard({
               />
 
               <LanguagePicker metaLocales={metaLocales} selected={adSet.locales ?? []} onToggle={toggleLocale} />
+
+              <DeviceOsPicker selected={adSet.userOs} onChange={userOs => onChange({ userOs })} />
             </div>
           )}
         </>
@@ -1178,6 +1225,8 @@ function AdSetCard({
           />
 
           <LanguagePicker metaLocales={metaLocales} selected={adSet.locales ?? []} onToggle={toggleLocale} />
+
+          <DeviceOsPicker selected={adSet.userOs} onChange={userOs => onChange({ userOs })} />
         </div>
       )}
 
@@ -1185,7 +1234,11 @@ function AdSetCard({
         <label className="block">
           <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Optimization goal</span>
           <select value={adSet.optimizationGoal ?? 'OFFSITE_CONVERSIONS'} onChange={e => onChange({ optimizationGoal: e.target.value })} className="input">
-            {OPTIMIZATION_OPTIONS.map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
+            {(objective === 'OUTCOME_APP_PROMOTION' ? APP_OPTIMIZATION_OPTIONS : OPTIMIZATION_OPTIONS).map(o => (
+              <option key={o} value={o}>
+                {(objective === 'OUTCOME_APP_PROMOTION' ? APP_OPTIMIZATION_LABELS : OPTIMIZATION_LABELS)[o] ?? o}
+              </option>
+            ))}
           </select>
         </label>
         <label className="block">
@@ -1537,6 +1590,51 @@ function LanguagePicker({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Device OS targeting — splits an App Promotion/Engagement campaign into
+ * per-platform ad sets with independent budgets/reporting. Meaningless for a
+ * website-pixel campaign, but harmless to leave visible — only App Promotion
+ * ad sets actually resolve a platform-specific store URL from it at launch
+ * (see MetaAdsService.createAdSet's applicationId branch).
+ */
+function DeviceOsPicker({
+  selected, onChange,
+}: {
+  selected: ('iOS' | 'Android')[] | undefined
+  onChange: (userOs: ('iOS' | 'Android')[] | undefined) => void
+}) {
+  const OPTIONS: Array<{ value: ('iOS' | 'Android')[] | undefined; label: string }> = [
+    { value: undefined, label: 'Both' },
+    { value: ['iOS'], label: 'iOS only' },
+    { value: ['Android'], label: 'Android only' },
+  ]
+  const current = selected?.length ? selected.join(',') : ''
+  return (
+    <div>
+      <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>
+        Device <span className="font-normal normal-case" style={{ color: 'var(--ink-4)' }}>(App Promotion/Engagement only — splits budget/reporting by platform)</span>
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {OPTIONS.map(opt => {
+          const optKey = opt.value?.join(',') ?? ''
+          const active = optKey === current
+          return (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+              style={active ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
