@@ -28,13 +28,16 @@ const OBJECTIVE_LABELS: Record<string, string> = {
   OUTCOME_TRAFFIC: 'Traffic',
   OUTCOME_APP_PROMOTION: 'App Promotion',
 }
-const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS']
+const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS', 'AD_RECALL_LIFT', 'THRUPLAY', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS']
 const OPTIMIZATION_LABELS: Record<string, string> = {
   OFFSITE_CONVERSIONS: 'Offsite Conversions',
   LINK_CLICKS: 'Link Clicks',
   LANDING_PAGE_VIEWS: 'Landing Page Views',
   REACH: 'Reach',
   IMPRESSIONS: 'Impressions',
+  AD_RECALL_LIFT: 'Ad Recall Lift',
+  THRUPLAY: 'ThruPlay Views',
+  TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: '2-Second Continuous Video Plays',
 }
 // Shown instead of OPTIMIZATION_OPTIONS when the campaign objective is App
 // Promotion — the web-oriented goals above don't apply to an app product, and
