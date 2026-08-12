@@ -20,7 +20,7 @@ import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccou
 import type { BulkAdsResult } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd, CampaignAction, AuditSnapshot, ShadowAction, AdSetConfig, MetaCustomAudience, CampaignLaunchReview, Product, MetaPage, PlacementPreset } from '@/types'
-import { PLACEMENT_PRESET_OPTIONS } from '@/types'
+import { PLACEMENT_PRESET_OPTIONS, OPTIMIZATION_OPTIONS, OPTIMIZATION_LABELS, APP_OPTIMIZATION_OPTIONS, APP_OPTIMIZATION_LABELS } from '@/types'
 import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { CampaignSetup } from '@/components/campaign/CampaignSetup'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
@@ -1542,6 +1542,15 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [newAdSetError, setNewAdSetError] = useState<string | null>(null)
   const [newAdSetResult, setNewAdSetResult] = useState<BulkAdsResult | null>(null)
   const [newAdSetPlacementPreset, setNewAdSetPlacementPreset] = useState<PlacementPreset>('vertical')
+  // '' means "inherit the campaign's existing goal" (the default, unchanged
+  // behavior) — the effective value is computed against the live campaign
+  // below rather than defaulted here, since `campaign` loads async.
+  const [newAdSetOptimizationGoal, setNewAdSetOptimizationGoal] = useState('')
+  // Gates submission when the operator picks a goal that differs from the
+  // campaign's existing one — mixed goals in one campaign blend the audit
+  // loop's ROAS/CPA comparison and the Day-14/30 learning writeback, so this
+  // makes them confirm they understand that before it's allowed through.
+  const [newAdSetGoalConfirmed, setNewAdSetGoalConfirmed] = useState(false)
 
   const flash = (m: string, t: 'success' | 'error') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 4000) }
 
@@ -1672,6 +1681,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
       if (!newAdSetCreative.primaryText.trim() || !newAdSetCreative.headline.trim()) { setNewAdSetError('Primary text and headline are required'); return }
     }
     if (newAdSetAudienceType !== 'advantage_plus' && !newAdSetAudienceId) { setNewAdSetError('Pick an audience'); return }
+    if (newAdSetGoalMismatch && !newAdSetGoalConfirmed) { setNewAdSetError('Confirm the optimization-goal warning below before creating this ad set'); return }
     setNewAdSetState('loading')
     setNewAdSetError(null)
     setNewAdSetResult(null)
@@ -1682,6 +1692,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
         metaAudienceId: newAdSetAudienceType !== 'advantage_plus' ? newAdSetAudienceId : undefined,
         dailyBudget: budget,
         placementPreset: newAdSetPlacementPreset,
+        optimizationGoal: effectiveNewAdSetGoal,
         ...(newAdSetSourceMode === 'sheet'
           ? { sheetId: newAdSetSheetSelection!.sheetId, excludeAssetIds: newAdSetSheetSelection!.excludeAssetIds }
           : newAdSetCreative),
@@ -1695,6 +1706,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
         setNewAdSetCreative({ assetType: 'image', mediaUrl: '', primaryText: '', headline: '', cta: 'Shop Now' })
         setNewAdSetSheetSelection(null)
         setNewAdSetPlacementPreset('vertical')
+        setNewAdSetOptimizationGoal(''); setNewAdSetGoalConfirmed(false)
       }
       fetchCampaign()
     } catch (err) {
@@ -1760,6 +1772,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const live = (campaign.metaAdSets?.length ? campaign.metaAdSets : campaign.adSets) || []
   const planned = campaign.campaignConfig?.adSets || []
   const usePlanned = live.length === 0 && planned.length > 0
+  // What a new ad set inherits by default — same source the backend itself
+  // falls back to (campaignConfig.adSets[0]) when no override is sent.
+  const inheritedOptimizationGoal = live[0]?.optimizationGoal || campaign.campaignConfig?.adSets?.[0]?.optimizationGoal || 'OFFSITE_CONVERSIONS'
+  const isAppCampaign = campaign.objective === 'OUTCOME_APP_PROMOTION'
+  const newAdSetGoalOptions = isAppCampaign ? APP_OPTIMIZATION_OPTIONS : OPTIMIZATION_OPTIONS
+  const newAdSetGoalLabels = isAppCampaign ? APP_OPTIMIZATION_LABELS : OPTIMIZATION_LABELS
+  const effectiveNewAdSetGoal = newAdSetOptimizationGoal || inheritedOptimizationGoal
+  const newAdSetGoalMismatch = effectiveNewAdSetGoal !== inheritedOptimizationGoal
   const pendingActs = (campaign.pendingActions || []).filter(a => a.status === 'pending' && GROWTH.includes(a.type)).length
   const isPendingApproval = campaign.status === 'pending_approval'
   const debate = campaign.reviewDebateLog || []
@@ -2273,6 +2293,31 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     </div>
                   </div>
                   <div>
+                    <p className="micro-label mb-1.5">Optimization goal</p>
+                    <select
+                      value={effectiveNewAdSetGoal}
+                      onChange={e => { setNewAdSetOptimizationGoal(e.target.value); setNewAdSetGoalConfirmed(false) }}
+                      className="input text-sm w-full"
+                    >
+                      {newAdSetGoalOptions.map(g => (
+                        <option key={g} value={g}>{newAdSetGoalLabels[g] ?? g}{g === inheritedOptimizationGoal ? ' (current)' : ''}</option>
+                      ))}
+                    </select>
+                    {newAdSetGoalMismatch && (
+                      <div className="mt-2 rounded-lg px-3 py-2.5 text-[11px] leading-relaxed flex items-start gap-2" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}`, color: C.amber }}>
+                        <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold mb-1">This ad set won&rsquo;t match the campaign&rsquo;s current goal ({newAdSetGoalLabels[inheritedOptimizationGoal] ?? inheritedOptimizationGoal}).</p>
+                          <p className="mb-2">Mixing optimization goals in one campaign blends the audit loop&rsquo;s ROAS/CPA comparison and the Day-14/30 learning writeback across ad sets that were never optimizing for the same thing.</p>
+                          <label className="flex items-center gap-1.5 font-medium cursor-pointer">
+                            <input type="checkbox" checked={newAdSetGoalConfirmed} onChange={e => setNewAdSetGoalConfirmed(e.target.checked)} />
+                            I understand — create it anyway
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
                     <p className="micro-label mb-1.5">Creative</p>
                     {newAdSetSourceMode === 'sheet' ? (
                       <SheetAttachPicker tenantId={tenantId} onChange={setNewAdSetSheetSelection} />
@@ -2294,7 +2339,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                     </p>
                   ) : null}
                   {newAdSetError && <p className="text-xs" style={{ color: C.red }}>{newAdSetError}</p>}
-                  <button onClick={doAddAdSet} disabled={newAdSetState === 'loading'} className="btn btn-accent">
+                  <button onClick={doAddAdSet} disabled={newAdSetState === 'loading' || (newAdSetGoalMismatch && !newAdSetGoalConfirmed)} className="btn btn-accent">
                     {newAdSetState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
                     {newAdSetState === 'loading'
                       ? (newAdSetSourceMode === 'sheet' ? 'Creating ads — this can take a few minutes if the sheet has video…' : 'Creating…')

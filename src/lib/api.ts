@@ -726,6 +726,8 @@ export const addAdSet = (
     metaAudienceId?: string
     dailyBudget: number
     placementPreset?: PlacementPreset
+    /** Omit to inherit the campaign's existing optimization goal (the default, unchanged behavior). Only pass this after the operator has confirmed the mixed-goal warning in the UI. */
+    optimizationGoal?: string
   } & AdSetCreativeSource,
 ) =>
   apiFetch<

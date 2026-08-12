@@ -16,7 +16,7 @@ import { CreativeEditor } from '@/components/campaign/CreativeEditor'
 import type {
   Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
-import { PLACEMENT_PRESET_OPTIONS } from '@/types'
+import { PLACEMENT_PRESET_OPTIONS, OPTIMIZATION_OPTIONS, OPTIMIZATION_LABELS, APP_OPTIMIZATION_OPTIONS, APP_OPTIMIZATION_LABELS } from '@/types'
 
 const CTA_OPTIONS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'ORDER_NOW', 'CONTACT_US', 'SUBSCRIBE', 'GET_OFFER', 'BOOK_TRAVEL', 'DOWNLOAD']
 const OBJECTIVE_OPTIONS = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_AWARENESS', 'OUTCOME_TRAFFIC', 'OUTCOME_APP_PROMOTION']
@@ -27,26 +27,6 @@ const OBJECTIVE_LABELS: Record<string, string> = {
   OUTCOME_AWARENESS: 'Awareness',
   OUTCOME_TRAFFIC: 'Traffic',
   OUTCOME_APP_PROMOTION: 'App Promotion',
-}
-const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS', 'AD_RECALL_LIFT', 'THRUPLAY', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS']
-const OPTIMIZATION_LABELS: Record<string, string> = {
-  OFFSITE_CONVERSIONS: 'Offsite Conversions',
-  LINK_CLICKS: 'Link Clicks',
-  LANDING_PAGE_VIEWS: 'Landing Page Views',
-  REACH: 'Reach',
-  IMPRESSIONS: 'Impressions',
-  AD_RECALL_LIFT: 'Ad Recall Lift',
-  THRUPLAY: 'ThruPlay Views',
-  TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: '2-Second Continuous Video Plays',
-}
-// Shown instead of OPTIMIZATION_OPTIONS when the campaign objective is App
-// Promotion — the web-oriented goals above don't apply to an app product, and
-// mixing them in makes it too easy to pick a combination the backend has to
-// silently downgrade (see VALID_OPTIMIZATION_GOALS in campaign-creator.service.ts).
-const APP_OPTIMIZATION_OPTIONS = ['APP_INSTALLS', 'OFFSITE_CONVERSIONS']
-const APP_OPTIMIZATION_LABELS: Record<string, string> = {
-  APP_INSTALLS: 'App Installs',
-  OFFSITE_CONVERSIONS: 'App Engagement (in-app event)',
 }
 
 function emptyAdSet(name = ''): ManualAdSetInput {

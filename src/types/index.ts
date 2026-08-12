@@ -595,6 +595,34 @@ export const PLACEMENT_PRESET_OPTIONS: { value: PlacementPreset; label: string }
   { value: 'everywhere', label: 'Everywhere (Facebook + Instagram)' },
 ]
 
+/**
+ * Meta optimization_goal choices exposed at ad-set creation — both for a
+ * brand-new campaign and for adding an ad set to an already-live one.
+ * Single source of truth so the two forms never drift (see
+ * VALID_OPTIMIZATION_GOALS in optimization-goals.ts on the backend, which
+ * this list must stay a subset of).
+ */
+export const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS', 'AD_RECALL_LIFT', 'THRUPLAY', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS']
+export const OPTIMIZATION_LABELS: Record<string, string> = {
+  OFFSITE_CONVERSIONS: 'Offsite Conversions',
+  LINK_CLICKS: 'Link Clicks',
+  LANDING_PAGE_VIEWS: 'Landing Page Views',
+  REACH: 'Reach',
+  IMPRESSIONS: 'Impressions',
+  AD_RECALL_LIFT: 'Ad Recall Lift',
+  THRUPLAY: 'ThruPlay Views',
+  TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: '2-Second Continuous Video Plays',
+}
+// Shown instead of OPTIMIZATION_OPTIONS when the campaign objective is App
+// Promotion — the web-oriented goals above don't apply to an app product, and
+// mixing them in makes it too easy to pick a combination the backend has to
+// silently downgrade (see VALID_OPTIMIZATION_GOALS in optimization-goals.ts).
+export const APP_OPTIMIZATION_OPTIONS = ['APP_INSTALLS', 'OFFSITE_CONVERSIONS']
+export const APP_OPTIMIZATION_LABELS: Record<string, string> = {
+  APP_INSTALLS: 'App Installs',
+  OFFSITE_CONVERSIONS: 'App Engagement (in-app event)',
+}
+
 export interface AdSetConfig {
   name: string
   budgetPercent: number
