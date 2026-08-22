@@ -26,6 +26,8 @@ import type {
   UpdateManualCampaignConfigDto,
   CreativePackage,
   DashboardOverview,
+  ToolImpactOverview,
+  ToolImpactScope,
   CampaignLaunchReview,
   CustomBriefOptions,
   CustomBriefRun,
@@ -34,6 +36,7 @@ import type {
   CustomBriefImageRef,
   StartCustomBriefBody,
   PlacementPreset,
+  CampaignCopilotSessionResponse,
 } from '@/types'
 
 import { getToken } from './auth'
@@ -1143,7 +1146,13 @@ export const approveIntelligenceDecision = (
   decisionId: string,
   body?: { reviewer?: string; notes?: string },
 ) =>
-  apiFetch<{ ok: true; message: string; decision: IntelligenceDecision }>(
+  apiFetch<{
+    ok: true
+    message: string
+    executed: boolean
+    executionError?: string
+    decision: IntelligenceDecision
+  }>(
     `/intelligence/${tenantId}/decisions/${decisionId}/approve`,
     { method: 'POST', body: JSON.stringify(body ?? {}) },
   )
@@ -1213,6 +1222,59 @@ export const getIntelligenceCycles = (
 export const getDashboardOverview = (tenantId: string, windowDays = 30) =>
   apiFetch<DashboardOverview>(
     `/dashboard/${tenantId}/overview?windowDays=${windowDays}`,
+  )
+
+/** Auditable results isolated to campaigns launched through Meridian. */
+export const getToolImpact = (
+  tenantId: string,
+  scope: ToolImpactScope = 'agent',
+) =>
+  apiFetch<ToolImpactOverview>(
+    `/dashboard/${tenantId}/tool-impact?scope=${encodeURIComponent(scope)}`,
+  )
+
+// Campaign Copilot keeps the conversation and its live plan in one durable
+// session. Creation accepts an optional first message; confirmation is the
+// explicit boundary before any campaign-building work starts.
+export const startCampaignCopilotSession = (
+  tenantId: string,
+  message?: string,
+  clientMessageId?: string,
+) =>
+  apiFetch<CampaignCopilotSessionResponse>(`/campaign-copilot/${tenantId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(message?.trim() ? { message: message.trim() } : {}),
+      ...(clientMessageId ? { clientMessageId } : {}),
+    }),
+  })
+
+export const getCampaignCopilotSession = (tenantId: string, sessionId: string) =>
+  apiFetch<CampaignCopilotSessionResponse>(
+    `/campaign-copilot/${tenantId}/sessions/${encodeURIComponent(sessionId)}`,
+  )
+
+export const sendCampaignCopilotMessage = (
+  tenantId: string,
+  sessionId: string,
+  message: string,
+  clientMessageId?: string,
+) =>
+  apiFetch<CampaignCopilotSessionResponse>(
+    `/campaign-copilot/${tenantId}/sessions/${encodeURIComponent(sessionId)}/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        message: message.trim(),
+        ...(clientMessageId ? { clientMessageId } : {}),
+      }),
+    },
+  )
+
+export const confirmCampaignCopilotSession = (tenantId: string, sessionId: string) =>
+  apiFetch<CampaignCopilotSessionResponse>(
+    `/campaign-copilot/${tenantId}/sessions/${encodeURIComponent(sessionId)}/confirm`,
+    { method: 'POST' },
   )
 
 // ── Custom brief: the external creative pipeline ───────────────────────────

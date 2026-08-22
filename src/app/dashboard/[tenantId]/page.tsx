@@ -1,26 +1,39 @@
 'use client'
 
-import { useState, useEffect, use, useCallback } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle, Loader2, Minus,
-  Play, Settings,
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Gauge,
+  Loader2,
+  Play,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Target,
 } from 'lucide-react'
 import {
-  formatCurrency, formatPercent, formatROASPlain, formatSignedCurrency,
+  formatCurrency,
+  formatRelativeTime,
 } from '@/lib/utils'
 import { getDashboardOverview } from '@/lib/api'
-import { PlainMetric } from '@/components/plain/PlainMetric'
-import { AlertFeed } from '@/components/overview/AlertFeed'
-import { BreakevenBar } from '@/components/overview/BreakevenBar'
-import { FacetBreakdown } from '@/components/overview/FacetBreakdown'
-import { InsightList } from '@/components/overview/InsightList'
 import { ActivityGrid } from '@/components/overview/ActivityGrid'
+import { AlertFeed } from '@/components/overview/AlertFeed'
+import { GrowthLoop } from '@/components/overview/GrowthLoop'
+import { InsightList } from '@/components/overview/InsightList'
+import { ObjectiveHealth } from '@/components/overview/ObjectiveHealth'
 import type { DashboardOverview } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
-
 const WINDOWS = [7, 30, 90] as const
 
 interface PageProps {
@@ -30,7 +43,6 @@ interface PageProps {
 export default function HomePage({ params }: PageProps) {
   const { tenantId } = use(params)
   const router = useRouter()
-
   const [data, setData] = useState<DashboardOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,14 +55,16 @@ export default function HomePage({ params }: PageProps) {
     setError(null)
     try {
       setData(await getDashboardOverview(tenantId, windowDays))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't load your dashboard")
+    } catch {
+      setError("We couldn't refresh the latest Meta and Meridian data.")
     } finally {
       setLoading(false)
     }
   }, [tenantId, windowDays])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+  }, [load])
 
   async function handleTrigger() {
     setTriggerState('loading')
@@ -60,297 +74,545 @@ export default function HomePage({ params }: PageProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const body = await res.json()
       setTriggerState('success')
-      setTriggerMessage('Working on new ad ideas…')
+      setTriggerMessage('Meridian is developing new ad ideas now.')
       if (body?.runId) {
         setTimeout(() => router.push(`/dashboard/${tenantId}/runs/${body.runId}`), 900)
       } else {
         setTimeout(() => setTriggerState('idle'), 5000)
       }
-    } catch (err) {
+    } catch {
       setTriggerState('error')
-      setTriggerMessage(err instanceof Error ? err.message : 'Something went wrong')
+      setTriggerMessage("New ad ideas couldn't start. Please try again.")
       setTimeout(() => setTriggerState('idle'), 4000)
     }
   }
 
-  if (loading && !data) {
-    return (
-      <div className="px-8 py-8 max-w-[1600px] mx-auto">
-        <div className="skeleton" style={{ height: 40, width: 320, marginBottom: 24 }} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="skeleton" style={{ height: 112 }} />
-          ))}
-        </div>
-      </div>
-    )
-  }
+  if (loading && !data) return <CommandCenterSkeleton />
 
   if (error || !data) {
     return (
-      <div className="px-8 py-8 max-w-[1600px] mx-auto">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div
-          className="flex items-center gap-3 rounded-xl px-5 py-4"
-          style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
+          role="alert"
+          className="card mx-auto flex max-w-2xl flex-col items-start gap-4 px-5 py-5 sm:flex-row sm:items-center"
+          style={{ background: 'var(--bad-bg)', borderColor: 'var(--bad-border)' }}
         >
-          <AlertTriangle size={16} className="shrink-0" />
-          <span>{error ?? 'No data'}</span>
-          <button onClick={() => void load()} className="btn btn-ghost ml-auto">Retry</button>
+          <span
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: 'var(--surface)', color: 'var(--bad)' }}
+          >
+            <AlertTriangle size={18} aria-hidden="true" />
+          </span>
+          <div className="flex-1">
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>
+              The latest growth view could not be loaded
+            </p>
+            <p className="explain mt-1">{error ?? 'No dashboard data was returned.'}</p>
+          </div>
+          <button type="button" onClick={() => void load()} className="btn btn-ghost">
+            <RefreshCw size={14} aria-hidden="true" /> Retry
+          </button>
         </div>
-      </div>
+      </main>
     )
   }
 
-  const { economics, portfolio, lifetime, trend, alerts, activity, window: win } = data
+  const { activity, alerts, campaigns, lifetime, portfolio, window: win } = data
   const metaConnected = activity.meta.connected
-  const criticalCount = alerts.filter(a => a.severity === 'critical').length
+  const partialCoverage = win.metricsSource === 'partial-timeseries'
+  const criticalCount = alerts.filter((alert) => alert.severity === 'critical').length
+  const allGoalsHaveNoSpend = portfolio.totalSpendAllObjectives <= 0
+  const salesHaveSpend = portfolio.spend > 0
+  const returnEvidence = portfolio.returnEvidence
+  const hasKnownReturn = returnEvidence.knownCampaigns > 0
+  const completeReturnEvidence = returnEvidence.status !== 'incomplete'
+  const resolvedMetaReturn = returnEvidence.status === 'complete_meta'
+  const rawValueGap = returnEvidence.knownRevenue - returnEvidence.knownSpend
+  const rawReturnAboveSpend = hasKnownReturn && returnEvidence.knownRoas >= 1
+  const openProposals = activity.queue.pendingActions + activity.queue.pendingDecisions
+
+  const heroMetric = allGoalsHaveNoSpend
+    ? 'Ready'
+    : formatCurrency(Math.round(portfolio.totalSpendAllObjectives))
+  const heroMetricLabel = allGoalsHaveNoSpend
+    ? 'to plan your next growth campaign'
+    : 'ad spend monitored'
 
   return (
-    <div className="min-h-screen">
-      <div className="px-8 py-8 max-w-[1600px] mx-auto">
-
-        {/* ── Hero ─────────────────────────────────────────────────── */}
-        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+    <main className="min-h-screen">
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <h1 className="page-title">Hi, here&rsquo;s what&rsquo;s happening today</h1>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="chip chip-accent">
+                <Bot size={12} aria-hidden="true" /> Growth Command Center
+              </span>
+              <span className={metaConnected ? 'chip chip-good' : 'chip chip-warn'}>
+                <span className={metaConnected ? 'beacon' : 'beacon beacon-bad'} aria-hidden="true" />
+                {metaConnected ? 'Meta connected' : 'Meta needs connection'}
+              </span>
+            </div>
+            <h1 className="page-title">{data.companyName || 'Your business'} growth, in one view</h1>
             <p className="page-subtitle">
-              {data.companyName || tenantId}
-              {data.industry ? ` · ${data.industry}` : ''}
+              {data.industry ? `${data.industry} · ` : ''}
+              View generated {formatRelativeTime(data.generatedAt)}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1">
-              {WINDOWS.map((w) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex items-center gap-1 rounded-xl p-1"
+              style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }}
+              aria-label="Reporting window"
+            >
+              {WINDOWS.map((window) => (
                 <button
-                  key={w}
-                  onClick={() => setWindowDays(w)}
-                  className="chip"
+                  key={window}
+                  type="button"
+                  onClick={() => setWindowDays(window)}
+                  aria-pressed={windowDays === window}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
                   style={{
-                    cursor: 'pointer',
-                    background: windowDays === w ? 'var(--accent-bg)' : 'transparent',
-                    borderColor: windowDays === w ? 'var(--accent-border)' : 'var(--hairline)',
-                    color: windowDays === w ? 'var(--accent-strong)' : 'var(--ink-3)',
+                    background: windowDays === window ? 'var(--ink)' : 'transparent',
+                    color: windowDays === window ? 'var(--paper)' : 'var(--ink-3)',
                   }}
                 >
-                  {w}d
+                  {window} days
                 </button>
               ))}
             </div>
+            <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent">
+              <Sparkles size={14} aria-hidden="true" /> Plan with Copilot
+            </Link>
             <button
+              type="button"
               onClick={handleTrigger}
               disabled={triggerState === 'loading' || !metaConnected}
-              /* Demoted from the primary action. Generating more ideas while
-                 the account is below breakeven adds spend to a funnel that
-                 loses money on every rupee — fixing what's live comes first,
-                 and the alert feed below now carries that call to action. */
-              className={
-                'btn ' + (
-                  triggerState === 'success' ? 'btn-ghost'
-                  : triggerState === 'error' ? 'btn-danger'
-                  : portfolio.isProfitable ? 'btn-accent'
-                  : 'btn-ghost'
-                )
-              }
+              className={triggerState === 'error' ? 'btn btn-danger' : 'btn btn-ghost'}
               title={!metaConnected ? 'Connect Meta first in Settings' : undefined}
             >
-              {triggerState === 'loading' ? <Loader2 size={14} className="animate-spin" />
-               : triggerState === 'success' ? <CheckCircle size={14} />
-               : <Play size={13} fill="currentColor" />}
-              {triggerState === 'loading' ? 'Thinking…'
-                : triggerState === 'success' ? 'On it'
-                : triggerState === 'error' ? 'Try again'
-                : 'Come up with new ad ideas'}
+              {triggerState === 'loading' ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              ) : triggerState === 'success' ? (
+                <CheckCircle2 size={14} aria-hidden="true" />
+              ) : (
+                <Play size={13} fill="currentColor" aria-hidden="true" />
+              )}
+              {triggerState === 'loading'
+                ? 'Developing ideas…'
+                : triggerState === 'success'
+                  ? 'Ideas in progress'
+                  : triggerState === 'error'
+                    ? 'Try ideas again'
+                    : 'Generate ad ideas'}
             </button>
           </div>
-        </div>
-        {triggerMessage && (
-          <p className="mb-4" style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}>
-            {triggerMessage}
-          </p>
-        )}
+        </header>
 
-        {!metaConnected && (
-          <div
-            className="card px-5 py-4 flex items-center gap-4 mb-5"
-            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
-          >
-            <AlertTriangle size={18} style={{ color: 'var(--warn)' }} className="shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Meta not connected yet</p>
-              <p className="explain">Add your Meta Ads token in Settings so we can see your ads.</p>
-            </div>
-            <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost shrink-0">
-              <Settings size={14} /> Open settings
-            </Link>
-          </div>
-        )}
-
-        {/* ── Breakeven context ────────────────────────────────────── */}
-        <div className="mb-5">
-          <BreakevenBar economics={economics} roas={portfolio.roas} />
-        </div>
-
-        {/* ── Top-line tiles ───────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
-          {/* Total across EVERY objective. The three tiles beside it cover
-              sales campaigns only, so this one has to state the whole number
-              or the page appears to lose track of real spend. */}
-          <PlainMetric
-            label={`Money spent · ${win.label.toLowerCase()}`}
-            value={formatCurrency(Math.round(portfolio.totalSpendAllObjectives))}
-            sub={
-              portfolio.nonRevenueSpend > 0
-                ? `${formatCurrency(Math.round(portfolio.spend))} on sales goals · ${formatCurrency(Math.round(portfolio.nonRevenueSpend))} on other goals`
-                : `Across ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'}` +
-                  (trend?.spendPct != null ? ` · ${signed(trend.spendPct)}% vs previous` : '')
-            }
-            help="Every campaign, all objectives. The tiles beside this one cover sales-objective campaigns only, since return and profit are only meaningful there."
-          />
-          <PlainMetric
-            label="Money earned · sales goals"
-            value={portfolio.revenue > 0 ? formatCurrency(Math.round(portfolio.revenue)) : '—'}
-            sub={
-              portfolio.revenue > 0
-                ? formatROASPlain(portfolio.roas, economics.breakevenROAS)
-                : 'No attributed revenue yet'
-            }
-            help="Revenue attributed by Meta's pixel, already net of refunds."
-            health={portfolio.isProfitable ? 'good' : 'bad'}
-          />
-          {/* The tile the old dashboard was missing entirely: whether any of
-              this actually made money once cost of goods is taken out. */}
-          <PlainMetric
-            label="Actual profit · sales goals"
-            value={formatSignedCurrency(portfolio.contributionProfit)}
-            sub={
-              economics.hasMixedMargins
-                ? "After each product's own margin"
-                : `After ${formatPercent(economics.marginPct)} margin${economics.isEstimated ? ' (assumed)' : ''}`
-            }
-            help="Revenue × margin − spend, across sales-objective campaigns. Awareness, traffic and app campaigns are excluded — they were never asked for tracked revenue."
-            health={portfolio.contributionProfit >= 0 ? 'good' : 'bad'}
-          />
-          <PlainMetric
-            label="Money at risk"
-            value={portfolio.moneyAtRisk > 0 ? formatCurrency(Math.round(portfolio.moneyAtRisk)) : '₹0'}
-            sub={
-              portfolio.campaignsBelowBreakeven > 0
-                ? `${portfolio.campaignsBelowBreakeven} campaign${portfolio.campaignsBelowBreakeven === 1 ? '' : 's'} below breakeven · ${formatPercent(portfolio.pctSpendBelowBreakeven)} of spend`
-                : 'Every campaign is above breakeven'
-            }
-            help="Contribution profit being destroyed by campaigns that lose money."
-            health={portfolio.moneyAtRisk > 0 ? 'bad' : 'good'}
-          />
-        </div>
-
-        {/* Window provenance + lifetime, stated rather than implied. The old
-            page stacked a lifetime total on top of a 10-day table with no
-            label on either. */}
-        <div className="flex items-center gap-3 flex-wrap mb-8 explain">
-          <span>
-            {win.metricsSource === 'timeseries'
-              ? `True ${win.days}-day window from daily data.`
-              : `Daily data not synced — showing lifetime totals for campaigns started in the last ${win.days} days.`}
-            {portfolio.nonRevenueCampaigns > 0 && (
-              <>
-                {' '}
-                {portfolio.nonRevenueCampaigns} campaign
-                {portfolio.nonRevenueCampaigns === 1 ? '' : 's'} run non-sales goals
-                {portfolio.nonRevenueOffTarget > 0
-                  ? ` (${portfolio.nonRevenueOffTarget} off target)`
-                  : ''}{' '}
-                and are judged on their own KPIs.
-              </>
-            )}
-          </span>
-          <span style={{ color: 'var(--ink-4)' }}>|</span>
-          <span>
-            Lifetime: {formatCurrency(Math.round(lifetime.spend))} spent ·{' '}
-            {formatCurrency(Math.round(lifetime.revenue))} earned ·{' '}
-            <span style={{ color: lifetime.isProfitable ? 'var(--good)' : 'var(--bad)' }}>
-              {lifetime.roas.toFixed(2)}x
-            </span>{' '}
-            ·{' '}
-            <span style={{ color: lifetime.contributionProfit >= 0 ? 'var(--good)' : 'var(--bad)' }}>
-              {formatSignedCurrency(lifetime.contributionProfit)} profit
-            </span>
-          </span>
-          {trend && (
-            <>
-              <span style={{ color: 'var(--ink-4)' }}>|</span>
-              <span className="inline-flex items-center gap-1">
-                <TrendIcon direction={trend.direction} />
-                <span
-                  style={{
-                    color:
-                      trend.direction === 'improving' ? 'var(--good)'
-                      : trend.direction === 'declining' ? 'var(--bad)'
-                      : 'var(--ink-3)',
-                  }}
-                >
-                  {trend.direction === 'flat'
-                    ? 'Flat vs previous period'
-                    : `${trend.direction === 'improving' ? 'Improving' : 'Declining'}${
-                        trend.roasPct != null ? ` · ${signed(trend.roasPct)}% return` : ''
-                      }`}
-                </span>
-              </span>
-            </>
+        <div aria-live="polite" className="min-h-0">
+          {triggerMessage && (
+            <p
+              className="mb-4 text-sm font-medium"
+              style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}
+            >
+              {triggerMessage}
+            </p>
           )}
         </div>
 
-        {/* ── Attention + learnings ────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
-          <div className="lg:col-span-2 card overflow-hidden">
+        {!metaConnected && (
+          <section
+            className="card mb-5 flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center"
+            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
+          >
+            <AlertTriangle size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Connect Meta to activate the growth loop</p>
+              <p className="explain mt-0.5">Meridian needs account, Page and measurement access before it can sync evidence or prepare launches.</p>
+            </div>
+            <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost">
+              <Settings size={14} aria-hidden="true" /> Open settings
+            </Link>
+          </section>
+        )}
+
+        {partialCoverage && (
+          <section
+            className="card mb-5 flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center"
+            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
+            role="status"
+          >
+            <Database size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Daily evidence is incomplete</p>
+              <p className="explain mt-0.5">
+                This view covers {win.coverage.campaignsWithRows} of {win.coverage.eligibleCampaigns} campaigns expected to have delivered in this window. Totals exclude {win.coverage.campaignsWithoutRows} campaign{win.coverage.campaignsWithoutRows === 1 ? '' : 's'} without daily rows.
+              </p>
+            </div>
+            <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">Review sync coverage</Link>
+          </section>
+        )}
+
+        <section
+          aria-labelledby="business-outcome-title"
+          className="card card-hero noise-bg relative mb-5 overflow-hidden"
+          style={{ borderColor: completeReturnEvidence && rawReturnAboveSpend ? 'var(--good-border)' : 'var(--accent-border)' }}
+        >
+          <div
+            className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full blur-3xl"
+            style={{ background: completeReturnEvidence && rawReturnAboveSpend ? 'var(--good-bg)' : 'var(--accent-bg)' }}
+            aria-hidden="true"
+          />
+          <div className="relative grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.5fr)]">
+            <div className="px-5 py-6 sm:px-7 sm:py-7 lg:px-8">
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <p className="micro-label">Account-wide growth oversight · {win.label.toLowerCase()}</p>
+                {!completeReturnEvidence && salesHaveSpend && (
+                  <Link href={`/dashboard/${tenantId}/campaigns`} className="chip chip-warn">
+                    Revenue coverage {returnEvidence.knownCampaigns}/{returnEvidence.campaignsWithSpend}
+                    <ArrowRight size={12} aria-hidden="true" />
+                  </Link>
+                )}
+              </div>
+              <h2
+                id="business-outcome-title"
+                className="max-w-4xl font-semibold tracking-[-0.035em]"
+                style={{ color: 'var(--ink)', fontSize: 'clamp(2.35rem, 4vw, 3.75rem)', lineHeight: 1.02 }}
+              >
+                <span className="display-num block">{heroMetric}</span>
+                <span
+                  className="mt-2 block font-semibold tracking-[-0.025em]"
+                  style={{ color: 'var(--ink-2)', fontSize: 'clamp(1.15rem, 1.8vw, 1.65rem)', lineHeight: 1.2 }}
+                >
+                  {heroMetricLabel}
+                </span>
+              </h2>
+              <p className="mt-4 max-w-3xl text-sm leading-6 sm:text-base" style={{ color: 'var(--ink-2)' }}>
+                {allGoalsHaveNoSpend
+                  ? 'Start with a business goal. Copilot can shape the audience, budget, creative and measurement plan for review.'
+                  : `Meridian is monitoring ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} across sales and objective-specific growth goals. Results from campaigns launched by Meridian are isolated on the Impact page.`}
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Link href={`/dashboard/${tenantId}/tool-impact`} className="btn btn-primary">
+                  Open Meridian impact <ArrowRight size={14} aria-hidden="true" />
+                </Link>
+                {!completeReturnEvidence && salesHaveSpend ? (
+                  <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">
+                    Review revenue coverage
+                  </Link>
+                ) : (
+                  <p className="explain max-w-xl">
+                    {win.metricsSource === 'timeseries'
+                      ? `Measured from true daily campaign data for this ${win.days}-day window.`
+                      : partialCoverage
+                        ? `${win.coverage.campaignsWithRows} of ${win.coverage.eligibleCampaigns} expected campaigns have daily rows.`
+                        : `Daily data is not synced, so this view uses the available campaign totals.`}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div
-              className="px-5 py-4 flex items-center gap-2.5"
+              className="relative flex flex-col justify-between px-5 py-6 sm:px-7 xl:border-l xl:px-6"
+              style={{ borderColor: 'var(--hairline)', background: 'rgba(255,255,255,0.68)' }}
+            >
+              <div>
+                <p className="micro-label">Workspace status</p>
+                <div className="mt-5 space-y-5">
+                  <HeroSignal
+                    icon={Gauge}
+                    value={portfolio.campaignCount}
+                    label={`campaign${portfolio.campaignCount === 1 ? '' : 's'} monitored · ${win.label.toLowerCase()}`}
+                  />
+                  <HeroSignal icon={Sparkles} value={activity.creatives.ready} label="creative assets ready now" />
+                  <HeroSignal
+                    icon={Target}
+                    value={openProposals}
+                    label={`growth decision${openProposals === 1 ? '' : 's'} awaiting review`}
+                  />
+                </div>
+              </div>
+              <Link
+                href={`/dashboard/${tenantId}/runs`}
+                className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
+                style={{ color: 'var(--accent-strong)' }}
+              >
+                See AI activity <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Growth outcome metrics" className="stagger mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {hasKnownReturn ? (
+            <>
+              <OutcomeMetric
+                label={partialCoverage ? 'Covered investment · all goals' : 'Account investment · all goals'}
+                value={formatCurrency(Math.round(portfolio.totalSpendAllObjectives))}
+                detail={portfolio.nonRevenueSpend > 0
+                  ? `${formatCurrency(Math.round(portfolio.spend))} sales · ${formatCurrency(Math.round(portfolio.nonRevenueSpend))} other goals`
+                  : `${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} in view`}
+                icon={Gauge}
+              />
+              <OutcomeMetric
+                label={resolvedMetaReturn ? 'Meta-attributed action value' : 'Verified recorded action value'}
+                value={formatCurrency(Math.round(returnEvidence.knownRevenue))}
+                detail={`Covers ${returnEvidence.knownCampaigns}/${returnEvidence.campaignsWithSpend} sales campaigns`}
+                icon={ArrowUpRight}
+                tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
+              />
+              <OutcomeMetric
+                label="Verified-evidence raw ROAS"
+                value={`${returnEvidence.knownRoas.toFixed(2)}x`}
+                detail="Campaign-scoped recorded action value ÷ covered sales spend"
+                icon={Activity}
+                tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
+              />
+              <OutcomeMetric
+                label="Known action-value gap"
+                value={`${rawValueGap >= 0 ? '+' : '−'}${formatCurrency(Math.round(Math.abs(rawValueGap)))}`}
+                detail={completeReturnEvidence ? 'Recorded action value minus sales spend; not contribution profit' : 'Verified campaigns only; unresolved rows remain withheld'}
+                icon={Gauge}
+                tone={completeReturnEvidence ? (rawValueGap >= 0 ? 'good' : 'bad') : 'neutral'}
+              />
+            </>
+          ) : (
+            <>
+              <OutcomeMetric
+                label={partialCoverage ? 'Covered sales spend' : 'Sales spend monitored'}
+                value={formatCurrency(Math.round(portfolio.spend))}
+                detail={`${returnEvidence.campaignsWithSpend} sales campaign${returnEvidence.campaignsWithSpend === 1 ? '' : 's'} with spend`}
+                icon={Gauge}
+              />
+              <OutcomeMetric
+                label="Other growth goals"
+                value={formatCurrency(Math.round(portfolio.nonRevenueSpend))}
+                detail={`${portfolio.nonRevenueCampaigns} awareness, reach, traffic or engagement campaign${portfolio.nonRevenueCampaigns === 1 ? '' : 's'}`}
+                icon={Target}
+              />
+              <OutcomeMetric
+                label="Campaigns monitored"
+                value={portfolio.campaignCount.toLocaleString('en-IN')}
+                detail={`Delivery evidence for the ${win.label.toLowerCase()} reporting window`}
+                icon={Activity}
+              />
+              <OutcomeMetric
+                label="Revenue-ready campaigns"
+                value={`${returnEvidence.knownCampaigns} / ${returnEvidence.campaignsWithSpend}`}
+                detail="Product mapping and a fresh Meta sync are required before raw ROAS is shown"
+                icon={Database}
+                tone="warn"
+              />
+            </>
+          )}
+        </section>
+
+        <div className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.4fr)]">
+          <ObjectiveHealth campaigns={campaigns} objectives={data.facets.byObjective} tenantId={tenantId} />
+          <TrustPanel data={data} tenantId={tenantId} />
+        </div>
+
+        <div className="mb-5">
+          <GrowthLoop activity={activity} insights={data.insights} portfolio={portfolio} tenantId={tenantId} />
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <section className="card overflow-hidden lg:col-span-2" aria-labelledby="attention-title">
+            <div
+              className="flex items-center gap-2.5 px-5 py-4"
               style={{ borderBottom: '1px solid var(--hairline)' }}
             >
-              <AlertTriangle
-                size={18}
-                style={{ color: criticalCount > 0 ? 'var(--bad)' : 'var(--ink-3)' }}
-              />
-              <h2 className="section-title">What needs your attention</h2>
-              {criticalCount > 0 && (
-                <span className="ml-auto chip chip-bad">{criticalCount} urgent</span>
-              )}
+              <AlertTriangle size={17} style={{ color: criticalCount > 0 ? 'var(--bad)' : 'var(--ink-3)' }} aria-hidden="true" />
+              <div>
+                <p className="micro-label">Next best action</p>
+                <h2 id="attention-title" className="section-title">What needs a decision</h2>
+              </div>
+              <span className={`ml-auto ${criticalCount > 0 ? 'chip chip-bad' : 'chip chip-good'}`}>
+                {criticalCount > 0 ? `${criticalCount} urgent` : 'No urgent risks'}
+              </span>
             </div>
             <AlertFeed alerts={alerts} />
-          </div>
-
+          </section>
           <InsightList insights={data.insights} tenantId={tenantId} />
         </div>
 
-        {/* ── Grouped performance ──────────────────────────────────── */}
-        <div className="mb-8">
-          <FacetBreakdown facets={data.facets} breakevenROAS={economics.breakevenROAS} />
-        </div>
-
-        {/* The per-campaign table lives on /campaigns, not here. This page
-            answers "what's happening and what needs me", which the tiles,
-            alert feed and grouped view already cover; an 18-row table
-            underneath repeated the same verdicts one campaign at a time. */}
-
-        {/* ── Everything else under this tenant ────────────────────── */}
-        <div className="mb-3">
-          <h2 className="section-title mb-1">Everything else running</h2>
-          <p className="explain mb-4">
-            The rest of the system working on this account.
-          </p>
+        <section aria-labelledby="system-pulse-title">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="micro-label mb-1">Operations</p>
+              <h2 id="system-pulse-title" className="section-title">System pulse</h2>
+            </div>
+            <p className="explain">Connections, production, review queues and evidence freshness</p>
+          </div>
           <ActivityGrid activity={activity} tenantId={tenantId} />
+        </section>
+
+        <footer className="mt-8 flex flex-col gap-2 border-t pt-4 text-xs sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--hairline)', color: 'var(--ink-4)' }}>
+          <span>Reporting window: {win.label} · Generated {formatRelativeTime(data.generatedAt)}</span>
+          <span>Account lifetime: {formatCurrency(Math.round(lifetime.spend))} spend · open Campaigns for basis-aware return evidence</span>
+        </footer>
+      </div>
+    </main>
+  )
+}
+
+function CommandCenterSkeleton() {
+  return (
+    <main aria-busy="true" aria-label="Loading growth command center" className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <span className="sr-only" role="status">Loading the latest growth evidence</span>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <div className="skeleton mb-3 h-6 w-44" />
+          <div className="skeleton h-9 w-72 max-w-full" />
         </div>
+        <div className="skeleton hidden h-10 w-64 sm:block" />
+      </div>
+      <div className="skeleton mb-4 h-80 w-full rounded-2xl" />
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton h-32" />)}
+      </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="skeleton h-72 lg:col-span-2" />
+        <div className="skeleton h-72" />
+      </div>
+    </main>
+  )
+}
+
+function OutcomeMetric({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  detail: string
+  icon: typeof Activity
+  tone?: 'good' | 'bad' | 'warn' | 'neutral'
+}) {
+  const color = tone === 'good'
+    ? 'var(--good)'
+    : tone === 'bad'
+      ? 'var(--bad)'
+      : tone === 'warn'
+        ? 'var(--warn)'
+        : 'var(--ink)'
+  const background = tone === 'good'
+    ? 'var(--good-bg)'
+    : tone === 'bad'
+      ? 'var(--bad-bg)'
+      : tone === 'warn'
+        ? 'var(--warn-bg)'
+        : 'var(--surface-warm)'
+  return (
+    <article className="card card-metric min-w-0 px-5 py-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="micro-label">{label}</p>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ color, background }}>
+          <Icon size={15} aria-hidden="true" />
+        </span>
+      </div>
+      <p className="display-num text-3xl" style={{ color }}>{value}</p>
+      <p className="explain mt-2">{detail}</p>
+    </article>
+  )
+}
+
+function HeroSignal({ icon: Icon, value, label }: { icon: typeof Activity; value: number; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+        style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}
+      >
+        <Icon size={16} aria-hidden="true" />
+      </span>
+      <div>
+        <span className="display-num text-xl" style={{ color: 'var(--ink)' }}>{value.toLocaleString('en-IN')}</span>
+        <p className="explain">{label}</p>
       </div>
     </div>
   )
 }
 
-function TrendIcon({ direction }: { direction: 'improving' | 'declining' | 'flat' }) {
-  if (direction === 'improving') return <ArrowUpRight size={13} style={{ color: 'var(--good)' }} />
-  if (direction === 'declining') return <ArrowDownRight size={13} style={{ color: 'var(--bad)' }} />
-  return <Minus size={13} style={{ color: 'var(--ink-3)' }} />
-}
+function TrustPanel({ data, tenantId }: { data: DashboardOverview; tenantId: string }) {
+  const { activity, economics } = data
+  const trustRows = [
+    {
+      icon: ShieldCheck,
+      label: 'Human review',
+      value: `${activity.queue.pendingApprovalCampaigns} campaign${activity.queue.pendingApprovalCampaigns === 1 ? '' : 's'} awaiting approval`,
+      href: `/dashboard/${tenantId}/approvals`,
+      healthy: true,
+    },
+    {
+      icon: RefreshCw,
+      label: 'Evidence freshness',
+      value: activity.sync.campaignsWithoutFreshness > 0
+        ? `${activity.sync.campaignsWithoutFreshness}/${activity.sync.activeCampaignCount} active campaigns lack a metrics timestamp`
+        : activity.sync.lastSyncAt
+          ? `${activity.sync.staleCampaignCount === 0 ? 'All timestamped active campaigns are within threshold' : `${activity.sync.staleCampaignCount} stale`} · latest evidence ${formatRelativeTime(activity.sync.lastSyncAt)}`
+          : 'No active campaign metrics timestamp',
+      href: `/dashboard/${tenantId}/campaigns`,
+      healthy: activity.sync.campaignsWithoutFreshness === 0 && activity.sync.staleCampaignCount === 0 && Boolean(activity.sync.lastSyncAt),
+    },
+    {
+      icon: Gauge,
+      label: 'Economics basis',
+      value: economics.isEstimated
+        ? 'Margin is assumed; raw command-center proof excludes contribution'
+        : economics.hasMixedMargins
+          ? 'Product margins are stored; contribution is withheld from this demo'
+          : `${economics.productName ?? 'Primary product'} economics stored; raw proof shown above`,
+      href: `/dashboard/${tenantId}/settings`,
+      healthy: !economics.isEstimated,
+    },
+    {
+      icon: Clock3,
+      label: 'Reporting evidence',
+      value: data.window.metricsSource === 'timeseries'
+        ? `True daily evidence · ${data.window.label.toLowerCase()}`
+        : data.window.metricsSource === 'partial-timeseries'
+          ? `Partial daily evidence · ${data.window.coverage.campaignsWithRows}/${data.window.coverage.eligibleCampaigns} campaigns covered`
+          : `Campaign lifetime fallback · ${data.window.label.toLowerCase()}`,
+      href: `/dashboard/${tenantId}/tool-impact`,
+      healthy: data.window.metricsSource === 'timeseries',
+    },
+  ]
 
-function signed(pct: number): string {
-  return `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}`
+  return (
+    <aside className="card overflow-hidden" aria-labelledby="trust-panel-title">
+      <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
+        <p className="micro-label mb-1.5">Proof &amp; safety</p>
+        <h2 id="trust-panel-title" className="section-title">Trust the number before acting</h2>
+      </div>
+      <div>
+        {trustRows.map((row, index) => {
+          const Icon = row.icon
+          return (
+            <Link
+              key={row.label}
+              href={row.href}
+              className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-warm)]"
+              style={{ borderTop: index > 0 ? '1px solid var(--hairline-light)' : undefined }}
+            >
+              <span
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: row.healthy ? 'var(--good-bg)' : 'var(--warn-bg)', color: row.healthy ? 'var(--good)' : 'var(--warn)' }}
+              >
+                <Icon size={14} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{row.label}</p>
+                <p className="explain mt-0.5">{row.value}</p>
+              </div>
+              <ArrowRight size={14} className="mt-1 shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--ink-4)' }} aria-hidden="true" />
+            </Link>
+          )
+        })}
+      </div>
+    </aside>
+  )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { use, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -14,8 +14,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
   X,
   XCircle,
 } from 'lucide-react'
@@ -36,6 +34,8 @@ import type {
   IntelligenceDecision,
   IntelligenceDecisionStatus,
 } from '@/types'
+import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -45,6 +45,11 @@ interface Toast {
   kind: 'success' | 'error'
   text: string
 }
+
+// Legacy intelligence decisions do not persist the campaign objective,
+// optimization goal or return basis. Until that contract is migrated, raw
+// profit/ROAS reasoning and the detailed trace cannot be interpreted safely.
+const LEGACY_REASONING_HAS_REQUIRED_CONTEXT = false
 
 // Human-friendly labels for the action-type enums the backend emits.
 const ACTION_LABEL: Record<string, string> = {
@@ -84,16 +89,6 @@ const RISK_STYLE: Record<string, string> = {
   low: 'chip-good',
   medium: 'chip-warn',
   high: 'chip-bad',
-}
-
-// Plain-English label for each engine that contributed to the decision.
-const SOURCE_LABEL: Record<string, string> = {
-  signal: 'What the agent noticed',
-  revenue: 'The money side',
-  snapshot: 'Current performance',
-  diagnosis: 'Likely root cause',
-  trend: 'How things are trending',
-  memory: 'Similar past cases',
 }
 
 function hoursLeft(iso: string): { hours: number; minutes: number; expired: boolean } {
@@ -157,9 +152,9 @@ interface CampaignBucket {
   campaignName: string
   metaCampaignId?: string
   decisions: IntelligenceDecision[]
-  totalImpactINR: number
+  modeledImpactINR: number
   createdAtNewest: string
-  status: 'losing' | 'break_even' | 'profitable'
+  status: 'below_break_even' | 'near_break_even' | 'above_break_even' | 'unscored'
 }
 
 function bucketByCampaign(decisions: IntelligenceDecision[]): CampaignBucket[] {
@@ -169,31 +164,32 @@ function bucketByCampaign(decisions: IntelligenceDecision[]): CampaignBucket[] {
     let b = buckets.get(key)
     if (!b) {
       const name = extractCampaignName(d)
-      const roas = Number(d.evidenceSnapshot?.metrics?.roas ?? 0)
-      const breakeven = Number(d.evidenceSnapshot?.metrics?.breakevenROAS ?? 0)
-      let status: CampaignBucket['status'] = 'profitable'
-      if (roas > 0 && breakeven > 0) {
-        if (breakeven - roas > 0.05) status = 'losing'
-        else if (roas < breakeven) status = 'break_even'
-      }
       b = {
         campaignId: key,
         campaignName: name,
         metaCampaignId: d.metaCampaignId,
         decisions: [],
-        totalImpactINR: 0,
+        modeledImpactINR: 0,
         createdAtNewest: d.createdAt,
-        status,
+        // Decision records do not yet persist objective, optimization goal or
+        // return basis, so a ROAS/breakeven verdict would be unsafe here.
+        status: 'unscored',
       }
       buckets.set(key, b)
     }
     b.decisions.push(d)
-    // Alternative actions share the same impact — take the max, not the sum.
-    b.totalImpactINR = Math.max(b.totalImpactINR, Math.abs(d.expectedProfitDeltaINR7d))
+    // Alternative actions share the same forecast — keep the largest modeled
+    // change, including its sign, rather than adding mutually exclusive plans.
+    if (Math.abs(d.expectedProfitDeltaINR7d) > Math.abs(b.modeledImpactINR)) {
+      b.modeledImpactINR = d.expectedProfitDeltaINR7d
+    }
     if (d.createdAt > b.createdAtNewest) b.createdAtNewest = d.createdAt
   }
-  // Rank buckets by impact size
-  return Array.from(buckets.values()).sort((a, b) => b.totalImpactINR - a.totalImpactINR)
+  // The legacy economic forecast is not proof-safe, so recency—not modeled
+  // impact—determines the operator review order.
+  return Array.from(buckets.values()).sort(
+    (a, b) => b.createdAtNewest.localeCompare(a.createdAtNewest),
+  )
 }
 
 export default function ProposedActionsPage({ params }: PageProps) {
@@ -217,6 +213,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [priming, setPriming] = useState(false)
+  const [approvalTarget, setApprovalTarget] = useState<IntelligenceDecision | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<Toast | null>(null)
@@ -259,8 +256,18 @@ export default function ProposedActionsPage({ params }: PageProps) {
   async function handleApprove(d: IntelligenceDecision) {
     setBusyId(d._id)
     try {
-      await approveIntelligenceDecision(tenantId, d._id)
-      flash('success', 'Recorded locally. Nothing sent to Meta.')
+      const result = await approveIntelligenceDecision(tenantId, d._id)
+      if (result.executed) {
+        flash('success', 'Approved and applied to the live Meta campaign.')
+      } else {
+        flash(
+          'error',
+          result.executionError
+            ? `Approval was recorded, but Meta could not apply it: ${result.executionError}`
+            : 'Approval was recorded, but Meta did not confirm execution.',
+        )
+      }
+      setApprovalTarget(null)
       await load()
     } catch (err) {
       flash('error', err instanceof Error ? err.message : 'Approve failed')
@@ -331,16 +338,12 @@ export default function ProposedActionsPage({ params }: PageProps) {
     return out
   }, [cycles])
 
-  const totalAtStake = useMemo(
-    () => buckets.reduce((s, b) => s + b.totalImpactINR, 0),
-    [buckets],
-  )
-
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8 stagger">
+      <IntelligenceCenterNav tenantId={tenantId} active="recommendations" />
       {/* Shadow mode banner */}
       <div
-        className="rounded-xl px-4 py-3 mb-6 flex items-center gap-3"
+        className="mb-7 flex items-start gap-3 rounded-2xl px-4 py-3.5 sm:items-center"
         style={{
           background: 'var(--accent-bg)',
           border: '1px solid var(--accent-border)',
@@ -349,41 +352,47 @@ export default function ProposedActionsPage({ params }: PageProps) {
         <ShieldCheck size={18} style={{ color: 'var(--accent-strong)' }} />
         <div className="flex-1">
           <p className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Shadow mode is ON — Meta is untouched
+            Human-controlled live execution
           </p>
           <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
-            The agent is watching your live campaigns. Everything below is a proposal only —
-            approving records the decision here for review; nothing is sent to Meta.
+            Recommendations are analysis until you act. Approving attempts the selected change on
+            the live Meta campaign immediately; rejecting only records feedback.
           </p>
         </div>
       </div>
 
       {/* Header */}
-      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+      <div className="mb-6 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
-          <h1 className="page-title">Things the agent wants to change</h1>
+          <p className="micro-label mb-2">Intelligence center · Recommendations</p>
+          <h1 className="page-title">Decide what Meridian should do next</h1>
           <p className="page-subtitle">
             {tab === 'shadow_review'
               ? buckets.length === 0
-                ? 'Nothing to review right now. Your campaigns are on track — or the agent hasn’t taken a fresh look yet.'
-                : `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} flagged. About ${formatCurrency(totalAtStake)} at stake over the next 7 days.`
+                ? 'No recommendations need review. Run a fresh analysis whenever you want another check.'
+                : `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} need review. Economic forecasts are withheld until objective and return-basis context is stored.`
               : `Showing ${decisions.length} ${tab.replace('_', ' ')} decision${decisions.length === 1 ? '' : 's'}.`}
           </p>
+          {tab === 'shadow_review' && buckets.length > 0 && (
+            <p className="mt-2 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
+              Review the action target and current Meta context. These legacy records cannot support a profit or ROAS claim.
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <button
             onClick={handlePrimeNow}
             disabled={priming}
-            className="btn btn-ghost"
+            className="btn btn-primary flex-1 sm:flex-none"
             title="Ask the agent to re-analyze all campaigns right now"
           >
             {priming ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            Look again now
+            Analyze campaigns
           </button>
-          <button onClick={load} disabled={loading} className="btn btn-ghost">
+          <button onClick={load} disabled={loading} className="btn btn-ghost" aria-label="Refresh recommendations">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
@@ -444,33 +453,40 @@ export default function ProposedActionsPage({ params }: PageProps) {
 
       {/* Summary strip */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <section aria-label="Recommendation status" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { label: 'Waiting', value: summary.counts.shadow_review },
-            { label: 'Approved', value: summary.counts.approved },
-            { label: 'Rejected', value: summary.counts.rejected },
-            { label: 'Expired', value: summary.counts.expired },
+            { label: 'Needs review', value: summary.counts.shadow_review, hint: 'Proposed' },
+            { label: 'Approved', value: summary.counts.approved, hint: 'Live execution attempted' },
+            { label: 'Rejected', value: summary.counts.rejected, hint: 'Feedback captured' },
+            { label: 'Expired', value: summary.counts.expired, hint: 'No decision in window' },
           ].map((s) => (
-            <div key={s.label} className="card px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+            <div key={s.label} className="card px-4 py-3.5">
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>
                 {s.label}
               </p>
-              <p className="text-[26px] font-semibold tabular-nums mt-0.5" style={{ color: 'var(--ink)' }}>
+              <p className="mt-1 text-[28px] font-bold leading-none tabular-nums" style={{ color: 'var(--ink)' }}>
                 {s.value}
+              </p>
+              <p className="mt-1.5 text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
+                {s.hint}
               </p>
             </div>
           ))}
-        </div>
+        </section>
       )}
 
       {/* Latest AI analysis — the diagnosis narrative behind every cycle,
           whether or not it produced a decision. Answers "why is there
           nothing here" directly instead of leaving an empty list. */}
       {latestCycleByCampaign.length > 0 && (
-        <div className="card px-5 py-4 mb-5">
-          <p className="text-[11px] uppercase tracking-wide font-semibold mb-2.5" style={{ color: 'var(--ink-3)' }}>
-            Latest AI analysis
-          </p>
+        <section className="card mb-6 px-4 py-4 sm:px-5" aria-labelledby="latest-analysis-title">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 id="latest-analysis-title" className="section-title">Latest campaign checks</h2>
+              <p className="explain mt-0.5">What Meridian observed before making—or withholding—a recommendation.</p>
+            </div>
+            <span className="chip chip-accent shrink-0">AI analysis</span>
+          </div>
           <div className="flex flex-col gap-2.5">
             {latestCycleByCampaign.map((c) => (
               <div
@@ -502,11 +518,11 @@ export default function ProposedActionsPage({ params }: PageProps) {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b" style={{ borderColor: 'var(--hairline)' }}>
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Recommendation status" style={{ borderColor: 'var(--hairline)' }}>
         {(
           [
             ['shadow_review', 'Waiting'],
@@ -520,7 +536,9 @@ export default function ProposedActionsPage({ params }: PageProps) {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className="px-4 py-2.5 text-[13.5px] font-semibold border-b-2 -mb-px"
+              role="tab"
+              aria-selected={isActive}
+              className="-mb-px min-h-11 shrink-0 border-b-2 px-4 py-2.5 text-[13.5px] font-semibold"
               style={{
                 color: isActive ? 'var(--accent-strong)' : 'var(--ink-3)',
                 borderColor: isActive ? 'var(--accent)' : 'transparent',
@@ -562,9 +580,15 @@ export default function ProposedActionsPage({ params }: PageProps) {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center py-16" style={{ color: 'var(--ink-3)' }}>
-          <Loader2 size={22} className="animate-spin mr-2" />
-          <span className="text-[14px]">Loading proposals…</span>
+        <div className="flex flex-col gap-3" role="status" aria-label="Loading recommendations">
+          {[0, 1].map((item) => (
+            <div key={item} className="card p-5 sm:p-6">
+              <div className="skeleton h-4 w-2/5 rounded" />
+              <div className="skeleton mt-3 h-3 w-4/5 rounded" />
+              <div className="skeleton mt-5 h-20 w-full rounded-xl" />
+            </div>
+          ))}
+          <span className="sr-only">Loading recommendations…</span>
         </div>
       )}
 
@@ -579,7 +603,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
               rejectingId={rejectingId}
               rejectReason={rejectReason}
               setRejectReason={setRejectReason}
-              onApprove={handleApprove}
+              onApprove={setApprovalTarget}
               onOpenReject={(id) => {
                 setRejectingId(id)
                 setRejectReason('')
@@ -593,6 +617,18 @@ export default function ProposedActionsPage({ params }: PageProps) {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(approvalTarget)}
+        title="Approve and apply this change to Meta?"
+        description={approvalTarget
+          ? `${ACTION_LABEL[approvalTarget.actionType] ?? approvalTarget.actionType} will be attempted immediately on the live ${approvalTarget.targetType === 'adset' ? 'ad group' : approvalTarget.targetType === 'ad' ? 'ad' : 'campaign'}. This legacy record does not store objective or return-basis context, so verify the target in Meta first. The approval remains recorded even if Meta rejects execution.`
+          : undefined}
+        confirmLabel="Approve & apply to Meta"
+        loading={Boolean(approvalTarget && busyId === approvalTarget._id)}
+        onConfirm={() => { if (approvalTarget) void handleApprove(approvalTarget) }}
+        onCancel={() => { if (!busyId) setApprovalTarget(null) }}
+      />
     </div>
   )
 }
@@ -624,25 +660,16 @@ function CampaignBucketCard({
   onCancelReject,
   onConfirmReject,
 }: CampaignBucketCardProps) {
-  const statusStyle =
-    bucket.status === 'losing'
-      ? { color: 'var(--bad)', bg: 'var(--bad-bg)', border: 'var(--bad-border)', Icon: TrendingDown }
-      : bucket.status === 'break_even'
-        ? { color: 'var(--warn)', bg: 'var(--warn-bg)', border: 'var(--warn-border)', Icon: Info }
-        : { color: 'var(--good)', bg: 'var(--good-bg)', border: 'var(--good-border)', Icon: TrendingUp }
+  const statusStyle = { color: 'var(--info)', bg: 'var(--info-bg)', border: 'var(--info-border)', Icon: Info }
   const StatusIcon = statusStyle.Icon
 
-  // Use the first (highest-scored) decision to draw the "what's wrong" context.
+  // Use the first decision for the stored evidence snapshot.
   const primary = bucket.decisions[0]
-  const roas = Number(primary?.evidenceSnapshot?.metrics?.roas ?? 0)
-  const breakeven = Number(primary?.evidenceSnapshot?.metrics?.breakevenROAS ?? 0)
   const spend = Number(primary?.evidenceSnapshot?.metrics?.spend ?? 0)
-
-  const parts = splitReasoning(primary?.reasoning ?? '')
 
   return (
     <article
-      className="card px-6 py-5"
+      className="card px-4 py-5 sm:px-6"
       style={{ borderLeft: `3px solid ${statusStyle.color}` }}
     >
       {/* Header — campaign name + status badge + impact ₹ */}
@@ -662,35 +689,27 @@ function CampaignBucketCard({
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10.5px] uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
-            Est. impact over 7 days
-          </p>
+          <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>Economic effect</p>
           <p
             className="text-[26px] font-semibold tabular-nums leading-none mt-0.5"
-            style={{ color: statusStyle.color }}
+            style={{ color: 'var(--warn)' }}
           >
-            {bucket.status === 'losing' || bucket.status === 'break_even' ? '−' : '+'}
-            {formatCurrency(bucket.totalImpactINR)}
+            Withheld
           </p>
           <p className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>
-            {bucket.status === 'losing' ? 'loss avoided' : bucket.status === 'break_even' ? 'wasted spend saved' : 'profit gain'}
+            Objective and return basis are not stored
           </p>
         </div>
       </div>
 
-      {/* What's going on — one-line summary from the primary decision */}
-      {parts.condition && (
-        <p className="text-[13.5px] mt-1 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
-          {parts.condition}
-        </p>
-      )}
+      <p className="text-[13.5px] mt-1 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+        Legacy recommendation. Validate its target against the live campaign objective before applying.
+      </p>
 
       {/* Numeric snapshot chips */}
-      {roas > 0 && (
+      {spend > 0 && (
         <div className="flex flex-wrap gap-2 mt-3">
-          <NumberChip label="Current ROAS" value={`${roas.toFixed(2)}×`} tone={statusStyle.color} />
-          <NumberChip label="Needs to be" value={`${breakeven.toFixed(2)}×`} />
-          {spend > 0 && <NumberChip label="Spent so far" value={formatCurrency(spend)} />}
+          <NumberChip label="Evidence snapshot spend" value={formatCurrency(spend)} tone={statusStyle.color} />
         </div>
       )}
 
@@ -758,6 +777,10 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
   const [trace, setTrace] = useState<DecisionTrace | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
 
   async function openPanel() {
     setOpen(true)
@@ -773,22 +796,56 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
     }
   }
 
-  // Escape closes, and the body must not scroll behind an open overlay.
+  // Keep keyboard focus inside the decision trace while it is open. Closing
+  // always returns focus to the exact control that launched the panel.
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const trigger = triggerRef.current
+    const focusTimer = window.setTimeout(() => closeRef.current?.focus(), 80)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOpen(false)
+        return
+      }
+      if (e.key !== 'Tab') return
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      )
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (!first || !last) return
+
+      if (!dialogRef.current?.contains(document.activeElement)) {
+        e.preventDefault()
+        first.focus()
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
+      window.clearTimeout(focusTimer)
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      trigger?.focus()
     }
   }, [open])
 
   return (
     <>
       <button
+        ref={triggerRef}
+        type="button"
         onClick={openPanel}
         className="mt-2 ml-4 inline-flex items-center gap-1 text-[12px] font-semibold"
         style={{ color: 'var(--accent-strong)' }}
@@ -806,16 +863,18 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
           and the backdrop stopped short of the sidebar. */}
       {open && createPortal(
         <div
+          ref={dialogRef}
           data-portal
           className="fixed inset-0 z-[100] flex justify-end"
           role="dialog"
           aria-modal="true"
-          aria-label="How it decided — 16 steps"
+          aria-labelledby={titleId}
         >
           <div
             className="absolute inset-0 animate-fade-in"
             style={{ background: 'rgba(0,0,0,0.35)' }}
             onClick={() => setOpen(false)}
+            aria-hidden="true"
           />
           <aside
             className="relative h-full w-full max-w-[560px] flex flex-col animate-panel-slide-in"
@@ -826,7 +885,7 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
               style={{ borderBottom: '1px solid var(--hairline)', background: 'var(--paper)' }}
             >
               <div className="min-w-0">
-                <h2 className="section-title">How it decided</h2>
+                <h2 id={titleId} className="section-title">How it decided</h2>
                 <p className="explain mt-0.5">
                   {trace
                     ? `${trace.stepsWithData} of ${trace.totalSteps} steps recorded output`
@@ -834,9 +893,11 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
                 </p>
               </div>
               <button
+                ref={closeRef}
+                type="button"
                 onClick={() => setOpen(false)}
                 className="btn btn-ghost shrink-0"
-                aria-label="Close"
+                aria-label="Close decision trace"
               >
                 Close
               </button>
@@ -941,6 +1002,8 @@ function ActionOption({
   const label = ACTION_LABEL[d.actionType] ?? d.actionType
   const effect = ACTION_EFFECT[d.actionType] ?? ''
   const parts = splitReasoning(d.reasoning)
+  const reviewedAt = d.humanReviewedAt ?? d.reviewedAt
+  const reviewNote = d.humanReviewNotes ?? d.rejectionReason
 
   return (
     <div
@@ -987,7 +1050,7 @@ function ActionOption({
               style={{ fontSize: '12.5px', padding: '6px 12px' }}
             >
               <XCircle size={13} />
-              Not this
+              Reject
             </button>
             <button
               onClick={onApprove}
@@ -996,51 +1059,31 @@ function ActionOption({
               style={{ fontSize: '12.5px', padding: '6px 14px' }}
             >
               {busy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-              Go with this
+              Apply to Meta
             </button>
           </div>
         )}
       </div>
 
-      {/* Why? disclosure */}
-      <button
-        onClick={() => setShowWhy((s) => !s)}
-        className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold"
-        style={{ color: 'var(--accent-strong)' }}
-      >
-        <ChevronRight
-          size={12}
-          style={{ transform: showWhy ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
-        />
-        {showWhy ? 'Hide reasoning' : 'Why this?'}
-      </button>
+      <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
+        Legacy profit/ROAS reasoning is withheld because this decision record does not store the objective or return basis.
+      </div>
 
-      {showWhy && (
-        <div className="mt-2 flex flex-col gap-2 text-[12.5px]" style={{ color: 'var(--ink-2)' }}>
-          {parts.effect && (
-            <p className="leading-relaxed">
-              <span style={{ color: 'var(--ink-3)' }}>Estimated effect: </span>
-              {parts.effect}
-            </p>
-          )}
-          <ol className="flex flex-col gap-1.5 mt-1">
-            {d.evidenceChain.map((step, i) => (
-              <li key={i} className="flex gap-2">
-                <span
-                  className="chip chip-neutral shrink-0"
-                  style={{ fontSize: '10px', padding: '2px 7px', minWidth: 'max-content' }}
-                >
-                  {SOURCE_LABEL[step.source] ?? step.source}
-                </span>
-                <span className="flex-1">{cleanText(step.step)}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
+      {LEGACY_REASONING_HAS_REQUIRED_CONTEXT && (
+        <>
+          <button
+            onClick={() => setShowWhy((s) => !s)}
+            aria-expanded={showWhy}
+            className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold"
+            style={{ color: 'var(--accent-strong)' }}
+          >
+            <ChevronRight size={12} />
+            {showWhy ? 'Hide reasoning' : 'Why this?'}
+          </button>
+          {showWhy && <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-2)' }}>{parts.effect}</p>}
+          <DecisionTracePanel tenantId={tenantId} decisionId={d._id} />
+        </>
       )}
-
-      {/* Full 16-step trace — how it got here, not just what it concluded. */}
-      <DecisionTracePanel tenantId={tenantId} decisionId={d._id} />
 
       {/* Countdown / status footer */}
       <div className="mt-3 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
@@ -1063,14 +1106,20 @@ function ActionOption({
           )
         ) : (
           <>
-            {d.status === 'approved' && d.reviewedAt && (
-              <>Approved · {relativeTime(d.reviewedAt)}</>
+            {d.status === 'approved' && reviewedAt && (
+              d.executedAt ? (
+                <>Applied to Meta · {relativeTime(d.executedAt)}</>
+              ) : d.executionError ? (
+                <span style={{ color: 'var(--bad)' }}>Approved, but Meta execution failed · {relativeTime(reviewedAt)}</span>
+              ) : (
+                <>Approved · execution status unavailable · {relativeTime(reviewedAt)}</>
+              )
             )}
-            {d.status === 'rejected' && d.reviewedAt && (
+            {d.status === 'rejected' && reviewedAt && (
               <>
-                Rejected {relativeTime(d.reviewedAt)}
-                {d.rejectionReason && (
-                  <> · <em style={{ color: 'var(--ink-2)' }}>{d.rejectionReason}</em></>
+                Rejected {relativeTime(reviewedAt)}
+                {reviewNote && (
+                  <> · <em style={{ color: 'var(--ink-2)' }}>{reviewNote}</em></>
                 )}
               </>
             )}

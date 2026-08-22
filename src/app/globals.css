@@ -1,58 +1,128 @@
 @import "tailwindcss";
 
 /* ════════════════════════════════════════════════════════════════════════
-   Meridian — Intelligence Console (bright theme, v1.0)
-   Warm off-white paper · high-contrast ink · restrained indigo accent
-   All colors flow from these tokens — never hardcode hex in pages.
+   Meridian — Atlas Light (production theme)
+   Daylight workspace · deep Atlas frame · cobalt intelligence · measured growth teal
+   The complete design contract lives in .stitch/DESIGN.md.
    ════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Surfaces — warm off-white paper */
-  --paper: #faf9f6;            /* app background — warm cream */
-  --surface: #ffffff;          /* panels — pure white */
-  --surface-warm: #f4f1eb;     /* raised / header strips — subtly warmer */
-  --muted: #ece8df;            /* wells, tracks, chips */
+  /* Foundation */
+  --paper: #f3f5f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-warm: #f8fafc;
+  --surface-tint: #eef1ff;
+  --surface-sunken: #e9eef5;
+  --muted: #e9eef5;
 
-  /* Ink — deep warm neutrals scaled */
-  --ink: #16130f;              /* primary text — near-black warm */
-  --ink-2: #4a443c;            /* secondary */
-  --ink-3: #78716c;            /* tertiary */
-  --ink-4: #a8a29e;            /* faint */
+  /* Typography */
+  --ink: #0f172a;
+  --ink-2: #334155;
+  --ink-3: #526176;
+  --ink-4: #667085;
 
-  /* Hairlines — near-invisible on paper */
-  --hairline: #e0dbd0;
-  --hairline-light: #ece8df;
+  /* Structure */
+  --hairline: #d7dee9;
+  --hairline-light: #e7ecf3;
+  --hairline-strong: #b8c3d3;
 
-  /* Accent — deep indigo (readable on bright bg) */
-  --accent: #4f46e5;
-  --accent-strong: #3730a3;
-  --accent-bg: rgba(79, 70, 229, 0.08);
-  --accent-border: rgba(79, 70, 229, 0.25);
+  /* Brand */
+  --accent: #3554d1;
+  --accent-hover: #2943b2;
+  --accent-strong: #1f337e;
+  --accent-bg: #eef1ff;
+  --accent-soft: #f6f7ff;
+  --accent-border: #c8d0fa;
+  --accent-aura: rgba(53, 84, 209, 0.105);
+  --brand-secondary: #00796f;
+  --brand-secondary-bg: #e7f6f3;
+  --brand-secondary-border: #a9ddd5;
+  --brand-secondary-aura: rgba(0, 121, 111, 0.08);
 
-  /* Semantic — desaturated for bright bg legibility */
-  --good: #059669;             /* emerald-600 */
-  --good-bg: rgba(5, 150, 105, 0.08);
-  --good-border: rgba(5, 150, 105, 0.28);
-  --warn: #b45309;             /* amber-700 */
-  --warn-bg: rgba(180, 83, 9, 0.09);
-  --warn-border: rgba(180, 83, 9, 0.28);
-  --bad: #b91c1c;              /* red-700 */
-  --bad-bg: rgba(185, 28, 28, 0.08);
-  --bad-border: rgba(185, 28, 28, 0.28);
-  --info: #0369a1;             /* sky-700 */
-  --info-bg: rgba(3, 105, 161, 0.08);
-  --info-border: rgba(3, 105, 161, 0.28);
+  /* The dark rail is structural framing; the working product remains light. */
+  --nav-bg: #14213d;
+  --nav-bg-raised: #1b2b4d;
+  --nav-active: #233760;
+  --nav-border: #2b3a5b;
+  --nav-text: #f4f7fc;
+  --nav-muted: #aab6c9;
+  --nav-accent: #91a3ff;
 
-  /* Elevation — bright UIs elevate with soft shadows, no glow */
-  --shadow-soft: 0 1px 2px rgba(23, 20, 15, 0.05), 0 1px 3px rgba(23, 20, 15, 0.04);
-  --shadow-raised: 0 4px 12px -4px rgba(23, 20, 15, 0.12), 0 2px 6px -2px rgba(23, 20, 15, 0.06);
-  --shadow-overlay: 0 24px 72px -16px rgba(23, 20, 15, 0.18);
-  --glow-accent: 0 0 0 3px rgba(79, 70, 229, 0.12);
-  --glow-good: 0 0 0 3px rgba(5, 150, 105, 0.12);
-  --glow-bad: 0 0 0 3px rgba(185, 28, 28, 0.12);
+  /* Semantic states */
+  --good: #087a5b;
+  --good-bg: #eaf7f2;
+  --good-border: #b5e1d0;
+  --warn: #98600a;
+  --warn-bg: #fff7e6;
+  --warn-border: #f1d59b;
+  --bad: #b4232e;
+  --bad-bg: #fff0f2;
+  --bad-border: #f2bdc3;
+  --info: #2563b8;
+  --info-bg: #eef5ff;
+  --info-border: #bdd3f5;
 
-  --radius: 12px;
-  --radius-sm: 8px;
+  /* State answers “is it healthy?”; it never identifies a chart series. */
+  --state-positive: #15805c;
+  --state-watch: #a15c00;
+  --state-negative: #c13e47;
+
+  /* Objective-aware data visualisation */
+  --viz-spend: #526175;
+  --viz-value: #00796f;
+  --viz-value-soft: #e8f6f2;
+  --viz-roas: #4f46d9;
+  --viz-roas-soft: #eef0ff;
+  --viz-purchase: #7c3aed;
+  --viz-awareness: #2563eb;
+  --viz-reach: #0284c7;
+  --viz-impressions: #6366f1;
+  --viz-clicks: #d97706;
+  --viz-leads: #0891b2;
+  --viz-engagement: #c026d3;
+  --viz-estimate: #b56800;
+  --viz-unknown: #94a3b8;
+  --viz-neutral: #64748b;
+  --viz-target: #172033;
+  --viz-counterfactual: #94a3b8;
+  --viz-grid: #e3e8f0;
+  --viz-plot-bg: #fbfcfe;
+  --viz-funnel-1: #314a91;
+  --viz-funnel-2: #3f5ab6;
+  --viz-funnel-3: #526fd1;
+  --viz-funnel-4: #7087df;
+
+  /* Stable aliases used by existing and future visualizations. */
+  --chart-spend: var(--viz-spend);
+  --chart-earned: var(--viz-value);
+  --chart-reach: var(--viz-reach);
+  --chart-impressions: var(--viz-impressions);
+  --chart-clicks: var(--viz-clicks);
+  --chart-results: var(--good);
+  --chart-neutral: var(--viz-neutral);
+  --chart-grid: var(--viz-grid);
+
+  /* Elevation */
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.045);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 30px -16px rgba(15, 23, 42, 0.2);
+  --shadow-raised: 0 16px 40px -16px rgba(15, 23, 42, 0.25), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --shadow-overlay: 0 28px 72px -18px rgba(15, 23, 42, 0.38);
+  --glow-accent: 0 0 0 3px rgba(53, 84, 209, 0.15);
+  --glow-good: 0 0 0 3px rgba(8, 122, 91, 0.13);
+  --glow-bad: 0 0 0 3px rgba(180, 35, 46, 0.12);
+
+  /* Geometry, space, and motion */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 8px;
+  --radius-lg: 22px;
+  --space-page: clamp(16px, 2.2vw, 32px);
+  --sidebar-width: 264px;
+  --mobile-header-height: 64px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 140ms;
+  --duration-standard: 200ms;
 
   /* Legacy aliases — keep older references mapped */
   --bg-base: var(--paper);
@@ -82,9 +152,15 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--paper); color-scheme: light; }
+html {
+  min-height: 100%;
+  background: var(--paper);
+  color-scheme: light;
+}
 
 body {
+  min-height: 100%;
+  margin: 0;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
@@ -93,22 +169,23 @@ body {
   font-size: 15px;
   line-height: 1.55;
   position: relative;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
 }
 
-/* Paper atmosphere: faint blueprint grid + top vignette */
+/* A quiet ambient field gives the light shell depth without competing with data. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(rgba(23, 20, 15, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 20, 15, 0.025) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, black 30%, transparent 100%);
+  background:
+    radial-gradient(circle at 12% -12%, var(--accent-aura), transparent 32rem),
+    radial-gradient(circle at 92% -8%, var(--brand-secondary-aura), transparent 29rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 34rem);
 }
-/* Lifts real content above the body::before blueprint grid (z-index 0).
+/* Lifts real content above the ambient field (z-index 0).
    Excludes [data-portal] because this rule sets `position` as well as
    z-index, and a portalled overlay is a direct child of <body> — so it
    silently rewrote `position: fixed` to `relative`, anchoring full-screen
@@ -116,31 +193,89 @@ body::before {
    drawer rendered through createPortal must carry data-portal. */
 body > *:not([data-portal]) { position: relative; z-index: 1; }
 
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: transparent;
+}
+
+.app-shell-main {
+  min-width: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: var(--accent-strong);
+  box-shadow: var(--shadow-raised);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* ── Typography utilities ─────────────────────────────────────────────── */
 
 .font-display { font-family: var(--font-display), Georgia, serif; }
 
 /* Page title — big, sentence-case, human. */
 .page-title {
-  font-size: 28px;
-  line-height: 1.15;
+  font-size: clamp(28px, 2.5vw, 36px);
+  line-height: 1.12;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   color: var(--ink);
+  text-wrap: balance;
 }
 
 .page-subtitle {
   font-size: 15px;
   color: var(--ink-3);
-  margin-top: 6px;
-  line-height: 1.5;
+  margin-top: 8px;
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
 /* Section title — sentence case, sans-serif, easy to read. */
 .section-title {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.005em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 
@@ -192,8 +327,25 @@ body > *:not([data-portal]) { position: relative; z-index: 1; }
   box-shadow: var(--shadow-soft);
 }
 
+.card-metric {
+  border-color: var(--hairline-light);
+  box-shadow: var(--shadow-card);
+}
+
+.card-hero {
+  border-color: var(--accent-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(118deg, var(--surface) 0%, var(--accent-soft) 61%, var(--brand-secondary-bg) 145%);
+  box-shadow: var(--shadow-card);
+}
+
+.card-flat {
+  box-shadow: none;
+}
+
 .card-hover { transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease; }
-.card-hover:hover { border-color: var(--ink-4); box-shadow: var(--shadow-raised); transform: translateY(-1px); }
+.card-hover:hover { border-color: var(--hairline-strong); box-shadow: var(--shadow-raised); transform: translateY(-1px); }
 
 .card-inset {
   background: var(--surface-warm);
@@ -237,7 +389,7 @@ table { border-collapse: collapse; }
   border-top: 1px solid var(--hairline-light);
 }
 .data-table tbody tr { transition: background 0.1s ease; }
-.data-table tbody tr:hover { background: rgba(23, 20, 15, 0.03); }
+.data-table tbody tr:hover { background: var(--accent-soft); }
 
 /* ── Chips ────────────────────────────────────────────────────────────── */
 
@@ -270,9 +422,10 @@ table { border-collapse: collapse; }
   font-size: 14px;
   font-weight: 600;
   padding: 10px 18px;
-  border-radius: 10px;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: background-color var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease, box-shadow var(--duration-fast) ease, transform var(--duration-fast) ease;
   border: 1px solid transparent;
   white-space: nowrap;
   line-height: 1.2;
@@ -280,11 +433,21 @@ table { border-collapse: collapse; }
 .btn-lg { font-size: 15px; padding: 12px 22px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-primary { background: var(--ink); color: var(--paper); }
-.btn-primary:hover:not(:disabled) { background: var(--ink-2); transform: translateY(-1px); box-shadow: var(--shadow-raised); }
+.btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 7px 16px -10px rgba(31, 51, 126, 0.8);
+}
+.btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, var(--accent-hover), var(--accent-strong)); transform: translateY(-1px); box-shadow: var(--shadow-raised); }
 
-.btn-accent { background: var(--accent); color: #fff; font-weight: 700; }
-.btn-accent:hover:not(:disabled) { background: var(--accent-strong); transform: translateY(-1px); box-shadow: var(--glow-accent); }
+.btn-accent {
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 7px 16px -10px rgba(31, 51, 126, 0.8);
+}
+.btn-accent:hover:not(:disabled) { background: linear-gradient(135deg, var(--accent-hover), var(--accent-strong)); transform: translateY(-1px); box-shadow: var(--shadow-raised); }
+.btn:active:not(:disabled) { transform: translateY(0); }
 
 .btn-ghost { background: var(--surface); color: var(--ink-2); border-color: var(--hairline); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-warm); border-color: var(--ink-4); color: var(--ink); }
@@ -296,11 +459,12 @@ table { border-collapse: collapse; }
 
 .input {
   width: 100%;
-  background: var(--paper);
+  min-height: 42px;
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 14px;
   color: var(--ink);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -311,12 +475,12 @@ table { border-collapse: collapse; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
-::selection { background: rgba(79, 70, 229, 0.18); color: var(--ink); }
+::selection { background: rgba(53, 84, 209, 0.18); color: var(--ink); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  box-shadow: var(--glow-accent);
   border-color: var(--accent) !important;
 }
 
@@ -328,7 +492,7 @@ input:focus, textarea:focus, select:focus {
 @keyframes slideInRight { from { opacity:0; transform:translateX(32px); } to { opacity:1; transform:translateX(0); } }
 @keyframes scaleIn { from { opacity:0; transform:scale(0.97); } to { opacity:1; transform:scale(1); } }
 @keyframes revealUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-@keyframes glowPulse { 0%,100% { box-shadow:0 0 0 0 rgba(129,140,248,0.0); } 50% { box-shadow:0 0 22px 0 rgba(129,140,248,0.12); } }
+@keyframes glowPulse { 0%,100% { box-shadow:0 0 0 0 rgba(53,84,209,0); } 50% { box-shadow:0 0 22px 0 rgba(53,84,209,0.12); } }
 @keyframes backdropIn { from { opacity:0; } to { opacity:1; } }
 @keyframes panelSlideIn { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:translateX(0); } }
 @keyframes slideOutRight { from { transform:translateX(0); } to { transform:translateX(100%); } }
@@ -336,8 +500,6 @@ input:focus, textarea:focus, select:focus {
 @keyframes barGrow { from { width: 0; } }
 @keyframes feedIn { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
 @keyframes sheetSlideUp { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:translateY(0); } }
-/* Side panels slide in from the right edge, not up from the bottom. */
-@keyframes panelSlideIn { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:translateX(0); } }
 
 .animate-fade-up { animation: fadeUp 0.3s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-fade-in { animation: fadeIn 0.22s ease both; }
@@ -378,4 +540,16 @@ input:focus, textarea:focus, select:focus {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-shell-main {
+    min-height: 100dvh;
+    padding-top: var(--mobile-header-height);
+    overflow: visible;
+  }
 }

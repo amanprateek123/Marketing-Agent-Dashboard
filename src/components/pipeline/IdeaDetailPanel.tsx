@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import {
   X, Star, CheckCircle2, Sparkles, ArrowRight, Loader2, ThumbsUp, XCircle,
-  Image as ImageIcon, Video, Copy, Users, DollarSign, Target, Package, ExternalLink,
+  Image as ImageIcon, Video, Copy, ExternalLink,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import {

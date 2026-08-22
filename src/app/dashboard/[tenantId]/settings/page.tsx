@@ -2,38 +2,33 @@
 
 import { useState, useEffect, use } from 'react'
 import {
-  Settings, Wifi, WifiOff, Package, Users, Bell, Building2, Target, Loader2,
+  Wifi, WifiOff, Package, Users, Bell, Building2, Loader2,
   CheckCircle2, RefreshCw, DollarSign, TrendingUp, TrendingDown, Zap, Plus,
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
-  ShieldCheck, Palette, Megaphone, Calendar, Globe, Sparkles, X, FlaskConical, Trophy,
+  ShieldCheck, Palette, Megaphone, Sparkles, X, FlaskConical, Trophy,
 } from 'lucide-react'
 import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness, MetaPage } from '@/types'
 import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses, getMetaPages } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 import { PageSelect } from '@/components/ui/PageSelect'
+import styles from './settings.module.css'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 interface PageProps { params: Promise<{ tenantId: string }> }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function maskToken(token?: string) {
-  if (!token) return '—'
-  return token.slice(0, 6) + '••••••••••••••'
-}
-
 // ── Shared UI components ─────────────────────────────────────────────────────
 
-function SectionCard({ children }: { children: React.ReactNode }) {
+function SectionCard({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
-    <section className="card p-6">
+    <section id={id} className={`card p-5 sm:p-6 ${styles.sectionAnchor}`}>
       {children}
     </section>
   )
 }
 
-function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right }: {
-  icon: React.ElementType; iconBg: string; iconColor: string; title: string; subtitle?: string; right?: React.ReactNode
+function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right, category }: {
+  icon: React.ElementType; iconBg: string; iconColor: string; title: string; subtitle?: string; right?: React.ReactNode; category?: string
 }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-5">
@@ -42,6 +37,7 @@ function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right }
           <Icon size={15} style={{ color: iconColor }} />
         </div>
         <div>
+          {category && <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: iconColor }}>{category}</p>}
           <h2 className="section-title">{title}</h2>
           {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{subtitle}</p>}
         </div>
@@ -157,6 +153,55 @@ function StatusPill({ active }: { active: boolean }) {
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? 'var(--good)' : 'var(--bad)' }} />
       {active ? 'Connected' : 'Disconnected'}
     </span>
+  )
+}
+
+interface LaunchCheck {
+  id: 'business' | 'products' | 'meta' | 'safety'
+  label: string
+  detail: string
+  ready: boolean
+  icon: React.ElementType
+}
+
+function ReadinessCheck({ check }: { check: LaunchCheck }) {
+  const Icon = check.icon
+  return (
+    <a href={`#${check.id}`} className={styles.readinessLink}>
+      <span
+        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        style={{
+          background: check.ready ? 'var(--good-bg)' : 'var(--warn-bg)',
+          color: check.ready ? 'var(--good)' : 'var(--warn)',
+        }}
+      >
+        <Icon size={15} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold" style={{ color: 'var(--ink)' }}>{check.label}</span>
+          <span className={check.ready ? 'chip chip-good' : 'chip chip-warn'}>{check.ready ? 'Ready' : 'Set up'}</span>
+        </span>
+        <span className="mt-1 block text-[11px] leading-4" style={{ color: 'var(--ink-3)' }}>{check.detail}</span>
+      </span>
+    </a>
+  )
+}
+
+function SettingsLoading() {
+  return (
+    <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8" role="status" aria-live="polite">
+      <span className="sr-only">Loading launch settings</span>
+      <div className="h-8 w-64 animate-pulse rounded-lg" style={{ background: 'var(--muted)' }} aria-hidden="true" />
+      <div className="mt-3 h-4 w-full max-w-md animate-pulse rounded" style={{ background: 'var(--muted)' }} aria-hidden="true" />
+      <div className="mt-8 grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className={styles.loadingCard} aria-hidden="true" />
+        <div className="space-y-5" aria-hidden="true">
+          <div className={styles.loadingCard} />
+          <div className={styles.loadingCard} />
+        </div>
+      </div>
+    </main>
   )
 }
 
@@ -408,10 +453,8 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
             </div></div>
             <div><FieldLabel>Conversion Value</FieldLabel><NumericInput value={product.conversionValue != null ? String(product.conversionValue) : ''} onChange={v => set('conversionValue', v ? Number(v) : undefined)} placeholder="999" /></div>
           </div>
-          {/* Contribution margin — the cents-on-the-rupee you keep after COGS,
-              fulfilment, fees, and refunds. Drives breakeven ROAS = 1 / margin
-              in the auditor. Leave blank to fall back to the vertical default;
-              set it here when the per-product economics differ from typical. */}
+          {/* Contribution margin before the separate refund adjustment. Raw
+              founder proof intentionally stays at recorded value vs spend. */}
           <div>
             <FieldLabel>Contribution Margin</FieldLabel>
             <div className="flex items-center gap-2">
@@ -430,14 +473,13 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
               </div>
               <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                 {product.contributionMargin != null && product.contributionMargin > 0
-                  ? <>→ breakeven ROAS <span className="mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
+                  ? <>Directional net-value threshold <span className="mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
                   : 'Vertical default applies when blank'}
               </p>
             </div>
           </div>
-          {/* Refund rate — when set, every ROAS/breakeven decision in the agent
-              runs on NET revenue: effective value = value × (1 − rate). Leave
-              blank when refunds don't apply (current behavior unchanged). */}
+          {/* Refund rate nets configured conversion value at ingestion. The
+              founder raw-ROAS proof does not reapply it. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
             <div>
               <FieldLabel>Refund Rate</FieldLabel>
@@ -611,8 +653,8 @@ export default function SettingsPage({ params }: PageProps) {
         setCompetitors({ competitors: comp?.competitors || [], competitorNotes: comp?.competitorNotes || '', calendarContext: comp?.calendarContext || '' })
       }
       setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load settings')
+    } catch {
+      setError('We could not load the launch settings. Check the connection and try again.')
     } finally { setLoading(false) }
   }
 
@@ -636,10 +678,10 @@ export default function SettingsPage({ params }: PageProps) {
       const res = await getMetaAccounts(tenantId, true)
       setMetaAccounts(res.accounts)
       setMetaAccountsState('idle')
-    } catch (err) {
+    } catch {
       setMetaAccounts([])
       setMetaAccountsState('error')
-      setMetaAccountsError(err instanceof Error ? err.message : 'Failed to load ad accounts')
+      setMetaAccountsError('Could not load ad accounts. Verify the Meta connection and retry.')
     }
   }
 
@@ -659,10 +701,10 @@ export default function SettingsPage({ params }: PageProps) {
       const res = await getMetaPages(tenantId)
       setMetaPages(res.pages)
       setMetaPagesState('idle')
-    } catch (err) {
+    } catch {
       setMetaPages([])
       setMetaPagesState('error')
-      setMetaPagesError(err instanceof Error ? err.message : 'Failed to load Pages')
+      setMetaPagesError('Could not load Pages. Verify the Meta connection and retry.')
     }
   }
 
@@ -690,9 +732,9 @@ export default function SettingsPage({ params }: PageProps) {
       showToast(`Syncing campaigns for ${selectedAccountIds.length} account(s)…`, 'success')
       fetchSettings()
       fetchMetaAccounts()
-    } catch (err) {
+    } catch {
       setMetaSyncState('error')
-      showToast(err instanceof Error ? err.message : 'Sync failed', 'error')
+      showToast('Meta sync could not start. Verify the selected accounts and retry.', 'error')
     } finally {
       setTimeout(() => setMetaSyncState('idle'), 3000)
     }
@@ -706,9 +748,9 @@ export default function SettingsPage({ params }: PageProps) {
       showToast(`Rolled back to prompts v${version}`, 'success')
       fetchPromptsHistory()
       setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 2500)
-    } catch (err) {
+    } catch {
       setRollbackState((s) => ({ ...s, [version]: 'error' }))
-      showToast(err instanceof Error ? err.message : 'Rollback failed', 'error')
+      showToast('Prompt rollback failed. No configuration was changed.', 'error')
       setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 3000)
     }
   }
@@ -756,38 +798,127 @@ export default function SettingsPage({ params }: PageProps) {
     }
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen"><Loader2 size={22} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
-  )
+  if (loading) return <SettingsLoading />
+
+  if (error && !settings) {
+    return (
+      <main className="mx-auto flex min-h-[70vh] max-w-[760px] items-center px-4 py-12 sm:px-6">
+        <div className="card w-full p-6 text-center sm:p-9" role="alert">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
+            <AlertCircle size={22} aria-hidden="true" />
+          </span>
+          <h1 className="mt-4 text-xl font-bold" style={{ color: 'var(--ink)' }}>Launch settings are unavailable</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6" style={{ color: 'var(--ink-3)' }}>{error}</p>
+          <button type="button" onClick={fetchSettings} className="btn btn-primary mt-5">
+            <RefreshCw size={14} aria-hidden="true" /> Try again
+          </button>
+        </div>
+      </main>
+    )
+  }
 
   const metaConnected = !!(settings?.meta?.accessToken)
   const currentPage = metaPages.find(p => p.id === settings?.meta?.pageId)
+  const savedActiveProducts = (settings?.products ?? []).filter((product) => product.active !== false && product.name?.trim())
+  const savedAccountCount = settings?.meta?.accountIds?.length ?? (settings?.meta?.accountId ? 1 : 0)
+  const businessReady = Boolean(settings?.info?.name?.trim() && settings?.brand?.targetAudience?.trim())
+  const productsReady = savedActiveProducts.length > 0
+  const metaReady = Boolean(metaConnected && savedAccountCount > 0 && settings?.meta?.pageId)
+  const safetyReady = Number(settings?.budget?.weeklyBudgetCap) > 0 && Number(settings?.budget?.maxBudgetPerCampaign) > 0
+  const launchChecks: LaunchCheck[] = [
+    {
+      id: 'business',
+      label: 'Business',
+      detail: businessReady ? 'Company and target audience are saved.' : 'Add the company and target audience context.',
+      ready: businessReady,
+      icon: Building2,
+    },
+    {
+      id: 'products',
+      label: 'Products',
+      detail: productsReady ? `${savedActiveProducts.length} active product${savedActiveProducts.length === 1 ? '' : 's'} available to Copilot.` : 'Add at least one active product.',
+      ready: productsReady,
+      icon: Package,
+    },
+    {
+      id: 'meta',
+      label: 'Meta connection',
+      detail: metaReady ? `${savedAccountCount} ad account${savedAccountCount === 1 ? '' : 's'} and a Page are selected.` : 'Connect a credential, ad account, and Facebook Page.',
+      ready: metaReady,
+      icon: metaConnected ? Wifi : WifiOff,
+    },
+    {
+      id: 'safety',
+      label: 'Safety controls',
+      detail: safetyReady ? 'Weekly and per-campaign limits are active.' : 'Set weekly and per-campaign budget limits.',
+      ready: safetyReady,
+      icon: ShieldCheck,
+    },
+  ]
+  const readyCount = launchChecks.filter((check) => check.ready).length
+  const readinessPercent = Math.round((readyCount / launchChecks.length) * 100)
 
   return (
-    <div className="px-8 py-8 max-w-4xl mx-auto stagger">
+    <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       {/* Toast */}
-      {toast && <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-lg text-sm font-medium animate-scale-in" style={toast.type === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>{toast.msg}</div>}
+      {toast && <div className="fixed right-4 top-4 z-50 max-w-[calc(100vw-2rem)] rounded-xl px-4 py-3 text-sm font-medium shadow-lg animate-scale-in" style={toast.type === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="status" aria-live="polite">{toast.msg}</div>}
 
       {/* Page header */}
-      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="micro-label mb-2 mono">{tenantId}</p>
-          <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Company profile, products, budget rules, and pipeline configuration.</p>
+          <p className="micro-label mb-2">Control · Launch readiness</p>
+          <h1 className="page-title">Launch settings</h1>
+          <p className="page-subtitle max-w-2xl">Give Meridian the business context, platform access, and safety limits it needs to prepare controlled campaigns.</p>
         </div>
-        <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost pb-2.5">
+        <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost">
           {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-          {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Prompts'}
+          {regenState === 'loading' ? 'Refreshing AI context…' : regenState === 'success' ? 'AI context refreshed' : 'Refresh AI context'}
         </button>
       </div>
 
-      {error && <div className="rounded-xl p-4 mb-5 flex items-center gap-3 text-sm" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}><AlertCircle size={14} /> {error}</div>}
+      {error && <div className="mb-5 flex items-center gap-3 rounded-xl p-4 text-sm" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="alert"><AlertCircle size={14} /> {error}</div>}
 
-      <div className="space-y-5">
+      <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-6" aria-label="Launch readiness and settings navigation">
+          <div className={styles.readinessCard}>
+            <p className="micro-label">Launch foundation</p>
+            <div className="mt-4 flex items-center gap-4">
+              <div className={styles.score} style={{ background: `conic-gradient(var(--good) ${readinessPercent}%, var(--muted) 0)` }} aria-label={`${readyCount} of ${launchChecks.length} launch essentials ready`}>
+                <span className={styles.scoreValue}>{readyCount}/4</span>
+              </div>
+              <div>
+                <p className="text-base font-bold" style={{ color: 'var(--ink)' }}>{readyCount === 4 ? 'Ready to launch' : `${4 - readyCount} setup step${4 - readyCount === 1 ? '' : 's'} left`}</p>
+                <p className="mt-1 text-[11px] leading-4" style={{ color: 'var(--ink-3)' }}>
+                  Based on saved configuration, not unsaved form changes.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 space-y-1">
+              {launchChecks.map((check) => <ReadinessCheck key={check.id} check={check} />)}
+            </div>
+          </div>
+
+          <nav className={styles.sideNav} aria-label="Settings sections">
+            <p className="micro-label px-2 pb-2">Configuration groups</p>
+            {[
+              { href: '#business', label: 'Business foundation', icon: Building2 },
+              { href: '#products', label: 'Products & measurement', icon: Package },
+              { href: '#meta', label: 'Meta connection', icon: Wifi },
+              { href: '#safety', label: 'Safety & automation', icon: ShieldCheck },
+            ].map(({ href, label, icon: Icon }) => (
+              <a key={href} href={href} className={styles.sideNavLink}>
+                <span className="flex items-center gap-2"><Icon size={14} aria-hidden="true" /> {label}</span>
+                <ChevronDown size={13} className="-rotate-90" aria-hidden="true" />
+              </a>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="min-w-0 space-y-5 stagger">
 
         {/* ── Company Info ── */}
-        <SectionCard>
-          <SectionHeader icon={Building2} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Company Info" subtitle="Basic company information" />
+        <SectionCard id="business">
+          <SectionHeader icon={Building2} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Company profile" subtitle="The market context Meridian uses before it recommends a campaign." />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div><FieldLabel required>Name</FieldLabel><TextInput value={info.name} onChange={v => setInfo(s => ({ ...s, name: v }))} placeholder="Company name" /></div>
             <div><FieldLabel>Industry</FieldLabel><TextInput value={info.industry} onChange={v => setInfo(s => ({ ...s, industry: v }))} placeholder="e.g. Astrology" /></div>
@@ -799,7 +930,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Brand ── */}
         <SectionCard>
-          <SectionHeader icon={Palette} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Brand & Voice" subtitle="How your brand communicates" />
+          <SectionHeader icon={Palette} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Brand & voice" subtitle="The audience, positioning, and language guardrails behind AI recommendations." />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><FieldLabel>Target Audience</FieldLabel><TextInput value={brand.targetAudience} onChange={v => setBrand(s => ({ ...s, targetAudience: v }))} placeholder="25-40 year old professionals" /></div>
@@ -817,9 +948,9 @@ export default function SettingsPage({ params }: PageProps) {
         </SectionCard>
 
         {/* ── Products ── */}
-        <SectionCard>
-          <SectionHeader icon={Package} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Products" subtitle="Products the AI promotes — changes trigger prompt regeneration"
-            right={<button onClick={() => setProducts(p => [...p, { name: '', active: true, currency: 'INR' }])} className="btn btn-ghost"><Plus size={12} /> Add</button>} />
+        <SectionCard id="products">
+          <SectionHeader icon={Package} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Products & measurement" title="Product catalogue" subtitle="What Meridian can promote, where customers land, and how results are measured."
+            right={<button onClick={() => setProducts(p => [...p, { name: '', active: true, currency: 'INR' }])} className="btn btn-ghost"><Plus size={12} /> Add product</button>} />
           {products.length === 0 ? (
             <div className="card-inset py-10 text-center" style={{ borderStyle: 'dashed' }}>
               <Package size={22} className="mx-auto mb-2" style={{ color: 'var(--ink-4)' }} />
@@ -834,17 +965,17 @@ export default function SettingsPage({ params }: PageProps) {
         </SectionCard>
 
         {/* ── Budget & Rules ── */}
-        <SectionCard>
-          <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget & Rules" subtitle="Caps, targets, and auto-pause / auto-scale thresholds" />
+        <SectionCard id="safety">
+          <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" category="Safety & automation" title="Budget guardrails" subtitle="Hard caps, performance targets, and controlled pause or scale thresholds." />
           <div className="space-y-3">
             <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget Caps" hint="Hard limits the agent will never spend past, no matter how well things are going.">
-              <div><FieldLabel>Weekly cap — most you'll spend in 7 days</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
+              <div><FieldLabel>Weekly cap — most you&apos;ll spend in 7 days</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
               <div><FieldLabel>Most any single campaign can spend per day</FieldLabel><NumericInput value={budgetFields.maxBudgetPerCampaign ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetPerCampaign: v }))} prefix="₹" /></div>
               <div><FieldLabel>Biggest single budget increase the agent can make</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets" hint="What 'doing well' means for this business — the agent measures every campaign against these.">
+            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets" hint="What doing well means for this business — the agent measures every campaign against these.">
               <div><FieldLabel><Term help={GLOSSARY.targetRoas}>Target ROAS</Term> — the return you want once healthy</FieldLabel><NumericInput value={budgetFields.targetROAS ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetROAS: v }))} suffix="x" step={0.1} /></div>
-              <div><FieldLabel><Term help={GLOSSARY.cpa}>Target CPA</Term> — what you're willing to pay per sale</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
+              <div><FieldLabel><Term help={GLOSSARY.cpa}>Target CPA</Term> — what you&apos;re willing to pay per sale</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
             </RuleGroup>
             <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Auto-Pause Triggers" hint="If a campaign crosses any of these lines, the agent pauses it automatically instead of waiting for you to notice.">
               <div><FieldLabel>Pause if <Term help={GLOSSARY.roas}>ROAS</Term> drops below</FieldLabel><NumericInput value={budgetFields.pauseIfROASBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfROASBelow: v }))} suffix="x" step={0.1} /></div>
@@ -860,7 +991,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Marketing Preferences ── */}
         <SectionCard>
-          <SectionHeader icon={Megaphone} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Marketing Preferences" subtitle="Platforms, formats, and content rules" />
+          <SectionHeader icon={Megaphone} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Marketing preferences" subtitle="Platforms, formats, and content rules Meridian should follow." />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><FieldLabel>Platforms</FieldLabel><TagsInput value={marketing.platforms} onChange={v => setMarketing(s => ({ ...s, platforms: v }))} placeholder="instagram, facebook, youtube" /></div>
@@ -877,7 +1008,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Pipeline Config ── */}
         <SectionCard>
-          <SectionHeader icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Pipeline Configuration" subtitle="Controls how the AI pipeline runs" />
+          <SectionHeader icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Safety & automation" title="Automation policy" subtitle="Controls how the intelligence workflow runs and where approval is required." />
           <div className="space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
               <FieldLabel>Strategy</FieldLabel>
@@ -925,7 +1056,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Competitors ── */}
         <SectionCard>
-          <SectionHeader icon={Users} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Competitors" subtitle="Used by scouts and research agents" />
+          <SectionHeader icon={Users} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Competitive context" subtitle="Companies and market moments the research agents should watch." />
           <div className="space-y-4">
             <div><FieldLabel>Competitors</FieldLabel><TagsInput value={competitors.competitors} onChange={v => setCompetitors(s => ({ ...s, competitors: v }))} placeholder="Nike, Adidas, Puma" /></div>
             <div><FieldLabel>Competitor Notes</FieldLabel><TextArea value={competitors.competitorNotes} onChange={v => setCompetitors(s => ({ ...s, competitorNotes: v }))} placeholder="Key things to watch for…" /></div>
@@ -936,9 +1067,9 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Notifications ── */}
         <SectionCard>
-          <SectionHeader icon={Bell} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Notifications" subtitle="Where pipeline digests and alerts are delivered" />
+          <SectionHeader icon={Bell} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Operator notifications" subtitle="Where pipeline digests and intervention alerts are delivered." />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><FieldLabel>Slack Webhook</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="https://hooks.slack.com/…" mono /></div>
+            <div><FieldLabel>Slack Webhook</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="Stored securely" mono type="password" /></div>
             <div><FieldLabel>Email</FieldLabel><TextInput value={delivery.email} onChange={v => setDelivery(s => ({ ...s, email: v }))} placeholder="team@company.com" type="email" /></div>
             <div><FieldLabel>WhatsApp Number</FieldLabel><TextInput value={delivery.whatsappNumber} onChange={v => setDelivery(s => ({ ...s, whatsappNumber: v }))} placeholder="+91..." /></div>
             <div><FieldLabel>Notion Database ID</FieldLabel><TextInput value={delivery.notionDatabaseId} onChange={v => setDelivery(s => ({ ...s, notionDatabaseId: v }))} placeholder="abc123..." mono /></div>
@@ -947,18 +1078,18 @@ export default function SettingsPage({ params }: PageProps) {
         </SectionCard>
 
         {/* ── Meta Ads ── */}
-        <SectionCard>
-          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} title="Meta Ads" subtitle="Access token and account details" right={<StatusPill active={metaConnected} />} />
+        <SectionCard id="meta">
+          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} category="Meta connection" title="Meta workspace" subtitle="Choose the business, Page, and ad accounts Meridian is allowed to use." right={<StatusPill active={metaConnected} />} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
-            {[{ label: 'Access Token', value: maskToken(settings?.meta?.accessToken), sub: undefined as string | undefined, active: !!settings?.meta?.accessToken, warn: false },
-              { label: 'Ad Account ID', value: settings?.meta?.accountId || '—', sub: undefined as string | undefined, active: !!settings?.meta?.accountId, warn: false },
+            {[{ label: 'Credential', value: metaConnected ? 'Stored securely' : 'Not connected', sub: undefined as string | undefined, active: metaConnected, warn: false },
+              { label: 'Ad accounts', value: savedAccountCount > 0 ? `${savedAccountCount} selected` : 'None selected', sub: undefined as string | undefined, active: savedAccountCount > 0, warn: false },
               { label: 'Page', value: currentPage ? currentPage.name : (settings?.meta?.pageId || '—'), sub: currentPage ? settings?.meta?.pageId : undefined, active: !!settings?.meta?.pageId, warn: !!settings?.meta?.pageId && !currentPage && metaPages.length > 0 }
             ].map(f => (
               <div key={f.label}>
                 <p className="micro-label mb-1.5">{f.label}</p>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.warn ? 'var(--bad)' : f.active ? 'var(--good)' : 'var(--ink-4)' }} />
-                  <p className="text-sm mono truncate" style={{ color: 'var(--ink)' }}>{f.value}</p>
+                  <p className="truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{f.value}</p>
                 </div>
                 {f.sub && <p className="text-[11px] mono truncate mt-0.5" style={{ color: 'var(--ink-4)' }}>{f.sub}</p>}
                 {f.warn && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>Not found in discovered Pages — verify below</p>}
@@ -1062,7 +1193,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── AI Prompts ── */}
         <SectionCard>
-          <SectionHeader icon={ShieldCheck} iconBg="var(--muted)" iconColor="var(--ink-3)" title="AI Agent Prompts" subtitle="Force-regenerate all system prompts from current company data" />
+          <SectionHeader icon={ShieldCheck} iconBg="var(--muted)" iconColor="var(--ink-3)" category="Safety & automation" title="AI context versions" subtitle="Refresh AI instructions from saved business data or restore an earlier version." />
           <div className="flex items-center gap-3">
             <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost">
               {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
@@ -1142,7 +1273,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Fix Caption Videos ── */}
         <SectionCard>
-          <SectionHeader icon={Sparkles} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Fix Caption Videos" subtitle="Re-fetch video creatives that are missing captions" />
+          <SectionHeader icon={Sparkles} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Maintenance" title="Repair missing video captions" subtitle="Re-fetch only video creatives whose captions are incomplete." />
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={handleFixCaptionVideos}
@@ -1166,5 +1297,6 @@ export default function SettingsPage({ params }: PageProps) {
 
       </div>
     </div>
+    </main>
   )
 }

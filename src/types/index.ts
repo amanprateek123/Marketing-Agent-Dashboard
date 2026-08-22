@@ -205,6 +205,14 @@ export interface IntelligenceDecision {
   reviewedBy?: string
   reviewedAt?: string
   rejectionReason?: string
+  /** Current backend review metadata; legacy aliases above remain for older snapshots. */
+  humanReviewedAt?: string
+  humanReviewedBy?: string
+  humanReviewNotes?: string
+  /** Present when an approved recommendation was applied to the live Meta object. */
+  executedAt?: string
+  /** Meta execution can fail after the human approval itself is recorded. */
+  executionError?: string
   createdAt: string
   updatedAt: string
 }
@@ -1365,6 +1373,12 @@ export interface Campaign {
   metaAdSets?: CampaignAdSet[]
   pendingActions?: PendingAction[]
   spend?: number
+  /** Persisted action value and its derivation — never reconstruct this from ROAS in the UI. */
+  revenue?: number
+  revenueBasis?: 'meta_action_value' | 'configured_conversion_value' | 'no_attributed_revenue' | 'unknown'
+  revenueAttributionSource?: 'custom_conversion' | 'custom_event' | 'standard_event' | 'app_event' | 'account_fallback' | 'unresolved' | 'unknown'
+  revenueAttributionActionTypes?: string[]
+  dataAsOf?: string
   impressions?: number
   clicks?: number
   conversions?: number
@@ -1464,3 +1478,6 @@ export * from './overview'
 
 // ── Custom brief: the external creative pipeline ───────────────────────────
 export * from './pipeline'
+
+// ── Conversational campaign planning ─────────────────────────────────────────
+export * from './campaign-copilot'

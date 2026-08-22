@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { Loader2, Activity, ShieldAlert, GitCompareArrows, Radar } from 'lucide-react'
+import {
+  AlertCircle,
+  Activity,
+  GitCompareArrows,
+  Radar,
+  RefreshCw,
+  ShieldAlert,
+} from 'lucide-react'
 import { formatRelativeTime } from '@/lib/utils'
 import { Term, GLOSSARY } from '@/components/plain/Term'
+import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
 import {
   getActionOutcomes,
   getRegretSummary,
@@ -44,7 +52,7 @@ function OutcomeChip({ label }: { label: string | null }) {
   const key = label ?? 'pending'
   return (
     <span className={`chip ${classes[key] ?? classes.pending}`}>
-      {key === 'pending' ? 'awaiting +72h' : key}
+      {key === 'pending' ? 'Awaiting 72h check' : key === 'improved' ? 'Observed improvement' : key === 'worsened' ? 'Observed decline' : key}
     </span>
   )
 }
@@ -83,11 +91,19 @@ export default function IntelligencePage({ params }: PageProps) {
   const [signals, setSignals] = useState<SignalAccuracy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [unavailableSections, setUnavailableSections] = useState<string[]>([])
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
+      setError(null)
+      setUnavailableSections([])
+      setOutcomes(null)
+      setRegret(null)
+      setEvals([])
+      setSignals(null)
       // Each section degrades independently — one failed endpoint must not
       // blank the whole intelligence view.
       const [o, r, e, s] = await Promise.allSettled([
@@ -101,6 +117,12 @@ export default function IntelligencePage({ params }: PageProps) {
       if (r.status === 'fulfilled') setRegret(r.value)
       if (e.status === 'fulfilled') setEvals(e.value)
       if (s.status === 'fulfilled') setSignals(s.value)
+      const unavailable: string[] = []
+      if (o.status === 'rejected') unavailable.push('Action outcomes')
+      if (r.status === 'rejected') unavailable.push('Safety calibration')
+      if (e.status === 'rejected') unavailable.push('Copy comparisons')
+      if (s.status === 'rejected') unavailable.push('Signal performance')
+      setUnavailableSections(unavailable)
       if ([o, r, e, s].every((x) => x.status === 'rejected')) {
         setError('Could not reach the intelligence endpoints — is the agent API running?')
       }
@@ -108,47 +130,147 @@ export default function IntelligencePage({ params }: PageProps) {
     }
     load()
     return () => { cancelled = true }
-  }, [tenantId])
+  }, [tenantId, reloadKey])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <p className="text-sm" style={{ color: 'var(--ink-2)' }}>Loading system intelligence...</p>
+      <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <IntelligenceCenterNav tenantId={tenantId} active="quality" />
+        <div role="status" aria-label="Loading decision quality">
+          <div className="skeleton h-4 w-36 rounded" />
+          <div className="skeleton mt-3 h-9 w-full max-w-xl rounded-lg" />
+          <div className="skeleton mt-3 h-4 w-full max-w-3xl rounded" />
+          <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="card p-4">
+                <div className="skeleton h-3 w-2/3 rounded" />
+                <div className="skeleton mt-3 h-7 w-1/3 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="skeleton mt-6 h-64 rounded-2xl" />
+          <span className="sr-only">Loading decision quality…</span>
         </div>
       </div>
     )
   }
 
+  const actionRows = outcomes?.trackRecord.byActionType ?? []
+  const improvedCount = actionRows.reduce((sum, row) => sum + row.improved, 0)
+  const worsenedCount = actionRows.reduce((sum, row) => sum + row.worsened, 0)
+  const neutralCount = actionRows.reduce((sum, row) => sum + row.neutral, 0)
+  const inconclusiveCount = actionRows.reduce((sum, row) => sum + row.inconclusive, 0)
+  const measuredCount = improvedCount + worsenedCount + neutralCount + inconclusiveCount
+  const directionalCount = improvedCount + worsenedCount
+  const observedImprovementRate = directionalCount > 0
+    ? Math.round((improvedCount / directionalCount) * 100)
+    : null
+  const guardrailCorrect = (regret?.byActionAndReason ?? []).reduce((sum, row) => sum + row.correct, 0)
+  const guardrailMissed = (regret?.byActionAndReason ?? []).reduce((sum, row) => sum + row.missed, 0)
+  const calibratedGuardrails = guardrailCorrect + guardrailMissed
+  const guardrailSupportRate = calibratedGuardrails > 0
+    ? Math.round((guardrailCorrect / calibratedGuardrails) * 100)
+    : null
+
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8 stagger">
+      <IntelligenceCenterNav tenantId={tenantId} active="quality" />
       {/* Header */}
-      <div className="mb-8">
-        <p className="micro-label mb-2">Agent report card</p>
-        <h1 className="page-title">Is the agent actually getting it right?</h1>
-        <p className="page-subtitle">
-          Every change the agent makes — or holds back from making — gets checked again a few days later.
-          This page is that scorecard: what it changed, what it refused to touch, and whether either call was correct.
-        </p>
+      <div className="mb-7 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <div>
+          <p className="micro-label mb-2">Intelligence center · Decision quality</p>
+          <h1 className="page-title">Know whether the intelligence is earning trust</h1>
+          <p className="page-subtitle max-w-3xl">
+            Follow executed actions into 72-hour outcome checks, calibrate safety blocks and compare learning versions.
+          </p>
+          <p className="mt-2 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
+            These are observed before-and-after checks—not proof that Meridian alone caused the change.
+          </p>
+        </div>
+        <button onClick={() => setReloadKey((key) => key + 1)} className="btn btn-ghost self-start lg:self-auto">
+          <RefreshCw size={14} /> Refresh scorecard
+        </button>
       </div>
 
       {error && (
-        <div className="rounded-xl p-4 mb-6 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
-          {error}
+        <div className="mb-6 flex flex-col gap-3 rounded-xl p-4 text-sm sm:flex-row sm:items-center" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
+          <AlertCircle size={16} className="shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setReloadKey((key) => key + 1)} className="btn btn-ghost shrink-0">
+            <RefreshCw size={14} /> Retry
+          </button>
         </div>
       )}
+
+      {!error && unavailableSections.length > 0 && (
+        <div
+          className="mb-6 flex items-start gap-3 rounded-xl p-4 text-sm"
+          role="status"
+          style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
+        >
+          <AlertCircle size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
+          <div>
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Some evidence is temporarily unavailable</p>
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+              Missing: {unavailableSections.join(', ')}. Other loaded sections remain available.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <section aria-label="Decision quality summary" className="mb-9 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          {
+            label: 'Executed actions',
+            value: outcomes?.trackRecord.total ?? 0,
+            hint: 'Recorded as sent or applied',
+            tone: 'var(--ink)',
+          },
+          {
+            label: 'Outcome checks',
+            value: measuredCount,
+            hint: `${inconclusiveCount} inconclusive`,
+            tone: 'var(--ink)',
+          },
+          {
+            label: 'Observed improvement',
+            value: observedImprovementRate === null ? '—' : `${observedImprovementRate}%`,
+            hint: 'Improved ÷ improved + worsened',
+            tone: observedImprovementRate === null
+              ? 'var(--ink-3)'
+              : observedImprovementRate >= 50
+                ? 'var(--good)'
+                : observedImprovementRate >= 1
+                  ? 'var(--warn)'
+                  : 'var(--bad)',
+          },
+          {
+            label: 'Safety calls supported',
+            value: guardrailSupportRate === null ? '—' : `${guardrailSupportRate}%`,
+            hint: 'Excludes inconclusive checks',
+            tone: guardrailSupportRate === null ? 'var(--ink-3)' : 'var(--accent-strong)',
+          },
+        ].map((metric) => (
+          <div key={metric.label} className="card p-4 sm:p-5">
+            <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>{metric.label}</p>
+            <p className="mt-1.5 text-[28px] font-bold leading-none tabular-nums" style={{ color: metric.tone }}>
+              {metric.value}
+            </p>
+            <p className="mt-2 text-[10.5px] leading-snug" style={{ color: 'var(--ink-3)' }}>{metric.hint}</p>
+          </div>
+        ))}
+      </section>
 
       {/* ===== 1. ACTION TRACK RECORD ===== */}
       <div className="mb-10">
         <SectionHeader
           icon={Activity}
           color="var(--good)"
-          title="Changes the agent made"
-          hint="Every change gets checked again 3 days later — did it actually move things in the right direction, or not?"
+          title="Executed actions and 72-hour proxy checks"
+          hint="CPA or CTR is checked after execution because objective-specific KPI context is not yet stored on these records. The comparison is observational and does not establish incrementality."
         />
         {!outcomes || (outcomes.trackRecord.total === 0 && outcomes.recent.length === 0) ? (
-          <EmptyState message="Nothing here yet — once the agent makes its first change, you'll see how it turned out about 3 days later." />
+          <EmptyState message="No executed actions have completed a 72-hour outcome check yet." />
         ) : (
           <div className="flex flex-col gap-4">
             {outcomes.trackRecord.byActionType.length > 0 && (
@@ -157,12 +279,12 @@ export default function IntelligencePage({ params }: PageProps) {
                   <thead>
                     <tr>
                       <th>Action type</th>
-                      <th className="num">Executed</th>
-                      <th className="num">Improved</th>
-                      <th className="num">Worsened</th>
+                      <th className="num">Checked</th>
+                      <th className="num">Proxy improved</th>
+                      <th className="num">Proxy declined</th>
                       <th className="num">Neutral</th>
                       <th className="num">Inconclusive</th>
-                      <th className="num">Worsened rate</th>
+                      <th className="num">Proxy decline rate</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -186,7 +308,10 @@ export default function IntelligencePage({ params }: PageProps) {
 
             {outcomes.recent.length > 0 && (
               <div className="card overflow-x-auto">
-                <p className="micro-label px-4 pt-3 pb-1">Recent actions</p>
+                <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-1">
+                  <p className="micro-label">Recent execution log</p>
+                  <span className="chip chip-info">Measured separately</span>
+                </div>
                 <table className="data-table">
                   <tbody>
                     {outcomes.recent.slice(0, 12).map((a, i) => (
@@ -211,22 +336,23 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={ShieldAlert}
           color="var(--warn)"
-          title="Changes the agent held back from making"
-          hint="The safety system sometimes stops the agent from acting, just to be cautious. This checks each block 3 days later — was holding back the right call, or should it have gone ahead? A high 'missed it' rate means the safety checks are being too cautious."
+          title="Safety calibration"
+          hint="Meridian revisits blocked actions after 72 hours. A high miss rate suggests a guardrail may be too conservative; counterfactual labels remain model-based."
         />
         {!regret || regret.total === 0 ? (
-          <EmptyState message="Nothing to show yet — this fills in once the safety system has blocked a few actions and had 3 days to see how they would have played out." />
+          <EmptyState message="No blocked action has enough follow-up evidence for safety calibration yet." />
         ) : (
           <div className="card overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Change type</th>
-                  <th>Why it held back</th>
-                  <th className="num">Times held back</th>
-                  <th className="num">Right to wait</th>
-                  <th className="num">Should&rsquo;ve acted</th>
-                  <th className="num">Miss rate</th>
+                  <th>Proposed action</th>
+                  <th>Guardrail reason</th>
+                  <th className="num">Evaluated blocks</th>
+                  <th className="num">Block supported</th>
+                  <th className="num">Possible miss</th>
+                  <th className="num">Inconclusive</th>
+                  <th className="num">Modeled miss rate · all evaluated</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,6 +363,7 @@ export default function IntelligencePage({ params }: PageProps) {
                     <td className="num mono">{r.total}</td>
                     <td className="num mono" style={{ color: 'var(--good)' }}>{r.correct}</td>
                     <td className="num mono" style={{ color: r.missed > 0 ? 'var(--bad)' : 'var(--ink-4)' }}>{r.missed}</td>
+                    <td className="num mono" style={{ color: 'var(--ink-3)' }}>{r.inconclusive}</td>
                     <td className="num mono font-bold" style={{ color: r.regretRatePct >= 40 ? 'var(--bad)' : r.regretRatePct >= 20 ? 'var(--warn)' : 'var(--good)' }}>
                       {r.regretRatePct.toFixed(0)}%
                     </td>
@@ -253,11 +380,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={GitCompareArrows}
           color="var(--accent)"
-          title="Upgrades to how the agent writes ads"
-          hint="Roughly every 30 days the agent updates its own instructions for writing ad copy, based on what's worked. Each update is graded here: did campaigns written under the new instructions actually out-earn the old ones?"
+          title="Legacy campaign version comparisons"
+          hint="This legacy diagnostic mixes campaign objectives and stored return bases. Treat its return-ratio comparison as directional only, not sales-performance proof."
         />
         {evals.length === 0 ? (
-          <EmptyState message="No comparisons yet — the first one runs after the agent's next monthly self-review, once two versions of its instructions have real campaign data to compare." />
+          <EmptyState message="No instruction versions have enough legacy campaign records to compare yet." />
         ) : (
           <div className="flex flex-col gap-3">
             {evals.map((e, i) => {
@@ -272,14 +399,14 @@ export default function IntelligencePage({ params }: PageProps) {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold mono tabular-nums" style={{ color: 'var(--ink)' }}>
-                        Version {e.newerVersion} <span style={{ color: 'var(--ink-3)' }}>vs</span> Version {e.olderVersion}
+                        Version {e.newerVersion} <span style={{ color: 'var(--ink-3)' }}>vs</span> version {e.olderVersion}
                       </span>
                       <span className={`chip uppercase ${verdictClass[e.verdict]}`}>
                         {e.verdict}
                       </span>
                     </div>
                     <span className="text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
-                      <Term help={GLOSSARY.roas}>{`${e.newer.weightedROAS.toFixed(2)}x`}</Term> <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
+                      <Term help={GLOSSARY.roas}>{`${e.newer.weightedROAS.toFixed(2)}x stored return-ratio proxy`}</Term> <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
                       <span className="ml-2" style={{ color: 'var(--ink-3)' }}>
                         ({e.newer.campaigns}/{e.older.campaigns} campaigns)
                       </span>
@@ -298,11 +425,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={Radar}
           color="var(--info)"
-          title="Where the agent's best ad ideas come from"
-          hint="The agent pulls ad ideas from a few different sources and platforms. This shows which ones actually turn into ads that sell, based on the last 90 days."
+          title="Legacy signal follow-up"
+          hint="This legacy view includes all brief objectives, counts any recorded conversion as a result, and uses an arithmetic mean of stored ROAS. It is not purchase or revenue proof."
         />
         {!signals || signals.briefsWithOutcomes === 0 ? (
-          <EmptyState message="Not enough data yet — this fills in once ad ideas the agent has launched have had about a week to show results." />
+          <EmptyState message="No launched briefs have enough legacy follow-up data yet." />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {([
@@ -316,8 +443,8 @@ export default function IntelligencePage({ params }: PageProps) {
                     <tr>
                       <th>Source</th>
                       <th className="num">Launched</th>
-                      <th className="num">Sold something</th>
-                      <th className="num"><Term help={GLOSSARY.roas}>Avg ROAS</Term></th>
+                      <th className="num">Recorded result &gt; 0</th>
+                      <th className="num"><Term help={GLOSSARY.roas}>Mean stored ROAS proxy</Term></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -326,7 +453,7 @@ export default function IntelligencePage({ params }: PageProps) {
                         <td className="font-medium capitalize" style={{ color: 'var(--ink)' }}>{r.label.replace(/_/g, ' ')}</td>
                         <td className="num mono">{r.launched}</td>
                         <td className="num mono">{r.converted}</td>
-                        <td className="num mono font-bold" style={{ color: r.avgROAS >= 1.5 ? 'var(--good)' : r.avgROAS >= 1 ? 'var(--warn)' : 'var(--bad)' }}>
+                        <td className="num mono font-bold" style={{ color: 'var(--ink-2)' }}>
                           {r.avgROAS.toFixed(2)}x
                         </td>
                       </tr>

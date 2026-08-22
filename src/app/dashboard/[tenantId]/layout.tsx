@@ -9,9 +9,12 @@ export default async function DashboardLayout({ children, params }: DashboardLay
   const { tenantId } = await params
 
   return (
-    <div className="flex min-h-screen" style={{ background: 'var(--paper)' }}>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <Sidebar tenantId={tenantId} />
-      <main className="flex-1 overflow-auto min-w-0">
+      <main className="app-shell-main" id="main-content">
         {children}
       </main>
     </div>

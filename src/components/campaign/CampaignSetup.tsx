@@ -6,6 +6,14 @@ import { getCampaignReview } from '@/lib/api'
 import { formatCurrency, formatRelativeTime } from '@/lib/utils'
 import type { Campaign, CampaignLaunchReview } from '@/types'
 
+interface SetupMetric {
+  k: string
+  v: string
+  sub?: string
+  mono?: boolean
+  bad?: boolean
+}
+
 /**
  * How a LIVE campaign is actually set up.
  *
@@ -24,9 +32,9 @@ import type { Campaign, CampaignLaunchReview } from '@/types'
  *     lags (~10 min), so it's labelled with its sync time rather than
  *     presented as live.
  *
- * The bid-vs-breakeven check earns its place: on 2026-07-27 an ad set shipped
- * with a ₹1,400 cost cap against an ₹1,100 breakeven — Meta authorised to buy
- * every sale at a ₹300 loss. Nothing surfaced it. Now it's a red row.
+ * The bid-vs-configured-value check surfaces when Meta can pay more for a sale
+ * than the stored net conversion value times contribution margin. It is a
+ * configuration warning, not a realized-profit claim.
  */
 
 export function CampaignSetup({
@@ -48,12 +56,12 @@ export function CampaignSetup({
   }, [tenantId, campaign._id])
 
   const product = review?.product
-  const adSet = (campaign.metaAdSets ?? [])[0] as Record<string, any> | undefined
-  const td = (adSet?.targetingDetail ?? {}) as Record<string, any>
+  const adSet = campaign.metaAdSets?.[0]
+  const td = adSet?.targetingDetail ?? {}
 
-  // Meta stores the cap in rupees on our synced copy. Breakeven is what one
-  // conversion is actually worth after margin — paying more than that per sale
-  // loses money on every single one, however good the CTR looks.
+  // Meta stores the cap in rupees on our synced copy. This compares that cap
+  // with the configured net conversion value after the stored margin. It is a
+  // planning estimate and stays separate from founder-facing raw ROAS proof.
   const bidCap = typeof adSet?.bidAmount === 'number' ? adSet.bidAmount : null
   const breakevenCPA = product
     ? product.conversionValueNet * (product.contributionMargin ?? 1)
@@ -67,6 +75,49 @@ export function CampaignSetup({
   ]
   const excluded = (td.excludedCustomAudiences ?? []) as Array<{ id: string; name: string }>
   const attribution = (adSet?.attributionSpec ?? []) as Array<{ event_type: string; window_days: number }>
+  const setupMetrics: Array<SetupMetric | null> = [
+    product
+      ? {
+          k: product.conversionTracking.type === 'custom_conversion' ? 'Buying this conversion'
+            : product.conversionTracking.type === 'custom_event' ? 'Custom event'
+              : product.conversionTracking.type === 'app_event' ? 'App event' : 'Conversion event',
+          v: product.conversionTracking.type === 'custom_conversion' ? product.conversionTracking.id
+            : product.conversionTracking.type === 'custom_event' ? product.conversionTracking.name
+              : product.conversionTracking.event,
+          mono: true,
+        }
+      : null,
+    product
+      ? product.conversionTracking.type === 'app_event'
+        ? { k: 'Meta App ID', v: product.applicationId || '—', sub: 'native app, not a website pixel', mono: true }
+        : { k: 'Meta Pixel', v: product.pixelId || '—', sub: product.pixelSource === 'product' ? 'from this product' : 'company default', mono: true }
+      : null,
+    product
+      ? { k: 'Worth per sale', v: formatCurrency(product.conversionValueNet), sub: product.refundRatePercent ? `after ${product.refundRatePercent}% refunds` : 'no refunds expected' }
+      : null,
+    breakevenCPA != null
+      ? { k: 'Configured value limit', v: formatCurrency(Math.round(breakevenCPA)) + ' / sale', sub: 'Net configured value × contribution margin' }
+      : null,
+    bidCap != null
+      ? {
+          k: 'Max Meta will pay',
+          v: formatCurrency(bidCap),
+          sub: adSet?.bidStrategy === 'COST_CAP' ? 'cost cap' : (adSet?.bidStrategy ?? '').toLowerCase().replace(/_/g, ' '),
+          bad: bidOverBreakeven,
+        }
+      : null,
+    adSet?.bidStrategy === 'LOWEST_COST_WITHOUT_CAP'
+      ? { k: 'Bidding', v: 'No cap', sub: 'Meta spends freely' }
+      : null,
+    { k: 'Daily budget', v: formatCurrency(campaign.budget ?? 0), sub: campaign.budgetModel ? campaign.budgetModel.toUpperCase() : undefined },
+    attribution.length > 0
+      ? {
+          k: 'Attribution',
+          v: attribution.map((a) => `${a.window_days}d ${a.event_type === 'CLICK_THROUGH' ? 'click' : 'view'}`).join(' · '),
+        }
+      : null,
+  ]
+  const visibleSetupMetrics = setupMetrics.filter((cell): cell is SetupMetric => cell !== null)
 
   if (failed) return null
 
@@ -83,7 +134,7 @@ export function CampaignSetup({
         )}
       </div>
 
-      {/* ── Money at risk first: a cap above breakeven loses on every sale ── */}
+      {/* A configuration guard, not a realized-profit verdict. */}
       {bidOverBreakeven && (
         <div
           className="rounded-lg px-4 py-3 flex items-start gap-2.5"
@@ -92,13 +143,13 @@ export function CampaignSetup({
           <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--bad)' }} />
           <div>
             <p className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>
-              This is set to buy sales at a loss
+              Cost cap exceeds the configured value limit
             </p>
             <p className="text-[13px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
-              Meta is allowed to pay up to {formatCurrency(bidCap!)} for one sale, but a sale is only
-              worth {formatCurrency(Math.round(breakevenCPA!))} to you. That&apos;s{' '}
-              {formatCurrency(Math.round(bidCap! - breakevenCPA!))} lost on every conversion at the
-              cap. Lower the cost cap, or raise the price/margin on {product?.name}.
+              Meta may pay up to {formatCurrency(bidCap!)} for one sale, while the configured net
+              value after margin is {formatCurrency(Math.round(breakevenCPA!))}. The cap is{' '}
+              {formatCurrency(Math.round(bidCap! - breakevenCPA!))} higher than that planning
+              estimate. Verify the product inputs, then lower the cap or revise {product?.name}.
             </p>
           </div>
         </div>
@@ -150,36 +201,7 @@ export function CampaignSetup({
         className="grid gap-px rounded-lg overflow-hidden"
         style={{ background: 'var(--hairline-light)', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
       >
-        {[
-          product && {
-            k: product.conversionTracking.type === 'custom_conversion' ? 'Buying this conversion'
-              : product.conversionTracking.type === 'custom_event' ? 'Custom event'
-                : product.conversionTracking.type === 'app_event' ? 'App event' : 'Conversion event',
-            v: product.conversionTracking.type === 'custom_conversion' ? product.conversionTracking.id
-              : product.conversionTracking.type === 'custom_event' ? product.conversionTracking.name
-                : product.conversionTracking.event,
-            mono: true,
-          },
-          product && (
-            product.conversionTracking.type === 'app_event'
-              ? { k: 'Meta App ID', v: product.applicationId || '—', sub: 'native app, not a website pixel', mono: true }
-              : { k: 'Meta Pixel', v: product.pixelId || '—', sub: product.pixelSource === 'product' ? 'from this product' : 'company default', mono: true }
-          ),
-          product && { k: 'Worth per sale', v: formatCurrency(product.conversionValueNet), sub: product.refundRatePercent ? `after ${product.refundRatePercent}% refunds` : 'no refunds expected' },
-          breakevenCPA != null && { k: 'Break even at', v: formatCurrency(Math.round(breakevenCPA)) + ' / sale', sub: `ROAS ${product?.breakevenROAS?.toFixed(2) ?? '—'}x` },
-          bidCap != null && {
-            k: 'Max Meta will pay',
-            v: formatCurrency(bidCap),
-            sub: adSet?.bidStrategy === 'COST_CAP' ? 'cost cap' : (adSet?.bidStrategy ?? '').toLowerCase().replace(/_/g, ' '),
-            bad: bidOverBreakeven,
-          },
-          adSet?.bidStrategy === 'LOWEST_COST_WITHOUT_CAP' && { k: 'Bidding', v: 'No cap', sub: 'Meta spends freely' },
-          { k: 'Daily budget', v: formatCurrency(campaign.budget ?? 0), sub: campaign.budgetModel ? campaign.budgetModel.toUpperCase() : undefined },
-          attribution.length > 0 && {
-            k: 'Attribution',
-            v: attribution.map((a) => `${a.window_days}d ${a.event_type === 'CLICK_THROUGH' ? 'click' : 'view'}`).join(' · '),
-          },
-        ].filter(Boolean).map((cell: any) => (
+        {visibleSetupMetrics.map((cell) => (
           <div key={cell.k} className="px-4 py-3" style={{ background: 'var(--surface)' }}>
             <p className="micro-label">{cell.k}</p>
             <p

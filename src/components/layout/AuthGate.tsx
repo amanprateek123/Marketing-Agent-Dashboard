@@ -2,41 +2,59 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { LockKeyhole } from 'lucide-react'
+import { MeridianMark } from '@/components/ui/MeridianMark'
 import { getToken } from '@/lib/auth'
 import { installAuthFetchInterceptor } from '@/lib/auth-fetch'
+import styles from './AuthGate.module.css'
 
 /**
- * Mounted once in the root layout, wrapping the whole app. Installs the
- * auth fetch interceptor and gates every route except /login behind having
- * a token in localStorage. This is a presence check only, not a validity
- * check — an expired/forged token still renders the page, but the first
- * API call it makes will 401 and the interceptor bounces to /login from
- * there. Good enough for a single-operator dashboard; not a substitute for
- * the backend's own verification, which is what actually enforces this.
+ * Installs the authenticated-fetch behavior and performs the browser-only
+ * token-presence gate. The backend remains the authority for token validity.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [checked, setChecked] = useState(false)
+  const [checked, setChecked] = useState(pathname === '/login')
 
   useEffect(() => {
     installAuthFetchInterceptor()
 
-    // Genuinely can't be computed at render time: localStorage doesn't
-    // exist during SSR, so whether we're authorized is unknowable until
-    // after mount. This is the actual auth check, not a value mirrored
-    // from props/state that a memo could replace.
     if (pathname === '/login') {
       setChecked(true) // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    if (!getToken()) {
+
+    try {
+      if (!getToken()) {
+        router.replace('/login')
+        return
+      }
+    } catch {
       router.replace('/login')
       return
     }
+
     setChecked(true)
   }, [pathname, router])
 
-  if (!checked) return null
+  if (!checked) {
+    return (
+      <div className={styles.shell}>
+        <div className={styles.panel} role="status" aria-live="polite" aria-label="Verifying workspace access">
+          <MeridianMark compact />
+          <div className={styles.indicator} aria-hidden="true">
+            <LockKeyhole size={20} />
+          </div>
+          <p className="text-[15px] font-bold" style={{ color: 'var(--ink)' }}>Securing your workspace</p>
+          <p className="mx-auto mt-2 max-w-[290px] text-xs leading-5" style={{ color: 'var(--ink-3)' }}>
+            Verifying operator access before loading business and campaign data.
+          </p>
+          <div className={styles.progress} aria-hidden="true" />
+        </div>
+      </div>
+    )
+  }
+
   return <>{children}</>
 }

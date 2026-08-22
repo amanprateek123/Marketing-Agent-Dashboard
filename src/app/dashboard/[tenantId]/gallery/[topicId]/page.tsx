@@ -300,13 +300,13 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
       <Link href={`/dashboard/${tenantId}/gallery`} className="flex items-center gap-1.5 text-[13px] font-medium mb-4" style={{ color: 'var(--ink-3)' }}>
-        <ArrowLeft size={14} /> Gallery
+        <ArrowLeft size={14} /> Asset gallery
       </Link>
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div className="flex-1 min-w-0">
-          <p className="micro-label mb-2">Topic</p>
+          <p className="micro-label mb-2">Reusable creative collection</p>
           {renamingTopic ? (
             <div className="flex items-center gap-2">
               <input
@@ -326,12 +326,15 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="page-title">{topic?.name ?? 'Untitled topic'}</h1>
-              <button onClick={startRenameTopic} className="p-1.5 rounded-md" style={{ color: 'var(--ink-3)' }}>
-                <Pencil size={14} />
-              </button>
-            </div>
+            <>
+              <div className="flex items-center gap-2">
+                <h1 className="page-title">{topic?.name ?? 'Untitled topic'}</h1>
+                <button onClick={startRenameTopic} className="p-1.5 rounded-md" style={{ color: 'var(--ink-3)' }} aria-label="Rename topic">
+                  <Pencil size={14} />
+                </button>
+              </div>
+              <p className="page-subtitle">Organize approved messages and media into campaign-ready sheets.</p>
+            </>
           )}
         </div>
         <button onClick={() => setPendingConfirm({ type: 'deleteTopic' })} className="btn btn-ghost" style={{ fontSize: '12px', color: 'var(--bad)' }}>

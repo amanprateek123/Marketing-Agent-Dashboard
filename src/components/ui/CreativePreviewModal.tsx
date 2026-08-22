@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import Link from 'next/link'
 import { X, Image as ImageIcon, Video as VideoIcon, ExternalLink, Loader2 } from 'lucide-react'
 
@@ -41,24 +41,74 @@ export function CreativePreviewModal({
   packageId,
   loading = false,
 }: CreativePreviewModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const onCloseRef = useRef(onClose)
+  const titleId = useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    const focusTimer = window.setTimeout(() => closeRef.current?.focus(), 80)
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], video[controls], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      )
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (!first || !last) return
+
+      if (!dialogRef.current?.contains(document.activeElement)) {
+        e.preventDefault()
+        first.focus()
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+    return () => {
+      window.clearTimeout(focusTimer)
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handler)
+      previouslyFocused?.focus()
+    }
+  }, [open])
 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" data-portal>
       <div
         className="absolute inset-0"
         style={{ background: 'rgba(28,25,23,0.5)', backdropFilter: 'blur(8px)', animation: 'backdropIn 0.15s ease' }}
-        onClick={onClose}
+        onClick={() => onCloseRef.current()}
+        aria-hidden="true"
       />
 
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="relative w-full max-w-2xl mx-4 overflow-hidden animate-scale-in"
         style={{
           background: 'var(--surface)',
@@ -70,8 +120,14 @@ export function CreativePreviewModal({
           flexDirection: 'column',
         }}
       >
+        <h2 id={titleId} className="sr-only">
+          {headline ? `Creative preview: ${headline}` : `${mediaType === 'video' ? 'Video' : 'Image'} creative preview`}
+        </h2>
         <button
-          onClick={onClose}
+          ref={closeRef}
+          type="button"
+          onClick={() => onCloseRef.current()}
+          aria-label="Close creative preview"
           className="absolute top-3 right-3 p-1.5 rounded-lg z-10"
           style={{ background: 'rgba(255,255,255,0.85)', color: 'var(--ink-2)' }}
         >

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle2, Plus, Trash2,
   Target, Zap, Info, Image as ImageIcon, Video as VideoIcon, X,
-  ChevronUp, ChevronDown,
+  ChevronUp, ChevronDown, Sparkles,
 } from 'lucide-react'
 import { getCompany, getCampaign, getCreativePackage, getMetaAccounts, getMetaAccountAudiences, getMetaLocales, searchMetaInterests, searchMetaGeo, resolveMetaGeo, createManualCampaign, updateManualCampaignConfig, listCreativePackages, listGalleryTopics, listGallerySheets, listGalleryAssets } from '@/lib/api'
 import type { GalleryTopicSummary, GallerySheetSummary } from '@/lib/api'
@@ -463,17 +463,32 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   if (loading || editLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} /></div>
 
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto stagger pb-20">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1440px] mx-auto stagger pb-20">
       <Link href={isEditMode ? `/dashboard/${tenantId}/campaigns/${editCampaignId}` : `/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5" style={{ color: 'var(--ink-3)' }}>
         <ArrowLeft size={14} /> {isEditMode ? 'Back to campaign' : 'Campaigns'}
       </Link>
-      <p className="micro-label mb-2">{isEditMode ? 'Editing pending campaign' : 'New campaign'}</p>
-      <h1 className="page-title mb-1">{isEditMode ? 'Edit Campaign' : 'Create Campaign'}</h1>
+      <p className="micro-label mb-2">{isEditMode ? 'Editing pending campaign' : 'Manual campaign builder'}</p>
+      <h1 className="page-title mb-1">{isEditMode ? 'Edit campaign' : 'Build with full control'}</h1>
       <p className="page-subtitle mb-6">
         {isEditMode
           ? 'Changes save directly to this pending campaign — no need to delete and recreate it. Still requires Approve & Launch to go live.'
-          : 'Launch directly to Meta with targeting you control — skips the AI review team entirely.'}
+          : 'Configure the product, goal, audience, budget and creative yourself. The campaign stays safely in Approval until you choose to launch it.'}
       </p>
+
+      {!isEditMode && (
+        <div className="card mb-6 flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
+            <Sparkles size={17} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Want Meridian to build the strategy?</p>
+            <p className="explain mt-0.5">Describe the outcome in plain English and Copilot will recommend the budget, audience, creative and measurement plan.</p>
+          </div>
+          <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent">
+            Plan with Copilot
+          </Link>
+        </div>
+      )}
 
       {!isEditMode && (
         <div className="mb-6">
@@ -780,7 +795,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
             className="btn btn-primary w-full justify-center py-3"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-            {submitting ? (isEditMode ? 'Saving…' : 'Creating…') : isEditMode ? 'Save changes' : 'Create Campaign — sends to Approval'}
+            {submitting ? (isEditMode ? 'Saving…' : 'Preparing…') : isEditMode ? 'Save changes' : 'Send campaign to Approval'}
           </button>
           <p className="text-[11px] text-center" style={{ color: 'var(--ink-4)' }}>
             {isEditMode

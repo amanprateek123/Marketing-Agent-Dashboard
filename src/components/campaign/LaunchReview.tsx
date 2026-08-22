@@ -82,6 +82,20 @@ const AUDIENCE_LABEL: Record<string, string> = {
   custom: 'Custom audience',
 }
 
+const OBJECTIVE_LABEL: Record<string, string> = {
+  OUTCOME_SALES: 'Sales · purchases',
+  OUTCOME_AWARENESS: 'Awareness · reach',
+  OUTCOME_TRAFFIC: 'Website traffic',
+  OUTCOME_LEADS: 'Lead generation',
+  OUTCOME_ENGAGEMENT: 'Engagement',
+  OUTCOME_APP_PROMOTION: 'App growth',
+}
+
+function objectiveLabel(value: string): string {
+  return OBJECTIVE_LABEL[value]
+    ?? value.replace(/^OUTCOME_/, '').replace(/_/g, ' ').toLowerCase()
+}
+
 /** How sure are we this is the right product? 'campaign' = the operator said so. */
 const RESOLVED_VIA: Record<string, { chip: string; label: string }> = {
   campaign: { chip: 'chip-good', label: 'Chosen for this campaign' },
@@ -136,9 +150,21 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
 
   if (loading) {
     return (
-      <div className="card-inset p-4 flex items-center gap-2.5" style={{ color: 'var(--ink-3)' }}>
-        <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)' }} />
-        <span className="text-sm">Checking what this will do…</span>
+      <div className="card-inset p-4" aria-live="polite">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }}
+          >
+            <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Running launch safety checks</p>
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+              Verifying destination, tracking, creative, audience and spend limits…
+            </p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -150,10 +176,12 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
         style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn)' }}
       >
         <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-        <span>
-          Couldn&apos;t check this campaign before launch — {error}. Approving is still possible, but
-          you won&apos;t see where the ads point until they&apos;re live.
-        </span>
+        <div>
+          <p className="font-semibold">The launch preview is temporarily unavailable</p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
+            {error}. The launch service will still repeat every safety check before creating anything on Meta.
+          </p>
+        </div>
       </div>
     )
   }
@@ -164,22 +192,34 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
     <div className="space-y-3">
       {/* ── Verdict ───────────────────────────────────────────────────── */}
       <div
-        className="rounded-lg px-4 py-3 flex items-start gap-2.5 text-sm font-semibold"
+        className="rounded-xl px-4 py-3.5 flex items-start justify-between gap-3 text-sm"
         style={
           review.ready
             ? { background: 'var(--good-bg)', border: '1px solid var(--good-border)', color: 'var(--good)' }
             : { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }
         }
       >
-        {review.ready ? (
-          <Check size={15} className="shrink-0 mt-0.5" />
-        ) : (
-          <Ban size={15} className="shrink-0 mt-0.5" />
-        )}
-        <span>
-          {review.ready
-            ? 'Ready to launch — we checked the landing page, tracking and creative.'
-            : `Can't launch yet — ${blockers.length} thing${blockers.length === 1 ? '' : 's'} to fix first.`}
+        <div className="flex items-start gap-2.5">
+          {review.ready ? (
+            <Check size={16} className="shrink-0 mt-0.5" />
+          ) : (
+            <Ban size={16} className="shrink-0 mt-0.5" />
+          )}
+          <div>
+            <p className="font-semibold">
+              {review.ready
+                ? 'Launch safety checks passed'
+                : `${blockers.length} launch blocker${blockers.length === 1 ? '' : 's'} must be resolved`}
+            </p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
+              {review.ready
+                ? 'Destination, tracking, creative and campaign limits are ready for your final decision.'
+                : 'Meridian will not send this campaign to Meta while a required check is failing.'}
+            </p>
+          </div>
+        </div>
+        <span className={`chip ${review.ready ? 'chip-good' : 'chip-bad'} shrink-0`}>
+          {review.ready ? 'Safe to approve' : 'Launch blocked'}
         </span>
       </div>
 
@@ -192,9 +232,14 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
           className="px-4 py-3"
           style={{ borderBottom: '1px solid var(--hairline-light)' }}
         >
-          <p className="micro-label flex items-center gap-1.5 mb-2">
-            <Link2 size={11} /> Where this ad sends people
-          </p>
+          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+            <p className="micro-label flex items-center gap-1.5">
+              <Link2 size={11} /> Product and destination
+            </p>
+            <span className="text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
+              The exact page customers will reach
+            </span>
+          </div>
 
           {product ? (
             <>
@@ -224,7 +269,7 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
                 <ArrowUpRight size={13} className="shrink-0" style={{ color: 'var(--ink-3)' }} />
               </a>
               <p className="explain mt-2">
-                Every ad in this campaign lands here. Tracking tags are added automatically per ad.
+                Every ad in this campaign lands here. Meridian adds the correct tracking tags automatically.
               </p>
             </>
           ) : (
@@ -332,7 +377,7 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
       {adSets.length > 0 && (
         <div className="space-y-2">
           <p className="micro-label flex items-center gap-1.5">
-            <Target size={11} /> Who this reaches ({adSets.length} ad group
+            <Target size={11} /> Audience and delivery plan ({adSets.length} ad group
             {adSets.length === 1 ? '' : 's'} · {formatCurrency(campaign.dailyBudget)} a day total)
           </p>
           {adSets.map((a, i) => (
@@ -343,7 +388,10 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
 
       {/* ── What Meta receives ────────────────────────────────────────── */}
       <div className="card-inset px-4 py-3">
-        <p className="micro-label mb-2">What gets created on Meta</p>
+        <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+          <p className="micro-label">Final Meta launch summary</p>
+          <span className="chip chip-neutral">Created paused, then activated safely</span>
+        </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px]" style={{ color: 'var(--ink-2)' }}>
           <span className="min-w-0">
             <span className="micro-label mr-1.5">Campaign name</span>
@@ -353,7 +401,7 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
           </span>
           <span>
             <span className="micro-label mr-1.5">Objective</span>
-            <span className="capitalize">{campaign.objective.replace(/_/g, ' ').toLowerCase()}</span>
+            <span className="capitalize">{objectiveLabel(campaign.objective)}</span>
           </span>
           <span>
             <span className="micro-label mr-1.5">Projected 7 days</span>
@@ -379,6 +427,9 @@ function IssueRow({
     tone === 'bad'
       ? { bg: 'var(--bad-bg)', border: 'var(--bad-border)', fg: 'var(--bad)' }
       : { bg: 'var(--warn-bg)', border: 'var(--warn-border)', fg: 'var(--warn)' }
+  const friendlyFix = issue.fix?.trim().toLowerCase().startsWith('curl ')
+    ? 'Update the required value in Products or Settings, then refresh this launch review.'
+    : issue.fix
 
   return (
     <div
@@ -397,12 +448,18 @@ function IssueRow({
         <p className="text-[13px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
           {issue.message}
         </p>
-        {issue.fix && !hideFix && (
+        {friendlyFix && !hideFix && (
           <p
-            className="mono text-[11px] mt-2 px-2.5 py-2 rounded whitespace-pre-wrap"
-            style={{ background: 'var(--surface)', color: 'var(--ink-3)', overflowX: 'auto' }}
+            className="text-[11px] mt-2 px-2.5 py-2 rounded whitespace-pre-wrap"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--hairline-light)',
+              color: 'var(--ink-3)',
+              overflowX: 'auto',
+            }}
           >
-            {issue.fix}
+            <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>How to fix: </span>
+            {friendlyFix}
           </p>
         )}
       </div>
@@ -461,7 +518,7 @@ function AdSetRow({ adSet, showSplit }: { adSet: LaunchReviewAdSet; showSplit: b
             </span>
           </span>
           {showSplit && <span className="chip chip-neutral">{adSet.budgetPercent}%</span>}
-          <span className="chip chip-accent">
+          <span className="chip chip-accent" title="Audience approach selected for this ad group">
             {AUDIENCE_LABEL[adSet.audienceType] ?? adSet.audienceType}
           </span>
         </div>

@@ -47,43 +47,64 @@ export function ExistingCreativePicker({ tenantId, onPick }: { tenantId: string;
   }, [tenantId])
 
   useEffect(() => {
-    if (!selectedTopicId) { setSheets([]); return }
     let cancelled = false
-    setSheetsLoading(true)
-    listGallerySheets(tenantId, selectedTopicId).then((list) => {
-      if (cancelled) return
-      setSheets(list)
-      setSelectedSheetId(list[0]?._id ?? '')
-    }).finally(() => { if (!cancelled) setSheetsLoading(false) })
+    async function loadSheets() {
+      if (!selectedTopicId) {
+        if (!cancelled) {
+          setSheets([])
+          setSelectedSheetId('')
+        }
+        return
+      }
+      setSheetsLoading(true)
+      try {
+        const list = await listGallerySheets(tenantId, selectedTopicId)
+        if (cancelled) return
+        setSheets(list)
+        setSelectedSheetId(list[0]?._id ?? '')
+      } finally {
+        if (!cancelled) setSheetsLoading(false)
+      }
+    }
+    void loadSheets()
     return () => { cancelled = true }
   }, [tenantId, selectedTopicId])
 
   useEffect(() => {
-    if (!selectedSheetId) { setAssets([]); return }
     let cancelled = false
-    setAssetsLoading(true)
-    listGalleryAssets(tenantId, selectedSheetId).then(async (rawAssets) => {
-      if (cancelled) return
-      const pickable = rawAssets.filter((a) => a.assetType !== 'carousel_card')
-      const uniquePackageIds = [...new Set(pickable.map((a) => a.sourcePackageId))]
-      const packages = await Promise.all(uniquePackageIds.map((id) => getCreativePackage(tenantId, id).catch(() => null)))
-      if (cancelled) return
-      const packageById = new Map(packages.filter(Boolean).map((p) => [p!._id, p!]))
-      const resolved: PickableAsset[] = pickable.map((a) => {
-        const pkg = packageById.get(a.sourcePackageId)
-        const variant = pkg?.copyVariants?.[a.variantIndex] ?? pkg?.copyVariants?.[pkg?.selectedCopyIndex ?? 0]
-        return {
-          key: a._id,
-          assetType: a.assetType as 'image' | 'video',
-          assetUrl: a.assetUrl,
-          primaryText: variant?.primaryText,
-          headline: variant?.headline,
-          cta: variant?.cta,
-          targetLanguage: pkg?.targetLanguage,
-        }
-      })
-      setAssets(resolved)
-    }).finally(() => { if (!cancelled) setAssetsLoading(false) })
+    async function loadAssets() {
+      if (!selectedSheetId) {
+        if (!cancelled) setAssets([])
+        return
+      }
+      setAssetsLoading(true)
+      try {
+        const rawAssets = await listGalleryAssets(tenantId, selectedSheetId)
+        if (cancelled) return
+        const pickable = rawAssets.filter((a) => a.assetType !== 'carousel_card')
+        const uniquePackageIds = [...new Set(pickable.map((a) => a.sourcePackageId))]
+        const packages = await Promise.all(uniquePackageIds.map((id) => getCreativePackage(tenantId, id).catch(() => null)))
+        if (cancelled) return
+        const packageById = new Map(packages.filter(Boolean).map((p) => [p!._id, p!]))
+        const resolved: PickableAsset[] = pickable.map((a) => {
+          const pkg = packageById.get(a.sourcePackageId)
+          const variant = pkg?.copyVariants?.[a.variantIndex] ?? pkg?.copyVariants?.[pkg?.selectedCopyIndex ?? 0]
+          return {
+            key: a._id,
+            assetType: a.assetType as 'image' | 'video',
+            assetUrl: a.assetUrl,
+            primaryText: variant?.primaryText,
+            headline: variant?.headline,
+            cta: variant?.cta,
+            targetLanguage: pkg?.targetLanguage,
+          }
+        })
+        setAssets(resolved)
+      } finally {
+        if (!cancelled) setAssetsLoading(false)
+      }
+    }
+    void loadAssets()
     return () => { cancelled = true }
   }, [tenantId, selectedSheetId])
 

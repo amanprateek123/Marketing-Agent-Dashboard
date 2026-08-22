@@ -15,7 +15,7 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DebateLog } from '@/components/ui/DebateLog'
 import { PageSelect } from '@/components/ui/PageSelect'
-import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge, BreakevenBadge } from '@/components/badges'
+import { FormatBadge, PromptsVersionBadge, RegretLabel, LeakDiagnosisBadge } from '@/components/badges'
 import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccounts, getMetaAccountAudiences, updateAdSetBudget, updateAdSetPlacement, getMetaPages, swapCampaignPage, addAdSet, addCreativeToAdSet, addCreativesSheetToAdSet } from '@/lib/api'
 import type { BulkAdsResult } from '@/lib/api'
 import { formatCurrency, formatDateTime, formatDate, formatRelativeTime, cn } from '@/lib/utils'
@@ -44,7 +44,7 @@ interface CreativePackage {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
-/* ─── Design tokens — mapped onto the global Editorial Intelligence Console palette ─── */
+/* ─── Design tokens — mapped onto the global Meridian production-light palette ─── */
 const C = {
   bg: 'var(--paper)', surface: 'var(--surface)', surfaceMuted: 'var(--surface-warm)',
   border: 'var(--hairline)', borderLight: 'var(--hairline-light)',
@@ -66,10 +66,180 @@ function MetricCell({ label, value, sub, color }: { label: string; value: string
   return (
     <div className="min-w-0">
       <p className="micro-label mb-1.5">{label}</p>
-      <p className="display-num text-[22px] truncate" style={{ color: color || C.text }}>{value}</p>
+      <p className="display-num break-words text-[19px] sm:text-[22px]" style={{ color: color || C.text }}>{value}</p>
       {sub && <p className="mono text-[11px] mt-0.5 tabular-nums" style={{ color: C.textMuted }}>{sub}</p>}
     </div>
   )
+}
+
+type DetailObjectiveGroup = 'sales' | 'awareness' | 'traffic' | 'leads' | 'app' | 'engagement' | 'unknown'
+
+interface DetailObjectiveContext {
+  group: DetailObjectiveGroup
+  objectiveLabel: string
+  optimizationGoal: string
+  resultLabel: string
+  efficiencyLabel: string
+}
+
+interface ObjectiveMetricInput {
+  spend?: number
+  impressions?: number
+  reach?: number
+  clicks?: number
+  conversions?: number
+  roas?: number
+  cpc?: number
+  cpm?: number
+  landingPageView?: number
+  thruplay?: number
+  video3s?: number
+}
+
+interface ObjectiveMetricPresentation {
+  result?: number
+  resultValue: string
+  efficiency?: number
+  efficiencyValue: string
+}
+
+function detailObjectiveGroup(objective?: string): DetailObjectiveGroup {
+  const normalized = (objective ?? '').toLowerCase()
+  if (!normalized) return 'unknown'
+  if (/awareness|reach|impression|recall|thruplay|video.view/.test(normalized)) return 'awareness'
+  if (/traffic|link.click|landing.page/.test(normalized)) return 'traffic'
+  if (/lead|message/.test(normalized)) return 'leads'
+  if (/app|install/.test(normalized)) return 'app'
+  if (/engagement/.test(normalized)) return 'engagement'
+  if (/sale|purchase|conversion|catalog/.test(normalized)) return 'sales'
+  return 'unknown'
+}
+
+function plainObjectiveLabel(objective: string | undefined, group: DetailObjectiveGroup): string {
+  if (!objective) {
+    return ({
+      sales: 'Sales', awareness: 'Awareness', traffic: 'Traffic', leads: 'Leads',
+      app: 'App growth', engagement: 'Engagement', unknown: 'Objective not recorded',
+    })[group]
+  }
+  return objective
+    .replace(/^OUTCOME_/i, '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function detailObjectiveContext(campaign: Campaign, adSets: CampaignAdSet[]): DetailObjectiveContext {
+  const explicitObjective = campaign.objective ?? campaign.campaignConfig?.objective
+  const group = detailObjectiveGroup(explicitObjective)
+  const goals = adSets.map((adSet) => adSet.optimizationGoal?.toUpperCase()).filter((goal): goal is string => Boolean(goal))
+  const uniqueGoals = [...new Set(goals)]
+  const optimizationGoal = uniqueGoals.length > 1
+    ? 'MIXED'
+    : uniqueGoals.length === 1
+      ? uniqueGoals[0]
+      : campaign.campaignConfig?.adSets?.[0]?.optimizationGoal?.toUpperCase() ?? ''
+
+  if (optimizationGoal === 'MIXED') {
+    return {
+      group,
+      objectiveLabel: plainObjectiveLabel(explicitObjective, group),
+      optimizationGoal,
+      resultLabel: 'Goal-specific results',
+      efficiencyLabel: 'Goal-specific efficiency',
+    }
+  }
+
+  if (optimizationGoal === 'REACH') {
+    return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Reach', efficiencyLabel: 'Cost / 1K reached' }
+  }
+  if (optimizationGoal === 'IMPRESSIONS' || optimizationGoal === 'AD_RECALL_LIFT') {
+    return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Impressions', efficiencyLabel: 'CPM' }
+  }
+  if (optimizationGoal === 'THRUPLAY' || optimizationGoal === 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS') {
+    return {
+      group,
+      objectiveLabel: plainObjectiveLabel(explicitObjective, group),
+      optimizationGoal,
+      resultLabel: optimizationGoal === 'THRUPLAY' ? 'ThruPlays' : '3-sec views (proxy)',
+      efficiencyLabel: optimizationGoal === 'THRUPLAY' ? 'Cost / ThruPlay' : 'Cost / 3-sec view',
+    }
+  }
+  if (optimizationGoal === 'LANDING_PAGE_VIEWS' || optimizationGoal === 'LINK_CLICKS') {
+    return {
+      group,
+      objectiveLabel: plainObjectiveLabel(explicitObjective, group),
+      optimizationGoal,
+      resultLabel: optimizationGoal === 'LANDING_PAGE_VIEWS' ? 'Landing-page views' : 'Clicks',
+      efficiencyLabel: optimizationGoal === 'LANDING_PAGE_VIEWS' ? 'Cost / LPV' : 'CPC',
+    }
+  }
+  if (group === 'sales') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Purchases', efficiencyLabel: 'Raw ROAS' }
+  if (group === 'leads') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Leads', efficiencyLabel: 'Cost / lead' }
+  if (group === 'app') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'App results', efficiencyLabel: 'Cost / result' }
+  if (group === 'engagement') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Engagement results', efficiencyLabel: 'Cost / engagement' }
+  if (group === 'awareness') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Impressions', efficiencyLabel: 'CPM' }
+  if (group === 'traffic') return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Clicks', efficiencyLabel: 'CPC' }
+  return { group, objectiveLabel: plainObjectiveLabel(explicitObjective, group), optimizationGoal, resultLabel: 'Results', efficiencyLabel: 'Cost / result' }
+}
+
+function detailContextForAdSet(parent: DetailObjectiveContext, optimizationGoal?: string): DetailObjectiveContext {
+  if (parent.optimizationGoal !== 'MIXED' || !optimizationGoal) return parent
+  const goal = optimizationGoal.toUpperCase()
+  if (goal === 'REACH') return { ...parent, optimizationGoal: goal, resultLabel: 'Reach', efficiencyLabel: 'Cost / 1K reached' }
+  if (goal === 'IMPRESSIONS' || goal === 'AD_RECALL_LIFT') return { ...parent, optimizationGoal: goal, resultLabel: 'Impressions', efficiencyLabel: 'CPM' }
+  if (goal === 'THRUPLAY') return { ...parent, optimizationGoal: goal, resultLabel: 'ThruPlays', efficiencyLabel: 'Cost / ThruPlay' }
+  if (goal === 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS') return { ...parent, optimizationGoal: goal, resultLabel: '3-sec views (proxy)', efficiencyLabel: 'Cost / 3-sec view' }
+  if (goal === 'LANDING_PAGE_VIEWS') return { ...parent, optimizationGoal: goal, resultLabel: 'Landing-page views', efficiencyLabel: 'Cost / LPV' }
+  if (goal === 'LINK_CLICKS') return { ...parent, optimizationGoal: goal, resultLabel: 'Clicks', efficiencyLabel: 'CPC' }
+  return { ...parent, optimizationGoal: goal }
+}
+
+function presentObjectiveMetrics(context: DetailObjectiveContext, metrics: ObjectiveMetricInput): ObjectiveMetricPresentation {
+  if (context.optimizationGoal === 'MIXED') {
+    return { result: undefined, resultValue: 'See ad sets', efficiency: undefined, efficiencyValue: 'See ad sets' }
+  }
+  const spend = metrics.spend
+  let result: number | undefined
+  let efficiency: number | undefined
+
+  if (context.optimizationGoal === 'REACH') {
+    result = metrics.reach
+    efficiency = spend != null && result != null && result > 0 ? (spend / result) * 1000 : undefined
+  } else if (context.optimizationGoal === 'IMPRESSIONS' || context.optimizationGoal === 'AD_RECALL_LIFT' || (context.group === 'awareness' && !context.optimizationGoal)) {
+    result = metrics.impressions
+    efficiency = metrics.cpm ?? (spend != null && result != null && result > 0 ? (spend / result) * 1000 : undefined)
+  } else if (context.optimizationGoal === 'THRUPLAY') {
+    result = metrics.thruplay
+    efficiency = spend != null && result != null && result > 0 ? spend / result : undefined
+  } else if (context.optimizationGoal === 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS') {
+    result = metrics.video3s
+    efficiency = spend != null && result != null && result > 0 ? spend / result : undefined
+  } else if (context.optimizationGoal === 'LANDING_PAGE_VIEWS') {
+    result = metrics.landingPageView
+    efficiency = spend != null && result != null && result > 0 ? spend / result : undefined
+  } else if (context.optimizationGoal === 'LINK_CLICKS' || context.group === 'traffic') {
+    result = metrics.clicks
+    efficiency = metrics.cpc ?? (spend != null && result != null && result > 0 ? spend / result : undefined)
+  } else {
+    result = metrics.conversions
+    efficiency = context.group === 'sales'
+      ? metrics.roas
+      : spend != null && result != null && result > 0
+        ? spend / result
+        : undefined
+  }
+
+  return {
+    result,
+    resultValue: result == null ? '—' : result.toLocaleString('en-IN'),
+    efficiency,
+    efficiencyValue: efficiency == null
+      ? '—'
+      : context.group === 'sales'
+        ? `${efficiency.toFixed(2)}x`
+        : formatCurrency(efficiency),
+  }
 }
 
 /* ═════════════════════════════════════════════════════════════════
@@ -87,10 +257,6 @@ function fmtPct(v: unknown, digits = 2): string {
   const n = typeof v === 'number' ? v : NaN
   return Number.isFinite(n) ? `${n.toFixed(digits)}%` : '—'
 }
-function fmtX(v: unknown): string {
-  const n = typeof v === 'number' ? v : NaN
-  return Number.isFinite(n) && n > 0 ? `${n.toFixed(2)}x` : '—'
-}
 function fmtStr(v: unknown): string {
   if (v == null || v === '') return '—'
   return String(v)
@@ -107,12 +273,26 @@ function fmtRanking(v: unknown): { text: string; color: string } {
 interface AllFieldsPanelProps {
   kind: 'adset' | 'ad'
   data: CampaignAdSet | CampaignAd
+  objectiveContext: DetailObjectiveContext
   onClose?: () => void
 }
 
-function AllFieldsPanel({ kind, data, onClose }: AllFieldsPanelProps) {
+function AllFieldsPanel({ kind, data, objectiveContext, onClose }: AllFieldsPanelProps) {
   const isAdSet = kind === 'adset'
   const d = data as CampaignAdSet & CampaignAd
+  const objectiveMetrics = presentObjectiveMetrics(objectiveContext, {
+    spend: d.metrics?.spend ?? d.spend,
+    impressions: d.impressions,
+    reach: d.reach,
+    clicks: d.clicks,
+    conversions: d.metrics?.conversions ?? d.conversions,
+    roas: d.metrics?.roas ?? d.roas,
+    cpc: d.metrics?.cpc ?? d.cpc,
+    cpm: d.metrics?.cpm ?? d.cpm,
+    landingPageView: d.landingPageView,
+    thruplay: d.thruplay,
+    video3s: d.video3s,
+  })
   const q = fmtRanking(d.qualityRanking)
   const e = fmtRanking(d.engagementRanking)
   const cv = fmtRanking(d.conversionRanking)
@@ -123,13 +303,15 @@ function AllFieldsPanel({ kind, data, onClose }: AllFieldsPanelProps) {
         background: C.bg,
         border: `1px solid ${C.border}`,
         boxShadow: '0 20px 60px rgba(0,0,0,0.16)',
-        minWidth: 620,
-        maxWidth: 720,
+        width: 'min(720px, calc(100vw - 32px))',
+        maxHeight: 'min(760px, calc(100vh - 40px))',
+        overflowY: 'auto',
       }}
     >
       {onClose && (
         <button
           onClick={onClose}
+          aria-label="Close details"
           className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70"
           style={{ color: C.textMuted }}
         >
@@ -140,13 +322,14 @@ function AllFieldsPanel({ kind, data, onClose }: AllFieldsPanelProps) {
         {isAdSet ? 'Ad set details' : 'Ad details'} · {d.name || '—'}
       </p>
 
-      <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-[12px]">
-        <FieldGroup title="Money">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-[12px]">
+        <FieldGroup title="Outcome">
           <F label="Spend"    value={fmtMoney(d.spend)} />
-          <F label="Revenue"  value={fmtMoney(d.revenue)} />
-          <F label="ROAS"     value={fmtX(d.roas)} />
-          <F label="AOV"      value={fmtMoney(d.aov)} />
-          <F label="CPA"      value={fmtMoney(d.cpa)} />
+          <F label={objectiveContext.resultLabel} value={objectiveMetrics.resultValue} />
+          <F label={objectiveContext.efficiencyLabel} value={objectiveMetrics.efficiencyValue} />
+          {objectiveContext.group === 'sales' && <F label="Attributed action value" value={fmtMoney(d.revenue)} />}
+          {objectiveContext.group === 'sales' && <F label="AOV" value={fmtMoney(d.aov)} />}
+          {objectiveContext.group === 'sales' && <F label="CPA" value={fmtMoney(d.cpa)} />}
           <F label="CPC"      value={fmtMoney(d.cpc)} />
           <F label="CPM"      value={fmtMoney(d.cpm)} />
         </FieldGroup>
@@ -165,7 +348,7 @@ function AllFieldsPanel({ kind, data, onClose }: AllFieldsPanelProps) {
         </FieldGroup>
 
         <FieldGroup title="Funnel">
-          <F label="Purchases"        value={fmtInt(d.conversions)} />
+          <F label={objectiveContext.group === 'sales' ? 'Purchases' : 'Meta results'} value={fmtInt(d.conversions)} />
           <F label="Add to cart"      value={fmtInt(d.addToCart)} />
           <F label="Initiate checkout" value={fmtInt(d.initiateCheckout)} />
           <F label="Landing page view" value={fmtInt(d.landingPageView)} />
@@ -312,15 +495,17 @@ function AnchoredPortal({
     const gap = 8
     const viewportW = window.innerWidth
     const viewportH = window.innerHeight
+    const margin = 16
     // Measure the panel that just rendered off-screen, so we know its actual height.
     const measured = panelRef.current?.getBoundingClientRect()
-    const panelWidth = measured?.width || 700
+    const panelWidth = Math.min(measured?.width || 700, viewportW - margin * 2)
     const panelHeight = measured?.height || 460
 
-    // Horizontal: align to row's right edge, clamp to viewport with 20px margin.
-    let left = r.right - panelWidth
-    if (left < 20) left = Math.max(20, r.left)
-    if (left + panelWidth > viewportW - 20) left = viewportW - panelWidth - 20
+    // Horizontal: align to the row, then clamp inside the visible viewport.
+    const viewportLeft = window.scrollX + margin
+    const viewportRight = window.scrollX + viewportW - margin
+    let left = window.scrollX + r.right - panelWidth
+    left = Math.max(viewportLeft, Math.min(left, viewportRight - panelWidth))
 
     // Vertical: prefer below; flip above if we'd overflow the viewport bottom.
     const spaceBelow = viewportH - r.bottom
@@ -332,7 +517,8 @@ function AnchoredPortal({
       top = window.scrollY + r.top - panelHeight - gap
     }
     // Final safety clamp — never go negative
-    if (top < window.scrollY + 20) top = window.scrollY + 20
+    if (top < window.scrollY + margin) top = window.scrollY + margin
+    // The portal must measure its rendered panel before it can be positioned.
     setPos({ top, left })
   }, [anchorRef, children])
 
@@ -395,16 +581,26 @@ function AdThumbnail({ thumbnailUrl, isVideo }: { thumbnailUrl?: string; isVideo
 /* ═════════════════════════════════════════════════════════════════
    AD ROW
    ═════════════════════════════════════════════════════════════════ */
-function AdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: CampaignAd) => void }) {
+function AdRow({ ad, objectiveContext, onViewAd }: { ad: CampaignAd; objectiveContext: DetailObjectiveContext; onViewAd?: (ad: CampaignAd) => void }) {
   const hasMedia = !!(ad.thumbnailUrl || ad.creativeVideoId)
   const [histOpen, setHistOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
   const spend = ad.metrics?.spend ?? ad.spend
   const ctr = ad.metrics?.ctr ?? ad.ctr
-  const revenue = ad.metrics?.revenue ?? ad.revenue
-  const roas = ad.metrics?.roas ?? ad.roas
-  const conversions = ad.metrics?.conversions ?? ad.conversions
+  const performance = presentObjectiveMetrics(objectiveContext, {
+    spend,
+    impressions: ad.impressions,
+    reach: ad.reach,
+    clicks: ad.clicks,
+    conversions: ad.metrics?.conversions ?? ad.conversions,
+    roas: ad.metrics?.roas ?? ad.roas,
+    cpc: ad.metrics?.cpc ?? ad.cpc,
+    cpm: ad.metrics?.cpm ?? ad.cpm,
+    landingPageView: ad.landingPageView,
+    thruplay: ad.thruplay,
+    video3s: ad.video3s,
+  })
   const fatigued = ctr != null && ad.ctrBaseline != null && ctr < ad.ctrBaseline * 0.65
   const hist = ad.replacementHistory || []
   return (
@@ -437,9 +633,9 @@ function AdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: CampaignAd) =
         </td>
         <td>{ad.status?.trim() ? <StatusBadge status={ad.status} /> : <span style={{ color: C.textFaint }}>—</span>}</td>
         <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
-        <td className="num mono font-medium" style={{ color: revenue && revenue > 0 ? C.text : C.textFaint }}>{revenue && revenue > 0 ? formatCurrency(revenue) : '—'}</td>
-        <td className="num mono font-semibold" style={{ color: roas != null && roas > 0 ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas && roas > 0 ? `${roas.toFixed(2)}x` : '—'}</td>
-        <td className="num mono" style={{ color: C.textSecondary }}>{conversions ?? '—'}</td>
+        <td className="num mono font-medium" style={{ color: performance.result == null ? C.textFaint : C.text }}>{performance.resultValue}</td>
+        <td className="num mono font-semibold" style={{ color: performance.efficiency == null ? C.textFaint : objectiveContext.group === 'sales' ? (performance.efficiency >= 1 ? C.green : C.red) : C.textSecondary }}>{performance.efficiencyValue}</td>
+        <td className="num mono" style={{ color: C.textSecondary }}>{ad.impressions?.toLocaleString() ?? '—'}</td>
         <td className="num mono" style={{ color: fatigued ? C.red : C.textSecondary }}>
           {ctr != null ? <>{ctr.toFixed(2)}%{ad.ctrBaseline != null && <span className="ml-1 text-[10px]" style={{ color: C.textMuted }}>/{ad.ctrBaseline.toFixed(1)}%</span>}</> : '—'}
         </td>
@@ -455,7 +651,7 @@ function AdRow({ ad, onViewAd }: { ad: CampaignAd; onViewAd?: (ad: CampaignAd) =
       </tr>
       {detailsOpen && (
         <AnchoredPortal anchorRef={rowRef} onClose={() => setDetailsOpen(false)}>
-          <AllFieldsPanel kind="ad" data={ad} onClose={() => setDetailsOpen(false)} />
+          <AllFieldsPanel kind="ad" data={ad} objectiveContext={objectiveContext} onClose={() => setDetailsOpen(false)} />
         </AnchoredPortal>
       )}
       {histOpen && hist.length > 0 && (
@@ -490,6 +686,7 @@ function AdSetRow({
   onViewAd,
   onBudgetChanged,
   onCreativeAdded,
+  objectiveContext,
 }: {
   adSet: CampaignAdSet
   formatTag?: 'video' | 'image'
@@ -501,6 +698,7 @@ function AdSetRow({
   onViewAd?: (ad: CampaignAd) => void
   onBudgetChanged?: () => void
   onCreativeAdded?: () => void
+  objectiveContext: DetailObjectiveContext
 }) {
   const [open, setOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -510,10 +708,19 @@ function AdSetRow({
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend
   const ctr = adSet.metrics?.ctr ?? adSet.ctr
-  const roas = adSet.metrics?.roas ?? adSet.roas
-  const conv = adSet.metrics?.conversions ?? adSet.conversions
-  const revenue = adSet.metrics?.revenue ?? adSet.revenue
   const impressions = adSet.impressions
+  const rowObjectiveContext = detailContextForAdSet(objectiveContext, adSet.optimizationGoal)
+  const performance = presentObjectiveMetrics(rowObjectiveContext, {
+    spend,
+    impressions,
+    reach: adSet.reach,
+    clicks: adSet.clicks,
+    conversions: adSet.metrics?.conversions ?? adSet.conversions,
+    roas: adSet.metrics?.roas ?? adSet.roas,
+    cpc: adSet.cpc,
+    cpm: adSet.cpm,
+    landingPageView: adSet.landingPageView,
+  })
   const adSetId = adSet.id || adSet.metaAdSetId
 
   const [budgetEditing, setBudgetEditing] = useState(false)
@@ -626,9 +833,8 @@ function AdSetRow({
           {budgetError && <p className="text-[10px] mt-1" style={{ color: C.red }}>{budgetError}</p>}
         </td>
         <td className="num mono font-medium" style={{ color: C.textSecondary }}>{spend ? formatCurrency(spend) : '—'}</td>
-        <td className="num mono font-medium" style={{ color: revenue && revenue > 0 ? C.text : C.textFaint }}>{revenue != null && revenue > 0 ? formatCurrency(revenue) : '—'}</td>
-        <td className="num mono font-semibold" style={{ color: roas != null && roas > 0 ? (roas >= 2 ? C.green : roas >= 1 ? C.amber : C.red) : C.textFaint }}>{roas != null && roas > 0 ? `${roas.toFixed(2)}x` : '—'}</td>
-        <td className="num mono font-medium" style={{ color: C.text }}>{conv ?? '—'}</td>
+        <td className="num mono font-medium" style={{ color: performance.result == null ? C.textFaint : C.text }}>{performance.resultValue}</td>
+        <td className="num mono font-semibold" style={{ color: performance.efficiency == null ? C.textFaint : rowObjectiveContext.group === 'sales' ? (performance.efficiency >= 1 ? C.green : C.red) : C.textSecondary }}>{performance.efficiencyValue}</td>
         <td className="num mono" style={{ color: C.textSecondary }}>{impressions?.toLocaleString() ?? '—'}</td>
         <td className="num mono" style={{ color: C.textSecondary }}>{ctr != null && ctr > 0 ? `${ctr.toFixed(2)}%` : '—'}</td>
         <td>
@@ -677,7 +883,7 @@ function AdSetRow({
       </tr>
       {detailsOpen && (
         <AnchoredPortal anchorRef={rowRef} onClose={() => setDetailsOpen(false)}>
-          <AllFieldsPanel kind="adset" data={adSet} onClose={() => setDetailsOpen(false)} />
+          <AllFieldsPanel kind="adset" data={adSet} objectiveContext={rowObjectiveContext} onClose={() => setDetailsOpen(false)} />
         </AnchoredPortal>
       )}
       {addCreativeOpen && tenantId && campaignId && adSet.id && (
@@ -706,8 +912,8 @@ function AdSetRow({
       )}
       {open && ads.length > 0 && (
         <tr><td colSpan={9} style={{ background: C.surfaceMuted }}>
-          <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
-          <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} onViewAd={onViewAd} />)}</tbody></table>
+          <table className="w-full"><thead><tr>{['Ad / Hook', 'Status', 'Spend', rowObjectiveContext.resultLabel, rowObjectiveContext.efficiencyLabel, 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead>
+          <tbody>{ads.map((ad, i) => <AdRow key={ad.id || i} ad={ad} objectiveContext={rowObjectiveContext} onViewAd={onViewAd} />)}</tbody></table>
         </td></tr>
       )}
     </>
@@ -788,9 +994,9 @@ function AddCreativePanel({
   return (
     <div
       className="relative rounded-xl px-5 py-4 z-30"
-      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 480, maxWidth: 560 }}
+      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', width: 'min(calc(100vw - 32px), 560px)', minWidth: 0, maxWidth: 560 }}
     >
-      <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
+      <button onClick={onClose} aria-label="Close creative picker" className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
         <XCircle size={16} />
       </button>
       <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 pr-6" style={{ color: C.textMuted }}>
@@ -883,9 +1089,9 @@ function ChangePlacementsPanel({
   return (
     <div
       className="relative rounded-xl px-5 py-4 z-30"
-      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', minWidth: 380, maxWidth: 420 }}
+      style={{ background: C.bg, border: `1px solid ${C.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.16)', width: 'min(calc(100vw - 32px), 420px)', minWidth: 0, maxWidth: 420 }}
     >
-      <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
+      <button onClick={onClose} aria-label="Close placement editor" className="absolute top-3 right-3 p-1 rounded-lg transition-opacity hover:opacity-70" style={{ color: C.textMuted }}>
         <XCircle size={16} />
       </button>
       <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 pr-6" style={{ color: C.textMuted }}>
@@ -1023,6 +1229,11 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
   const [st, setSt] = useState<Record<string, { a?: string; o?: string }>>({})
+  // Legacy action records do not persist objective, return basis or the
+  // economics version behind their narrative. Keep history reviewable, but
+  // withhold the narrative and one-click execution until that contract is
+  // migrated and the refund basis is reconciled.
+  const executionAllowed = false
 
   async function load(f?: string) {
     try {
@@ -1056,6 +1267,10 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
 
   return (
     <div>
+      <div className="mb-4 rounded-xl px-4 py-3" style={{ background: C.amberBg, border: `1px solid ${C.amberBorder}` }}>
+        <p className="text-sm font-semibold" style={{ color: C.amber }}>Legacy action evidence is incomplete</p>
+        <p className="text-xs mt-1" style={{ color: C.textSecondary }}>Economic reasoning and one-click execution are withheld because these records do not store objective, return-basis and economics-version context.</p>
+      </div>
       {/* Filter row */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex gap-1">
@@ -1083,7 +1298,6 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
             const growth = GROWTH.includes(action.type)
             const pause = action.type === 'pause_ad' || action.type === 'pause_adset'
             const hasRepl = action.type === 'replace_creative' || action.type === 'add_creative'
-            const reason = typeof action.reason === 'string' ? action.reason : JSON.stringify(action.reason)
             const typeS = ACTION_STYLES[action.type] || { border: C.border }
 
             return (
@@ -1103,8 +1317,7 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                     <StatusBadge status={action.status} />
                   </div>
 
-                  {/* Reason */}
-                  {reason && <p className="text-[13px] leading-relaxed mb-4" style={{ color: C.textSecondary }}>{reason}</p>}
+                  <p className="text-[13px] leading-relaxed mb-4" style={{ color: C.textSecondary }}>Legacy model narrative withheld. Validate the action against the live objective and current Meta evidence.</p>
 
                   {/* Info chips */}
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1188,18 +1401,19 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
                   {/* Buttons — every pending action gets buttons */}
                   {pending && (
                     <div className="flex items-center gap-2.5 mt-4 pt-4" style={{ borderTop: `1px solid ${C.borderLight}` }}>
-                      {growth && (
+                      {executionAllowed && growth && (
                         <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.green, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <ThumbsUp size={13} />}
                           {aS === 'loading' ? 'Approving…' : aS === 'success' ? 'Approved!' : aS === 'error' ? 'Failed' : 'Approve'}
                         </button>
                       )}
-                      {pause && (
+                      {executionAllowed && pause && (
                         <button onClick={() => approve(action.actionId)} disabled={aS === 'loading'} className="btn" style={aS === 'success' ? { background: C.greenBg, color: C.green, border: `1px solid ${C.greenBorder}` } : aS === 'error' ? { background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}` } : { background: C.red, color: '#fff' }}>
                           {aS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : aS === 'success' ? <CheckCircle size={13} /> : <Pause size={13} />}
                           {aS === 'loading' ? 'Executing…' : aS === 'success' ? 'Executed!' : aS === 'error' ? 'Failed' : 'Execute Now'}
                         </button>
                       )}
+                      {!executionAllowed && <span className="chip chip-warn">Execution withheld</span>}
                       <button onClick={() => override(action.actionId)} disabled={oS === 'loading'} className="btn btn-ghost">
                         {oS === 'loading' ? <Loader2 size={13} className="animate-spin" /> : oS === 'success' ? <CheckCircle size={13} /> : <Ban size={13} />}
                         {oS === 'loading' ? 'Overriding…' : oS === 'success' ? 'Done' : 'Override'}
@@ -1220,8 +1434,10 @@ function ActionsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: 
    AUDIT — Bayesian / Power-calc / Thompson / DiD helpers
    ═════════════════════════════════════════════════════════════════ */
 function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']> }) {
-  const breakeven = b.breakeven ?? 1.0
-  const passed = b.lowerROAS != null && b.lowerROAS > breakeven
+  // Contribution breakeven is intentionally not used here while the refund
+  // basis is being reconciled. This panel is only a raw value-vs-spend check.
+  const rawThreshold = 1.0
+  const passed = b.lowerROAS != null && b.lowerROAS >= rawThreshold
   const conf = b.confidenceLevel ?? 0.95
   return (
     <div
@@ -1229,14 +1445,14 @@ function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']>
       style={{ background: passed ? C.greenBg : C.surfaceMuted, border: `1px solid ${passed ? C.greenBorder : C.border}` }}
     >
       <div>
-        <p className="micro-label">Shrunken ROAS</p>
+        <p className="micro-label">Modeled raw ROAS</p>
         <p className="text-base font-bold tabular-nums" style={{ color: C.text }}>
           {b.shrunkenROAS != null ? `${b.shrunkenROAS.toFixed(2)}x` : '—'}
         </p>
       </div>
       <div>
         <p className="micro-label">
-          Lower ROAS · {Math.round(conf * 100)}%
+          Lower modeled ROAS · {Math.round(conf * 100)}%
         </p>
         <p className="text-base font-bold tabular-nums" style={{ color: passed ? C.green : C.text }}>
           {b.lowerROAS != null ? `${b.lowerROAS.toFixed(2)}x` : '—'}
@@ -1245,10 +1461,11 @@ function BayesianVerdictPanel({ b }: { b: NonNullable<AuditSnapshot['bayesian']>
       {passed && (
         <div className="col-span-2">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-md" style={{ background: C.surface, color: C.green, border: `1px solid ${C.greenBorder}` }}>
-            <CheckCircle size={10} /> Above breakeven ({breakeven.toFixed(2)}x) at {Math.round(conf * 100)}% confidence
+            <CheckCircle size={10} /> Above the 1.00x raw value/spend threshold at {Math.round(conf * 100)}% model confidence
           </span>
         </div>
       )}
+      <p className="col-span-2 text-[10.5px]" style={{ color: C.textMuted }}>Historical model diagnostic—not contribution profit or causal proof.</p>
     </div>
   )
 }
@@ -1772,6 +1989,48 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const live = (campaign.metaAdSets?.length ? campaign.metaAdSets : campaign.adSets) || []
   const planned = campaign.campaignConfig?.adSets || []
   const usePlanned = live.length === 0 && planned.length > 0
+  const objectiveContext = detailObjectiveContext(campaign, live)
+  const runtimeCampaign = campaign as Campaign & { reach?: number; cpm?: number; frequency?: number }
+  const hasCampaignLandingPageViews = live.some((adSet) => adSet.landingPageView != null)
+  const campaignLandingPageViews = hasCampaignLandingPageViews ? live.reduce((sum, adSet) => sum + (adSet.landingPageView ?? 0), 0) : undefined
+  const campaignAds = live.flatMap((adSet) => adSet.ads ?? [])
+  const hasCampaignThruplays = campaignAds.some((ad) => ad.thruplay != null)
+  const campaignThruplays = hasCampaignThruplays ? campaignAds.reduce((sum, ad) => sum + (ad.thruplay ?? 0), 0) : undefined
+  const hasCampaignVideo3s = campaignAds.some((ad) => ad.video3s != null)
+  const campaignVideo3s = hasCampaignVideo3s ? campaignAds.reduce((sum, ad) => sum + (ad.video3s ?? 0), 0) : undefined
+  const campaignHasRecordedReturnBasis = campaign.revenueBasis === 'meta_action_value' ||
+    campaign.revenueBasis === 'no_attributed_revenue'
+  const campaignHasConfiguredEstimate = campaign.revenueBasis === 'configured_conversion_value'
+  const campaignReturnResolved = campaignHasRecordedReturnBasis &&
+    campaign.revenueAttributionSource != null &&
+    campaign.revenueAttributionSource !== 'unknown' &&
+    campaign.revenueAttributionSource !== 'unresolved' &&
+    campaign.revenueAttributionSource !== 'account_fallback'
+  const campaignValueAvailable = campaignReturnResolved || campaignHasConfiguredEstimate
+  const campaignValueLabel = campaign.revenueBasis === 'configured_conversion_value'
+    ? 'Configured action-value estimate'
+    : campaign.revenueBasis === 'no_attributed_revenue'
+      ? 'Recorded attributed action value'
+      : 'Meta-attributed action value'
+  const campaignValueNote = campaignReturnResolved
+    ? 'Attributed value; not collected cash'
+    : campaignHasConfiguredEstimate
+      ? 'Configured estimate; excluded from raw ROAS proof'
+      : 'Return derivation unavailable'
+  const campaignPerformance = presentObjectiveMetrics(objectiveContext, {
+    spend: campaign.spend,
+    impressions: campaign.impressions,
+    reach: runtimeCampaign.reach,
+    clicks: campaign.clicks,
+    conversions: campaign.conversions,
+    roas: campaignReturnResolved ? campaign.roas : undefined,
+    cpc: campaign.cpc,
+    cpm: runtimeCampaign.cpm,
+    landingPageView: campaignLandingPageViews,
+    thruplay: campaignThruplays,
+    video3s: campaignVideo3s,
+  })
+  const attributedActionValue = campaignValueAvailable ? campaign.revenue : undefined
   // What a new ad set inherits by default — same source the backend itself
   // falls back to (campaignConfig.adSets[0]) when no override is sent.
   const inheritedOptimizationGoal = live[0]?.optimizationGoal || campaign.campaignConfig?.adSets?.[0]?.optimizationGoal || 'OFFSITE_CONVERSIONS'
@@ -1794,7 +2053,11 @@ export default function CampaignDetailPage({ params }: PageProps) {
   ]
 
   /* ─── ROAS color ─── */
-  const rc = campaign.roas != null ? (campaign.roas >= 2 ? C.green : campaign.roas >= 1 ? C.amber : C.red) : C.textFaint
+  // This screen uses the demo's deliberately simple spend-versus-attributed-value signal:
+  // 1.00x means attributed action value covered ad spend. Product breakeven
+  // remains visible as separate context below instead of being conflated with
+  // the raw ROAS colour.
+  const rc = campaignReturnResolved && campaign.roas != null ? (campaign.roas >= 1 ? C.green : C.red) : C.textFaint
 
   return (
     <div className="min-h-screen">
@@ -1804,7 +2067,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
       <AdMediaModal tenantId={tenantId} ad={viewAd} onClose={() => setViewAd(null)} />
 
       {/* ─── TOP BAR ─── */}
-      <div className="px-8 pt-8 pb-0 max-w-[1600px] mx-auto stagger">
+      <div className="px-4 pt-6 pb-0 sm:px-6 lg:px-8 lg:pt-8 max-w-[1600px] mx-auto stagger">
         <Link href={`/dashboard/${tenantId}/campaigns`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5 transition-opacity hover:opacity-70" style={{ color: C.textMuted }}><ArrowLeft size={14} />Campaigns</Link>
 
         {/* ─── HEADER ─── */}
@@ -1817,9 +2080,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
             </div>
             {campaign.topic && campaign.name && <p className="page-subtitle mb-2">{campaign.topic}</p>}
             <div className="flex items-center gap-3 flex-wrap text-xs" style={{ color: C.textMuted }}>
-              {campaign.source === 'agent' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}><Bot size={11} />Agent</span>}
-              {campaign.source === 'manual' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><User size={11} />Manual</span>}
-              {campaign.objective && <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{campaign.objective}</span>}
+              {campaign.source === 'agent' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.accentLight, color: C.accent }}><Bot size={11} />AI built</span>}
+              {campaign.source === 'human' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><User size={11} />Dashboard built</span>}
+              {campaign.source === 'manual' && <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-md" title="Created directly in Meta Ads Manager and synced here for read-only visibility" style={{ background: C.surfaceMuted, color: C.textSecondary, border: `1px solid ${C.border}` }}><ExternalLink size={11} />Meta synced</span>}
+              <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{objectiveContext.objectiveLabel}</span>
+              {objectiveContext.optimizationGoal && <span className="font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>{plainObjectiveLabel(objectiveContext.optimizationGoal, objectiveContext.group)} optimization</span>}
+              <span className="inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}`, color: C.textSecondary }}>
+                <Clock size={10} /> {campaign.dataAsOf ? `Metrics ${formatRelativeTime(campaign.dataAsOf)}` : 'Metrics freshness unknown'}
+              </span>
               {campaign.budgetModel && (
                 <span
                   className="font-bold px-2 py-0.5 rounded-md uppercase"
@@ -1959,27 +2227,23 @@ export default function CampaignDetailPage({ params }: PageProps) {
 
         {/* ─── METRICS STRIP ─── */}
         <div className="card p-5 mb-6">
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-6">
-            <MetricCell label="Impressions" value={campaign.impressions?.toLocaleString() ?? '—'} />
-            <MetricCell label="Clicks" value={campaign.clicks?.toLocaleString() ?? '—'} />
-            <MetricCell label="CTR" value={campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : '—'} color={C.amber} />
-            <MetricCell label="CPC" value={campaign.cpc ? formatCurrency(campaign.cpc) : '—'} />
-            <div>
-              <MetricCell label="ROAS" value={campaign.roas != null ? `${campaign.roas.toFixed(2)}x` : '—'} color={rc} />
-              {/* Breakeven context — sourced from the latest audit signals.breakeven.
-                  Without this, ROAS in isolation is misleading (1.2x looks fine
-                  until you know breakeven is 5x for low-margin products). */}
-              {snaps[0]?.breakeven?.breakevenROAS != null && (
-                <div className="mt-1.5">
-                  <BreakevenBadge
-                    roas={campaign.roas}
-                    breakeven={snaps[0].breakeven.breakevenROAS}
-                    source={snaps[0].breakeven.source}
-                  />
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-6 md:gap-6">
+            <MetricCell label="Spend" value={campaign.spend != null ? formatCurrency(campaign.spend) : '—'} />
+            <MetricCell label={objectiveContext.resultLabel} value={campaignPerformance.resultValue} color={campaignPerformance.result == null ? C.textFaint : C.text} />
+            {objectiveContext.group === 'sales' ? (
+              <>
+                <div>
+                  <MetricCell label="Raw ROAS" value={campaignPerformance.efficiencyValue} color={rc} />
+                  <p className="mt-1 text-[10.5px] leading-snug" style={{ color: campaignReturnResolved ? C.textMuted : C.amber }}>{campaignValueNote}</p>
                 </div>
-              )}
-            </div>
-            <MetricCell label="Conversions" value={campaign.conversions ?? '—'} color={C.green} />
+                <MetricCell label={campaignValueAvailable ? campaignValueLabel : 'Action value'} value={attributedActionValue != null ? formatCurrency(attributedActionValue) : 'Unavailable'} sub={campaignValueNote} />
+              </>
+            ) : (
+              <MetricCell label={objectiveContext.efficiencyLabel} value={campaignPerformance.efficiencyValue} />
+            )}
+            <MetricCell label="Impressions" value={campaign.impressions?.toLocaleString() ?? '—'} />
+            {objectiveContext.group !== 'sales' && <MetricCell label="Clicks" value={campaign.clicks?.toLocaleString() ?? '—'} sub={objectiveContext.resultLabel === 'Clicks' ? 'Primary result' : undefined} />}
+            <MetricCell label="CTR" value={campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : '—'} color={C.textSecondary} />
           </div>
           {campaign.budget != null && campaign.budget > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4" style={{ borderTop: `1px solid ${C.borderLight}` }}>
@@ -1989,30 +2253,24 @@ export default function CampaignDetailPage({ params }: PageProps) {
             </div>
           )}
           {/* Verdict strip */}
-          {snaps.length > 0 && (() => {
-            const v = snaps[0].verdict
-            const s = v.verdict === 'act' ? { bg: C.redBg, b: C.redBorder, c: C.red, l: 'Act Now' } : v.verdict === 'watch' ? { bg: C.amberBg, b: C.amberBorder, c: C.amber, l: 'Watch' } : { bg: C.greenBg, b: C.greenBorder, c: C.green, l: 'All Good' }
-            return (
-              <div className="mt-4 rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: s.bg, border: `1px solid ${s.b}` }}>
-                <Shield size={14} className="mt-0.5 shrink-0" style={{ color: s.c }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold" style={{ color: s.c }}>{s.l}</span>
-                    {v.urgency && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: s.b, color: s.c }}>{v.urgency === 'immediate' ? 'Immediate' : v.urgency}</span>}
-                    <LeakDiagnosisBadge leak={v.leakDiagnosis} />
-                    <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snaps[0].auditedAt)}</span>
-                  </div>
-                  {v.contextInsight && <p className="text-sm mt-1 leading-relaxed" style={{ color: s.c }}>{v.contextInsight}</p>}
+          {snaps.length > 0 && (
+            <div className="mt-4 rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: C.surfaceMuted, border: `1px solid ${C.border}` }}>
+              <Shield size={14} className="mt-0.5 shrink-0" style={{ color: C.textMuted }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold" style={{ color: C.textSecondary }}>Latest audit note</span>
+                  <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snaps[0].auditedAt)}</span>
                 </div>
+                <p className="text-sm mt-1 leading-relaxed" style={{ color: C.textSecondary }}>Legacy verdict text is withheld here. Open Audit for objective-aware metrics and evidence.</p>
               </div>
-            )
-          })()}
+            </div>
+          )}
         </div>
       </div>
 
       {/* ─── APPROVAL PANEL ─── */}
       {isPendingApproval && (
-        <div className="px-8 max-w-[1600px] mx-auto mb-6">
+        <div className="px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto mb-6">
           <div className="rounded-2xl overflow-hidden" style={{ border: `2px solid ${C.greenBorder}`, background: C.greenBg }}>
             <div className="px-6 py-4 flex items-center gap-3" style={{ background: C.greenBg, borderBottom: `1px solid ${C.greenBorder}` }}>
               <ThumbsUp size={16} style={{ color: C.green }} />
@@ -2150,14 +2408,14 @@ export default function CampaignDetailPage({ params }: PageProps) {
       )}
 
       {/* Debate */}
-      {debate.length > 0 && <div className="px-8 max-w-[1600px] mx-auto mb-6"><div className="card p-6"><p className="micro-label mb-4">Review Debate</p><DebateLog rounds={debate} /></div></div>}
+      {debate.length > 0 && <div className="px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto mb-6"><div className="card p-6"><p className="micro-label mb-4">Review debate</p><DebateLog rounds={debate} /></div></div>}
 
       {/* ═══════════════════════════════════════════════════════════
          TABS
          ═══════════════════════════════════════════════════════════ */}
-      <div className="px-8 max-w-[1600px] mx-auto pb-12">
+      <div className="px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto pb-12">
         <Tabs.Root value={tab} onValueChange={setTab}>
-          <Tabs.List className="flex gap-1 mb-6" style={{ borderBottom: `2px solid ${C.border}` }}>
+          <Tabs.List className="flex gap-1 mb-6 overflow-x-auto" style={{ borderBottom: `2px solid ${C.border}` }}>
             {tabs.map(t => (
               <Tabs.Trigger key={t.id} value={t.id} className="flex items-center gap-1.5 px-4 py-3 text-sm font-semibold transition-all -mb-0.5" style={tab === t.id ? { color: C.accent, borderBottom: `2px solid ${C.accent}` } : { color: C.textMuted, borderBottom: '2px solid transparent' }}>
                 {t.icon}{t.label}
@@ -2355,13 +2613,13 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Budget', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} campaignId={campaignId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} onViewAd={setViewAd} onBudgetChanged={fetchCampaign} onCreativeAdded={fetchCampaign} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Budget', 'Spend', objectiveContext.resultLabel, objectiveContext.efficiencyLabel, 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} campaignId={campaignId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} objectiveContext={objectiveContext} onViewAd={setViewAd} onBudgetChanged={fetchCampaign} onCreativeAdded={fetchCampaign} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>
 
           {/* ── SEGMENTS ── */}
-          <Tabs.Content value="segments"><SegmentsPanel tenantId={tenantId} campaignId={campaignId} /></Tabs.Content>
+          <Tabs.Content value="segments"><SegmentsPanel tenantId={tenantId} campaignId={campaignId} objectiveGroup={objectiveContext.group} returnEvidenceAvailable={campaignReturnResolved} /></Tabs.Content>
 
           {/* ── ACTIONS ── */}
           <Tabs.Content value="actions"><ActionsPanel tenantId={tenantId} campaignId={campaignId} /></Tabs.Content>
@@ -2374,14 +2632,33 @@ export default function CampaignDetailPage({ params }: PageProps) {
               : (
                 <div className="p-6 space-y-6">
                   {snaps.length >= 3 && (() => {
-                    const rd = snaps.map(s => s.metrics.roas ?? 0).reverse(), sd = snaps.map(s => s.metrics.spend ?? 0).reverse()
-                    return <div className="grid grid-cols-2 gap-4">{[{ l: 'ROAS', d: rd, c: C.green, u: 'x', I: TrendingUp }, { l: 'Spend', d: sd, c: C.accent, u: '₹', I: DollarSign }].map(({ l, d, c, u, I }) => {
+                    const chronological = [...snaps].reverse()
+                    const primaryIsResult = ['leads', 'app', 'engagement'].includes(objectiveContext.group)
+                    const primaryValues = chronological
+                      .map((snapshot) => objectiveContext.group === 'sales'
+                        ? snapshot.metrics.roas
+                        : primaryIsResult
+                          ? snapshot.metrics.conversions
+                          : snapshot.metrics.ctr)
+                      .filter((value): value is number => value != null)
+                    const spendValues = chronological.map((snapshot) => snapshot.metrics.spend).filter((value): value is number => value != null)
+                    const primaryLabel = objectiveContext.group === 'sales'
+                      ? 'Raw ROAS'
+                      : primaryIsResult
+                        ? objectiveContext.resultLabel
+                        : 'Delivery CTR'
+                    const primaryUnit = objectiveContext.group === 'sales' ? 'x' : primaryIsResult ? 'count' : '%'
+                    const series = [
+                      { l: primaryLabel, d: primaryValues, c: C.green, u: primaryUnit, I: TrendingUp, directional: true },
+                      { l: 'Spend', d: spendValues, c: C.accent, u: '₹', I: DollarSign, directional: false },
+                    ].filter((item) => item.d.length >= 2)
+                    return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{series.map(({ l, d, c, u, I, directional }) => {
                       const latest = d[d.length - 1], prev = d[d.length - 2] ?? latest, delta = prev ? ((latest - prev) / prev) * 100 : 0
                       const min = Math.min(...d), max = Math.max(...d), rng = max - min || 1, W = 180, H = 48
-                      const pts = d.map((v, i) => `${(i / (d.length - 1)) * W},${H - ((v - min) / rng) * H}`).join(' ')
+                      const pts = d.map((v, i) => `${2 + (i / (d.length - 1)) * (W - 6)},${H - 2 - ((v - min) / rng) * (H - 4)}`).join(' ')
                       return <div key={l} className="card-inset p-5">
-                        <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-1.5"><I size={13} style={{ color: c }} /><p className="text-xs font-bold" style={{ color: C.textSecondary }}>{l} Trend</p></div><span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: delta >= 0 ? C.greenBg : C.redBg, color: delta >= 0 ? C.green : C.red }}>{delta >= 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%</span></div>
-                        <div className="flex items-end gap-5"><svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none"><polyline points={pts} stroke={c} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" /><circle cx={W} cy={H - ((latest - min) / rng) * H} r={4} fill={c} /></svg><div><p className="display-num text-xl" style={{ color: c }}>{u === '₹' ? formatCurrency(latest) : `${latest.toFixed(2)}x`}</p><p className="text-[10px] mt-1 font-semibold" style={{ color: C.textMuted }}>Latest</p></div></div>
+                        <div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-1.5"><I size={13} style={{ color: c }} /><p className="text-xs font-bold" style={{ color: C.textSecondary }}>{l} trend</p></div><span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md" style={directional ? { background: delta >= 0 ? C.greenBg : C.redBg, color: delta >= 0 ? C.green : C.red } : { background: C.accentLight, color: C.accent }}>{delta >= 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%</span></div>
+                        <div className="flex flex-col sm:flex-row sm:items-end gap-4"><svg className="w-full min-w-0" style={{ maxWidth: 280 }} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" fill="none"><polyline points={pts} stroke={c} strokeWidth={2} vectorEffect="non-scaling-stroke" fill="none" strokeLinejoin="round" strokeLinecap="round" /><circle cx={W - 4} cy={H - 2 - ((latest - min) / rng) * (H - 4)} r={3} fill={c} /></svg><div className="shrink-0"><p className="display-num text-xl" style={{ color: c }}>{u === '₹' ? formatCurrency(latest) : u === 'x' ? `${latest.toFixed(2)}x` : u === '%' ? `${latest.toFixed(2)}%` : latest.toLocaleString('en-IN')}</p><p className="text-[10px] mt-1 font-semibold" style={{ color: C.textMuted }}>Latest snapshot</p></div></div>
                       </div>
                     })}</div>
                   })()}
@@ -2414,15 +2691,21 @@ export default function CampaignDetailPage({ params }: PageProps) {
                             {sk && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: insufficient ? C.amberBg : C.surfaceMuted, color: insufficient ? C.amber : C.textMuted }}>{insufficient ? 'No evidence yet' : 'All clear'}</span>}
                             <LeakDiagnosisBadge leak={v.leakDiagnosis} />
                             <span className="text-[11px]" style={{ color: C.textMuted }}>{formatDateTime(snap.auditedAt)}</span>
-                            {snap.metrics.roas != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>ROAS {snap.metrics.roas.toFixed(2)}x</span>}
+                            {objectiveContext.group === 'sales' && snap.metrics.roas != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>Raw ROAS {snap.metrics.roas.toFixed(2)}x</span>}
+                            {['leads', 'app', 'engagement'].includes(objectiveContext.group) && snap.metrics.conversions != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>{objectiveContext.resultLabel} {snap.metrics.conversions.toLocaleString('en-IN')}</span>}
+                            {['awareness', 'traffic'].includes(objectiveContext.group) && snap.metrics.ctr != null && <span className="text-[11px] font-semibold tabular-nums" style={{ color: C.textSecondary }}>Delivery CTR {snap.metrics.ctr.toFixed(2)}%</span>}
                             {snap.metrics.spend != null && <span className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>· {formatCurrency(snap.metrics.spend)}</span>}
                             {snap.powerCalc && <PowerCalcBadge p={snap.powerCalc} />}
                           </div>
-                          {snap.bayesian && <div className="mt-2"><BayesianVerdictPanel b={snap.bayesian} /></div>}
+                          {objectiveContext.group === 'sales' && campaignReturnResolved && snap.bayesian && <div className="mt-2"><BayesianVerdictPanel b={snap.bayesian} /></div>}
                           {snap.adSets && snap.adSets.length > 0 && <div className="mt-2"><ThompsonAllocationBar adSets={snap.adSets} /></div>}
-                          {sk ? <div className="flex gap-3 mt-0.5">{[snap.metrics.spend != null && `${formatCurrency(snap.metrics.spend)} spent`, snap.metrics.conversions != null && `${snap.metrics.conversions} conv.`, snap.metrics.ctr != null && `CTR ${snap.metrics.ctr.toFixed(2)}%`].filter(Boolean).map((t, k) => <span key={k} className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>{t}</span>)}</div> : v.contextInsight ? <p className="text-[13px] leading-relaxed" style={{ color: C.textSecondary }}>{v.contextInsight}</p> : null}
+                          {sk ? <div className="flex gap-3 mt-0.5 flex-wrap">{[
+                            snap.metrics.spend != null && `${formatCurrency(snap.metrics.spend)} spent`,
+                            ['sales', 'leads', 'app', 'engagement'].includes(objectiveContext.group) && snap.metrics.conversions != null && `${snap.metrics.conversions} ${objectiveContext.resultLabel.toLowerCase()}`,
+                            snap.metrics.ctr != null && `CTR ${snap.metrics.ctr.toFixed(2)}%`,
+                          ].filter(Boolean).map((t, k) => <span key={k} className="text-[11px] tabular-nums" style={{ color: C.textMuted }}>{t}</span>)}</div> : v.contextInsight ? <p className="text-[13px] leading-relaxed" style={{ color: C.textSecondary }}>{v.contextInsight}</p> : null}
                           {v.recommendedActions?.length ? <div className="flex flex-wrap gap-1 mt-1.5">{v.recommendedActions.map((a, j) => <span key={j} className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: C.surfaceMuted, color: C.textMuted }}>{typeof a === 'string' ? a : (a.reason ?? a.targetName ?? a.type ?? '')}</span>)}</div> : null}
-                          {snap.adSets?.length && !sk ? (() => { const w = snap.adSets!.filter(a => a.metrics?.roas != null && a.metrics.roas >= 1.5); const rr = snap.adSets!.some(a => (a.metrics?.conversions ?? 0) >= 20); const fw = snap.ads?.filter(a => a.metrics?.ctr != null && a.metrics.ctr < 0.5) || []; if (!w.length && !rr && !fw.length) return null; return <div className="flex flex-wrap gap-1.5 mt-2">{w.map((a, k) => <span key={k} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}><TrendingUp size={9} />{a.name}: {a.metrics!.roas!.toFixed(1)}x</span>)}{rr && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.blueBg, color: C.blue }}><Target size={9} />Retarget ready</span>}{fw.length > 0 && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.amberBg, color: C.amber }}><FlameKindling size={9} />{fw.length} fatigue</span>}</div> })() : null}
+                          {snap.adSets?.length && !sk ? (() => { const sales = objectiveContext.group === 'sales'; const w = sales ? snap.adSets!.filter(a => a.metrics?.roas != null && a.metrics.roas >= 1) : []; const rr = sales && snap.adSets!.some(a => (a.metrics?.conversions ?? 0) >= 20); const fw = snap.ads?.filter(a => a.metrics?.ctr != null && a.metrics.ctr < 0.5) || []; if (!w.length && !rr && !fw.length) return null; return <div className="flex flex-wrap gap-1.5 mt-2">{w.map((a, k) => <span key={k} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.greenBg, color: C.green }}><TrendingUp size={9} />{a.name}: {a.metrics!.roas!.toFixed(1)}x raw ROAS</span>)}{rr && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.blueBg, color: C.blue }}><Target size={9} />Retarget ready</span>}{fw.length > 0 && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: C.amberBg, color: C.amber }}><FlameKindling size={9} />{fw.length} fatigue</span>}</div> })() : null}
                           {snap.ads?.length ? (
                             <details className="mt-2">
                               <summary className="text-[11px] cursor-pointer font-semibold" style={{ color: C.textMuted }}>{snap.ads.length} ad{snap.ads.length !== 1 ? 's' : ''}</summary>

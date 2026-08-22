@@ -8,7 +8,6 @@ import {
   Bot,
   User,
   Search,
-  TrendingUp,
   DollarSign,
   Activity,
   ArrowUpDown,
@@ -24,6 +23,9 @@ import {
   Play,
   Pause,
   ExternalLink,
+  ShieldCheck,
+  Clock3,
+  Database,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
@@ -46,17 +48,231 @@ interface PageProps {
   searchParams: Promise<{ filter?: string; accountId?: string }>
 }
 
-type SortKey = 'topic' | 'status' | 'budget' | 'spend' | 'roas' | 'ctr' | 'conversions' | 'launchedAt'
+type SortKey = 'topic' | 'status' | 'objective' | 'budget' | 'spend' | 'result' | 'efficiency' | 'launchedAt'
 type SortDir = 'asc' | 'desc'
 
 const STATUS_FILTERS = [
-  { key: 'all',              label: 'All' },
-  { key: 'active',           label: 'Active' },
-  { key: 'pending_approval', label: 'Pending' },
-  { key: 'paused',           label: 'Paused' },
-  { key: 'completed',        label: 'Completed' },
-  { key: 'failed',           label: 'Failed' },
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'pending_approval', label: 'Awaiting approval' },
+  { key: 'needs_attention', label: 'Needs attention' },
+  { key: 'paused', label: 'Paused' },
+  { key: 'completed', label: 'Completed' },
 ]
+
+type ObjectiveGroup = 'sales' | 'awareness' | 'traffic' | 'leads' | 'app' | 'engagement' | 'unknown'
+
+interface CampaignOutcome {
+  group: ObjectiveGroup
+  objectiveLabel: string
+  resultLabel: string
+  resultValue: string
+  resultSort: number
+  efficiencyLabel: string
+  efficiencyValue: string
+  efficiencySort: number
+}
+
+function hasCampaignScopedRecordedReturn(campaign: Campaign): boolean {
+  const recordedBasis = campaign.revenueBasis === 'meta_action_value' ||
+    campaign.revenueBasis === 'no_attributed_revenue'
+  const scopedSource = campaign.revenueAttributionSource != null &&
+    campaign.revenueAttributionSource !== 'unknown' &&
+    campaign.revenueAttributionSource !== 'unresolved' &&
+    campaign.revenueAttributionSource !== 'account_fallback'
+  return recordedBasis && scopedSource
+}
+
+type CampaignRuntimeMetrics = Campaign & {
+  reach?: number
+  cpm?: number
+  frequency?: number
+}
+
+function optimizationGoalFor(campaign: Campaign): string {
+  const goals = (campaign.metaAdSets ?? campaign.adSets ?? [])
+    .map((adSet) => adSet.optimizationGoal)
+    .filter((goal): goal is string => Boolean(goal))
+  const uniqueGoals = [...new Set(goals)]
+  return uniqueGoals.length > 1 ? 'MIXED' : uniqueGoals.length === 1 ? uniqueGoals[0].toUpperCase() : ''
+}
+
+function objectiveGroupFor(campaign: Campaign): ObjectiveGroup {
+  const objective = `${campaign.objective ?? campaign.campaignConfig?.objective ?? ''}`.toLowerCase()
+  if (!objective) return 'unknown'
+  if (/awareness|reach|impression|recall|thruplay|video.view/.test(objective)) return 'awareness'
+  if (/traffic|link.click|landing.page/.test(objective)) return 'traffic'
+  if (/lead|message/.test(objective)) return 'leads'
+  if (/app|install/.test(objective)) return 'app'
+  if (/engagement/.test(objective)) return 'engagement'
+  if (/sale|purchase|conversion|catalog/.test(objective)) return 'sales'
+  return 'unknown'
+}
+
+function objectiveLabelFor(campaign: Campaign, group: ObjectiveGroup): string {
+  const explicit = campaign.objective ?? campaign.campaignConfig?.objective
+  if (!explicit) {
+    return ({ sales: 'Sales', awareness: 'Awareness', traffic: 'Traffic', leads: 'Leads', app: 'App growth', engagement: 'Engagement', unknown: 'Not recorded' })[group]
+  }
+  const normalized = explicit
+    .replace(/^OUTCOME_/i, '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function campaignOutcome(campaign: Campaign): CampaignOutcome {
+  const group = objectiveGroupFor(campaign)
+  const runtimeMetrics = campaign as CampaignRuntimeMetrics
+  const optimizationGoal = optimizationGoalFor(campaign)
+  const spend = campaign.spend ?? 0
+  const impressions = campaign.impressions ?? 0
+  const reach = runtimeMetrics.reach ?? 0
+  const clicks = campaign.clicks ?? 0
+  const conversions = campaign.conversions ?? 0
+  const campaignAdSets = campaign.metaAdSets ?? campaign.adSets ?? []
+  const hasLandingPageViews = campaignAdSets.some((adSet) => adSet.landingPageView != null)
+  const landingPageViews = hasLandingPageViews
+    ? campaignAdSets.reduce((sum, adSet) => sum + (adSet.landingPageView ?? 0), 0)
+    : undefined
+  const ads = (campaign.metaAdSets ?? campaign.adSets ?? []).flatMap((adSet) => adSet.ads ?? [])
+  const hasThruplays = ads.some((ad) => ad.thruplay != null)
+  const thruplays = hasThruplays ? ads.reduce((sum, ad) => sum + (ad.thruplay ?? 0), 0) : undefined
+  const hasThreeSecondViews = ads.some((ad) => ad.video3s != null)
+  const threeSecondViews = hasThreeSecondViews ? ads.reduce((sum, ad) => sum + (ad.video3s ?? 0), 0) : undefined
+  const costPerResult = conversions > 0 ? spend / conversions : 0
+  const cpm = runtimeMetrics.cpm ?? (impressions > 0 ? (spend / impressions) * 1000 : 0)
+  const cpc = campaign.cpc ?? (clicks > 0 ? spend / clicks : 0)
+
+  if (optimizationGoal === 'MIXED') {
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: 'Mixed optimization goals',
+      resultValue: 'See ad sets',
+      resultSort: 0,
+      efficiencyLabel: 'Goal-specific efficiency',
+      efficiencyValue: 'See ad sets',
+      efficiencySort: 0,
+    }
+  }
+
+  if (optimizationGoal === 'REACH' || optimizationGoal === 'IMPRESSIONS' || optimizationGoal === 'AD_RECALL_LIFT') {
+    const useReach = optimizationGoal === 'REACH'
+    const deliveryResult = useReach ? runtimeMetrics.reach : impressions
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: useReach ? 'Reach' : 'Impressions',
+      resultValue: deliveryResult == null ? 'Unavailable' : deliveryResult.toLocaleString(),
+      resultSort: deliveryResult ?? 0,
+      efficiencyLabel: 'CPM',
+      efficiencyValue: cpm > 0 ? formatCurrency(cpm) : '—',
+      efficiencySort: cpm,
+    }
+  }
+
+  if (optimizationGoal === 'LANDING_PAGE_VIEWS' || optimizationGoal === 'LINK_CLICKS') {
+    const useLandingViews = optimizationGoal === 'LANDING_PAGE_VIEWS'
+    const trafficResult = useLandingViews ? landingPageViews : clicks
+    const trafficCost = trafficResult != null && trafficResult > 0 ? spend / trafficResult : useLandingViews ? 0 : cpc
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: useLandingViews ? 'Landing-page views' : 'Clicks',
+      resultValue: trafficResult == null ? 'Unavailable' : trafficResult.toLocaleString(),
+      resultSort: trafficResult ?? 0,
+      efficiencyLabel: useLandingViews ? 'Cost / LPV' : 'CPC',
+      efficiencyValue: trafficCost > 0 ? formatCurrency(trafficCost) : '—',
+      efficiencySort: trafficCost,
+    }
+  }
+
+  if (optimizationGoal === 'THRUPLAY' || optimizationGoal === 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS') {
+    const hasExactThruplays = optimizationGoal === 'THRUPLAY'
+    const videoResult = hasExactThruplays ? thruplays : threeSecondViews
+    const videoCost = videoResult != null && videoResult > 0 ? spend / videoResult : 0
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: hasExactThruplays ? 'ThruPlays' : '3-sec views (proxy)',
+      resultValue: videoResult == null ? 'Unavailable' : videoResult.toLocaleString(),
+      resultSort: videoResult ?? 0,
+      efficiencyLabel: hasExactThruplays ? 'Cost / ThruPlay' : 'Cost / 3-sec view',
+      efficiencyValue: videoResult == null ? 'Unavailable' : videoCost > 0 ? formatCurrency(videoCost) : '—',
+      efficiencySort: videoCost,
+    }
+  }
+
+  if (group === 'awareness') {
+    const awarenessResult = reach > 0 ? reach : impressions
+    const awarenessLabel = reach > 0 ? 'Reach' : 'Impressions'
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: awarenessLabel,
+      resultValue: awarenessResult > 0 ? awarenessResult.toLocaleString() : '—',
+      resultSort: awarenessResult,
+      efficiencyLabel: 'CPM',
+      efficiencyValue: cpm > 0 ? formatCurrency(cpm) : '—',
+      efficiencySort: cpm,
+    }
+  }
+  if (group === 'traffic' && !['OFFSITE_CONVERSIONS', 'APP_INSTALLS'].includes(optimizationGoal)) {
+    const trafficResult = landingPageViews ?? clicks
+    const trafficLabel = landingPageViews != null ? 'Landing-page views' : 'Clicks (delivery proxy)'
+    const trafficCost = trafficResult != null && trafficResult > 0 ? spend / trafficResult : cpc
+    return {
+      group,
+      objectiveLabel: objectiveLabelFor(campaign, group),
+      resultLabel: trafficLabel,
+      resultValue: trafficResult > 0 ? trafficResult.toLocaleString() : '—',
+      resultSort: trafficResult,
+      efficiencyLabel: landingPageViews != null ? 'Cost / LPV' : 'CPC',
+      efficiencyValue: trafficCost > 0 ? formatCurrency(trafficCost) : '—',
+      efficiencySort: trafficCost,
+    }
+  }
+
+  const resultLabel = group === 'leads'
+    ? 'Leads'
+    : group === 'app'
+      ? 'App results'
+      : group === 'sales'
+        ? 'Attributed sales results'
+        : group === 'engagement'
+          ? 'Engagement results'
+          : 'Results'
+  const efficiencyLabel = group === 'leads'
+    ? 'Cost / lead'
+    : group === 'sales'
+      ? 'Raw ROAS'
+      : group === 'engagement'
+        ? 'Cost / engagement'
+        : 'Cost / result'
+  const roas = campaign.roas ?? 0
+  const returnResolved = hasCampaignScopedRecordedReturn(campaign)
+  const configuredEstimate = campaign.revenueBasis === 'configured_conversion_value'
+  return {
+    group,
+    objectiveLabel: objectiveLabelFor(campaign, group),
+    resultLabel,
+    resultValue: conversions.toLocaleString(),
+    resultSort: conversions,
+    efficiencyLabel: group === 'sales' && configuredEstimate
+      ? 'Configured estimate · not raw proof'
+      : efficiencyLabel,
+    efficiencyValue: group === 'sales'
+      ? (returnResolved ? `${roas.toFixed(2)}x` : configuredEstimate ? 'Withheld' : 'Unavailable')
+      : (costPerResult > 0 ? formatCurrency(costPerResult) : '—'),
+    efficiencySort: group === 'sales' ? (returnResolved ? roas : 0) : costPerResult,
+  }
+}
+
+function campaignNeedsAttention(campaign: Campaign, proposals?: CampaignProposalCounts): boolean {
+  const pendingActions = (campaign.pendingActions ?? []).some((action) => action.status === 'pending')
+  return campaign.status === 'failed' || pendingActions || (proposals?.total ?? 0) > 0
+}
 
 // ── Source badge ──────────────────────────────────────────────────────────────
 // 'agent' = fully autonomous pipeline launch. 'human' = someone built this
@@ -70,20 +286,20 @@ function SourceBadge({ source }: { source?: 'agent' | 'human' | 'manual' }) {
   if (source === 'agent') {
     return (
       <span className="chip chip-accent">
-        <Bot size={9} /> Agent
+        <Bot size={11} /> AI built
       </span>
     )
   }
   if (source === 'human') {
     return (
       <span className="chip chip-neutral">
-        <User size={9} /> Manual create
+        <User size={11} /> Dashboard built
       </span>
     )
   }
   return (
     <span className="chip chip-neutral" title="Created directly in Meta Ads Manager — synced here for visibility only, not managed by this tool">
-      <ExternalLink size={9} /> From Meta
+      <ExternalLink size={11} /> Meta synced
     </span>
   )
 }
@@ -274,6 +490,12 @@ function CampaignRow({
 }) {
   const [open, setOpen] = useState(false)
   const adSets = campaign.metaAdSets || []
+  const outcome = campaignOutcome(campaign)
+  const returnResolved = hasCampaignScopedRecordedReturn(campaign)
+  const optimizationGoal = optimizationGoalFor(campaign)
+  const optimizationLabel = optimizationGoal
+    ? optimizationGoal.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : ''
 
   return (
     <>
@@ -317,6 +539,11 @@ function CampaignRow({
                   {campaign.topic}
                 </p>
               )}
+              {campaign.productName && (
+                <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--ink-3)' }}>
+                  {campaign.productName}
+                </p>
+              )}
               {isPending && (
                 <p className="text-[11px] mt-0.5 font-medium" style={{ color: 'var(--warn)' }}>
                   Awaiting approval
@@ -341,9 +568,12 @@ function CampaignRow({
           )}
         </td>
 
-        {/* Source */}
+        {/* Objective */}
         <td className="whitespace-nowrap">
-          <SourceBadge source={campaign.source} />
+          <span className="chip chip-info">{outcome.objectiveLabel}</span>
+          {optimizationLabel && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--ink-3)' }}>Optimizes for {optimizationLabel}</p>
+          )}
         </td>
 
         {/* Budget */}
@@ -356,30 +586,38 @@ function CampaignRow({
           {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
         </td>
 
-        {/* ROAS */}
+        {/* Objective-specific result */}
         <td className="num whitespace-nowrap">
-          {campaign.roas != null ? (
-            <span className="mono text-[12px] font-semibold" style={{
-              color: campaign.roas >= 2 ? 'var(--good)' : campaign.roas >= 1 ? 'var(--warn)' : 'var(--bad)'
-            }}>
-              {campaign.roas.toFixed(2)}x
-            </span>
-          ) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
+          <p className="mono text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>{outcome.resultValue}</p>
+          <p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>{outcome.resultLabel}</p>
         </td>
 
-        {/* CTR */}
-        <td className="num whitespace-nowrap mono text-[12px]">
-          {campaign.ctr != null ? `${campaign.ctr.toFixed(2)}%` : <span style={{ color: 'var(--ink-4)' }}>—</span>}
+        {/* Objective-specific efficiency */}
+        <td className="num whitespace-nowrap">
+          <p
+            className="mono text-[12px] font-semibold"
+            style={{
+              color: outcome.group === 'sales' && campaign.roas != null && returnResolved
+                ? campaign.roas >= 1 ? 'var(--good)' : 'var(--bad)'
+                : 'var(--ink)',
+            }}
+          >
+            {outcome.efficiencyValue}
+          </p>
+          <p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>{outcome.efficiencyLabel}</p>
         </td>
 
-        {/* Conversions */}
-        <td className="num whitespace-nowrap mono text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>
-          {campaign.conversions != null ? campaign.conversions : <span style={{ color: 'var(--ink-4)' }}>—</span>}
+        {/* Source */}
+        <td className="whitespace-nowrap">
+          <SourceBadge source={campaign.source} />
         </td>
 
         {/* Launched */}
         <td className="num whitespace-nowrap text-[11px] mono" style={{ color: 'var(--ink-3)' }}>
           {formatDate(campaign.launchedAt)}
+          <span className="block mt-1 text-[10px]">
+            {campaign.dataAsOf ? `Metrics ${formatRelativeTime(campaign.dataAsOf)}` : 'Metrics freshness unknown'}
+          </span>
         </td>
 
         {/* Action */}
@@ -664,18 +902,37 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  // Derived stats
-  const totalSpend       = campaigns.reduce((s, c) => s + (c.spend || 0), 0)
-  const activeCampaigns  = campaigns.filter((c) => c.status === 'active').length
+  // Derived portfolio status. Spend is deliberately scoped to campaigns built
+  // in Meridian; Meta-synced campaigns remain visible below but are read-only.
+  const managedSpend = campaigns
+    .filter((campaign) => campaign.source === 'agent' || campaign.source === 'human')
+    .reduce((sum, campaign) => sum + (campaign.spend || 0), 0)
+  const activeCampaigns = campaigns.filter((c) => c.status === 'active').length
   const pendingCampaigns = campaigns.filter((c) => c.status === 'pending_approval').length
-  const roasArr          = campaigns.filter((c) => c.roas && c.roas > 0).map((c) => c.roas!)
-  const avgRoas          = roasArr.length ? roasArr.reduce((a, b) => a + b, 0) / roasArr.length : 0
+  const attentionCampaigns = campaigns.filter((campaign) =>
+    campaignNeedsAttention(campaign, proposalsByCampaign[campaign._id]),
+  ).length
+  const activeCampaignRows = campaigns.filter((campaign) => campaign.status === 'active')
+  const latestMetricsAt = activeCampaignRows
+    .map((campaign) => campaign.dataAsOf)
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1)
+  const activeWithoutFreshness = activeCampaignRows.filter((campaign) => !campaign.dataAsOf).length
+  const latestAudit = campaigns
+    .map((campaign) => campaign.lastAuditedAt)
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1)
 
   const countByStatus = useMemo(() => {
     const m: Record<string, number> = { all: campaigns.length }
     campaigns.forEach((c) => { m[c.status] = (m[c.status] || 0) + 1 })
+    m.needs_attention = campaigns.filter((campaign) =>
+      campaignNeedsAttention(campaign, proposalsByCampaign[campaign._id]),
+    ).length
     return m
-  }, [campaigns])
+  }, [campaigns, proposalsByCampaign])
 
   // Ad accounts actually present in this tenant's campaigns — always
   // selectable even if the Meta name lookup above never resolved.
@@ -687,7 +944,11 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
 
   const filtered = useMemo(() => {
     let list = campaigns
-    if (statusFilter !== 'all') list = list.filter((c) => c.status === statusFilter)
+    if (statusFilter === 'needs_attention') {
+      list = list.filter((campaign) => campaignNeedsAttention(campaign, proposalsByCampaign[campaign._id]))
+    } else if (statusFilter !== 'all') {
+      list = list.filter((c) => c.status === statusFilter)
+    }
     if (accountFilter !== 'all') list = list.filter((c) => c.metaAccountId === accountFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -703,63 +964,85 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       switch (sortKey) {
         case 'topic':       va = a.name || a.topic || ''; vb = b.name || b.topic || ''; break
         case 'status':      va = a.status; vb = b.status; break
+        case 'objective':   va = campaignOutcome(a).objectiveLabel; vb = campaignOutcome(b).objectiveLabel; break
         case 'budget':      va = a.budget || 0; vb = b.budget || 0; break
         case 'spend':       va = a.spend || 0; vb = b.spend || 0; break
-        case 'roas':        va = a.roas || 0; vb = b.roas || 0; break
-        case 'ctr':         va = a.ctr || 0; vb = b.ctr || 0; break
-        case 'conversions': va = a.conversions || 0; vb = b.conversions || 0; break
+        case 'result':      va = campaignOutcome(a).resultSort; vb = campaignOutcome(b).resultSort; break
+        case 'efficiency':  va = campaignOutcome(a).efficiencySort; vb = campaignOutcome(b).efficiencySort; break
         case 'launchedAt':  va = a.launchedAt || ''; vb = b.launchedAt || ''; break
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [campaigns, statusFilter, accountFilter, search, sortKey, sortDir])
+  }, [campaigns, statusFilter, accountFilter, search, sortKey, sortDir, proposalsByCampaign])
 
   const numericCols: { key: SortKey; label: React.ReactNode }[] = [
-    { key: 'budget',      label: 'Budget'   },
-    { key: 'spend',       label: 'Spend'    },
-    { key: 'roas',        label: <Term help={GLOSSARY.roas}>ROAS</Term> },
-    { key: 'ctr',         label: <Term help={GLOSSARY.ctr}>CTR</Term> },
-    { key: 'conversions', label: <Term help={GLOSSARY.conv}>Conv.</Term> },
-    { key: 'launchedAt',  label: 'Launched' },
+    { key: 'budget', label: 'Daily budget' },
+    { key: 'spend', label: 'Spend' },
+    { key: 'result', label: 'Primary result' },
+    { key: 'efficiency', label: 'Efficiency' },
   ]
 
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
 
       {/* ── Page header ─────────────────────────────────────────── */}
-      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
-        <div className="min-w-0">
-          <p className="micro-label mb-2 mono">{tenantId}</p>
-          <h1 className="page-title">Campaigns</h1>
-          <p className="page-subtitle">Every campaign across the account — live, pending, and archived.</p>
+      <div className="flex items-start justify-between gap-5 mb-6 flex-wrap">
+        <div className="min-w-0 max-w-2xl">
+          <p className="micro-label mb-2">Campaign operations</p>
+          <h1 className="page-title">Live growth portfolio</h1>
+          <p className="page-subtitle">Launch, review and safely operate every campaign from one objective-aware workspace.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap pb-1">
-          <Link href={`/dashboard/${tenantId}/campaigns/new`} className="btn btn-primary">
-            <Plus size={12} /> Create Campaign
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-primary">
+            <Bot size={14} /> Build with AI
+          </Link>
+          <Link href={`/dashboard/${tenantId}/campaigns/new`} className="btn btn-ghost">
+            <Plus size={14} /> Create manually
           </Link>
           <button
+            type="button"
             onClick={handleRunAudit}
             disabled={auditState === 'loading'}
             className={
               auditState === 'success' ? 'btn chip-good border'
               : auditState === 'error' ? 'btn btn-danger'
-              : 'btn btn-primary'
+              : 'btn btn-ghost'
             }
           >
-            {auditState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
-            {auditState === 'loading' ? 'Auditing…' : auditState === 'success' ? 'Done!' : auditState === 'error' ? 'Failed' : 'Run Audit Now'}
+            {auditState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+            {auditState === 'loading' ? 'Checking…' : auditState === 'success' ? 'Audit complete' : auditState === 'error' ? 'Audit failed' : 'Run safety audit'}
           </button>
           <button
+            type="button"
             onClick={handleSyncFromMeta}
             disabled={syncing}
             className="btn btn-ghost"
             title="Pull fresh campaign/adset/ad data from Meta (not just reload from the database)"
           >
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : undefined} />
-            {syncing ? 'Syncing…' : 'Refresh from Meta'}
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
+            {syncing ? 'Syncing…' : 'Sync Meta'}
           </button>
+        </div>
+      </div>
+
+      <div className="card px-4 py-3 mb-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2.5 text-[13px]" style={{ color: 'var(--ink-2)' }}>
+          <ShieldCheck size={16} style={{ color: 'var(--good)' }} className="shrink-0" />
+          <span><strong style={{ color: 'var(--ink)' }}>Controlled operations.</strong> Meridian-built campaigns use approval and budget safeguards; Meta-synced campaigns stay read-only.</span>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap text-[12px]" style={{ color: 'var(--ink-3)' }}>
+          <span className="inline-flex items-center gap-1.5">
+            <Database size={13} /> {activeWithoutFreshness > 0
+              ? `${activeWithoutFreshness}/${activeCampaignRows.length} active campaigns lack a metrics timestamp`
+              : latestMetricsAt
+                ? `Latest active metrics ${formatRelativeTime(latestMetricsAt)}`
+                : 'No active metrics timestamp'}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Clock3 size={13} /> Safety audit {latestAudit ? formatRelativeTime(latestAudit) : 'not run yet'}
+          </span>
         </div>
       </div>
 
@@ -824,17 +1107,20 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       )}
 
       {/* ── Stats row ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <StatCard icon={Megaphone}  label="Total"    value={campaigns.length}                              iconColor="var(--ink-2)" iconBg="var(--muted)" />
-        <StatCard icon={Activity}   label="Active"   value={activeCampaigns}                               iconColor="var(--good)" iconBg="var(--good-bg)" accent="var(--good)" />
-        <StatCard icon={DollarSign} label="Spend"    value={formatCurrency(totalSpend)}                   iconColor="var(--accent)" iconBg="var(--accent-bg)" accent="var(--accent)" />
-        <StatCard icon={TrendingUp} label={<Term help={GLOSSARY.roas}>Avg ROAS</Term>} value={avgRoas > 0 ? `${avgRoas.toFixed(2)}x` : '—'} iconColor="var(--warn)" iconBg="var(--warn-bg)" accent="var(--warn)" />
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+        <StatCard icon={Activity} label="Active now" value={activeCampaigns} iconColor="var(--good)" iconBg="var(--good-bg)" accent="var(--good)" />
+        <StatCard icon={AlertCircle} label="Awaiting approval" value={pendingCampaigns} iconColor="var(--warn)" iconBg="var(--warn-bg)" accent="var(--warn)" />
+        <StatCard icon={ShieldCheck} label="Needs attention" value={attentionCampaigns} iconColor={attentionCampaigns > 0 ? 'var(--bad)' : 'var(--good)'} iconBg={attentionCampaigns > 0 ? 'var(--bad-bg)' : 'var(--good-bg)'} accent={attentionCampaigns > 0 ? 'var(--bad)' : 'var(--good)'} />
+        <StatCard icon={DollarSign} label="Meridian-managed spend" value={formatCurrency(managedSpend)} iconColor="var(--accent)" iconBg="var(--accent-bg)" accent="var(--accent)" />
       </div>
 
       {/* ── Error ────────────────────────────────────────────────── */}
       {error && (
-        <div className="rounded-xl p-4 mb-4 flex items-center gap-3 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
-          <AlertCircle size={14} className="shrink-0" /> {error}
+        <div className="rounded-xl p-4 mb-4 flex items-center justify-between gap-3 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
+          <span className="inline-flex items-center gap-2"><AlertCircle size={14} className="shrink-0" /> Campaign data could not be refreshed ({error}).</span>
+          <button type="button" onClick={() => { setLoading(true); void fetchCampaigns() }} className="btn btn-ghost shrink-0">
+            <RefreshCw size={13} /> Retry
+          </button>
         </div>
       )}
 
@@ -852,12 +1138,14 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
               const active = statusFilter === f.key
               return (
                 <button
+                  type="button"
                   key={f.key}
                   onClick={() => setStatusFilter(f.key)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  aria-pressed={active}
+                  className="inline-flex min-h-10 items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all"
                   style={
                     active
-                      ? { background: 'var(--ink)', color: 'var(--paper)' }
+                      ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)', boxShadow: 'inset 0 0 0 1px var(--accent-border)' }
                       : { background: 'transparent', color: 'var(--ink-2)' }
                   }
                 >
@@ -867,7 +1155,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                       className="text-[10px] min-w-4.5 text-center px-1 py-0.5 rounded-full leading-none font-semibold mono"
                       style={
                         active
-                          ? { background: 'rgba(255,255,255,0.22)', color: 'var(--paper)' }
+                          ? { background: 'var(--surface)', color: 'var(--accent-strong)' }
                           : { background: 'var(--muted)', color: 'var(--ink-3)' }
                       }
                     >
@@ -883,6 +1171,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
             {/* Ad account filter */}
             {accountOptions.length > 0 && (
               <select
+                aria-label="Filter by ad account"
                 value={accountFilter}
                 onChange={(e) => setAccountFilter(e.target.value)}
                 className="input text-xs"
@@ -899,6 +1188,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
             <div className="relative">
               <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-3)' }} />
               <input
+                aria-label="Search campaigns"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -912,9 +1202,12 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 gap-2.5" style={{ color: 'var(--ink-3)' }}>
-            <Loader2 size={16} className="animate-spin" />
-            <span className="text-sm">Loading campaigns…</span>
+          <div className="p-5 space-y-3" role="status" aria-label="Loading campaign portfolio">
+            <div className="skeleton h-10 w-full" />
+            <div className="skeleton h-14 w-full" />
+            <div className="skeleton h-14 w-full" />
+            <div className="skeleton h-14 w-full" />
+            <span className="sr-only">Loading campaigns…</span>
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState
@@ -925,19 +1218,20 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
               : 'No campaigns yet'
             }
             subtitle={
-              !search && statusFilter === 'all' ? 'Trigger a pipeline run to create your first campaign'
+              !search && statusFilter === 'all' ? 'Build your first campaign with AI or create one manually.'
               : statusFilter === 'pending_approval' ? 'All campaigns have been reviewed'
               : undefined
             }
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="data-table">
+            <table className="data-table min-w-[1120px]">
               <thead>
                 <tr>
                   {/* Campaign */}
                   <th style={{ width: '35%' }}>
                     <button
+                      type="button"
                       onClick={() => toggleSort('topic')}
                       className="inline-flex items-center gap-1.5 uppercase tracking-[0.09em]"
                       style={{ color: sortKey === 'topic' ? 'var(--accent)' : undefined }}
@@ -949,6 +1243,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                   {/* Status */}
                   <th>
                     <button
+                      type="button"
                       onClick={() => toggleSort('status')}
                       className="inline-flex items-center gap-1.5 uppercase tracking-[0.09em]"
                       style={{ color: sortKey === 'status' ? 'var(--accent)' : undefined }}
@@ -957,13 +1252,23 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                     </button>
                   </th>
 
-                  {/* Source */}
-                  <th>Source</th>
+                  {/* Objective */}
+                  <th>
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('objective')}
+                      className="inline-flex items-center gap-1.5 uppercase tracking-[0.09em]"
+                      style={{ color: sortKey === 'objective' ? 'var(--accent)' : undefined }}
+                    >
+                      Objective <SortIcon col="objective" sortKey={sortKey} sortDir={sortDir} />
+                    </button>
+                  </th>
 
                   {/* Numeric sortable cols */}
                   {numericCols.map((col) => (
                     <th key={col.key} className="num">
                       <button
+                        type="button"
                         onClick={() => toggleSort(col.key)}
                         className="inline-flex items-center gap-1 uppercase tracking-[0.09em] ml-auto"
                         style={{ color: sortKey === col.key ? 'var(--accent)' : undefined }}
@@ -973,6 +1278,20 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
                       </button>
                     </th>
                   ))}
+
+                  <th>Source</th>
+
+                  <th className="num">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('launchedAt')}
+                      className="inline-flex items-center gap-1 uppercase tracking-[0.09em] ml-auto"
+                      style={{ color: sortKey === 'launchedAt' ? 'var(--accent)' : undefined }}
+                    >
+                      <SortIcon col="launchedAt" sortKey={sortKey} sortDir={sortDir} />
+                      Launched
+                    </button>
+                  </th>
 
                   <th className="w-10" />
                 </tr>

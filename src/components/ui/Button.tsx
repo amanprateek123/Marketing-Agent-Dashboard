@@ -6,7 +6,11 @@ type Variant = 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'gho
 type Size = 'sm' | 'md'
 
 const variantStyles: Record<Variant, React.CSSProperties> = {
-  primary:   { background: 'var(--accent)', color: '#fff' },
+  primary:   {
+    background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18), 0 7px 16px -10px rgba(31,51,126,.8)',
+    color: '#fff',
+  },
   secondary: { background: 'var(--surface)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' },
   success:   { background: 'var(--good-bg)', border: '1px solid var(--good-border)', color: 'var(--good)' },
   danger:    { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' },

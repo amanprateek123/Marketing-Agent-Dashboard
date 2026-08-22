@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import {
   FormatBadge,
-  PromptsVersionBadge,
 } from '@/components/badges'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -51,6 +50,26 @@ type ActionState = 'idle' | 'loading' | 'success' | 'error'
 interface Toast {
   kind: 'success' | 'error'
   text: string
+}
+
+const CAMPAIGN_OBJECTIVE_LABELS: Record<string, string> = {
+  OUTCOME_SALES: 'Sales · purchases',
+  OUTCOME_AWARENESS: 'Awareness · reach',
+  OUTCOME_TRAFFIC: 'Website traffic',
+  OUTCOME_LEADS: 'Lead generation',
+  OUTCOME_ENGAGEMENT: 'Engagement',
+  OUTCOME_APP_PROMOTION: 'App growth',
+  sales_purchase: 'Sales · purchases',
+  awareness_reach: 'Awareness · reach',
+  traffic: 'Website traffic',
+  leads: 'Lead generation',
+  engagement: 'Engagement',
+  app_promotion: 'App growth',
+}
+
+function campaignObjectiveLabel(value: string): string {
+  return CAMPAIGN_OBJECTIVE_LABELS[value]
+    ?? value.replace(/^OUTCOME_/, '').replace(/_/g, ' ').toLowerCase()
 }
 
 export default function ApprovalsPage({ params }: PageProps) {
@@ -120,18 +139,30 @@ export default function ApprovalsPage({ params }: PageProps) {
     return ids.map((id) => (id.startsWith('act_') ? id : `act_${id}`))
   }, [company])
 
+  const headerSubtitle = loading
+    ? 'Meridian is gathering your latest campaign drafts and launch controls.'
+    : error
+      ? 'Campaign drafts could not be loaded. Retry before making any launch decision.'
+      : pending.length === 0
+        ? 'Nothing is waiting right now. Meridian will bring completed campaign drafts here before any Meta spend can begin.'
+        : pending.length === 1
+          ? 'Meridian prepared 1 campaign strategy. Verify the creative, destination, tracking and budget before choosing whether it launches.'
+          : `Meridian prepared ${pending.length} campaign strategies. Verify each creative, destination, tracking setup and budget before choosing what launches.`
+
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
+    <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-[1600px] mx-auto stagger">
       {/* Header */}
-      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+      <div className="flex items-end justify-between gap-5 mb-5 flex-wrap">
         <div>
-          <h1 className="page-title">Ads waiting for you to review</h1>
-          <p className="page-subtitle">
-            {pending.length === 0
-              ? 'Nothing waiting right now.'
-              : pending.length === 1
-                ? '1 new ad idea. Approve to launch it on Meta.'
-                : `${pending.length} new ad ideas. Approve to launch them on Meta.`}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="micro-label">Human launch control</span>
+            <span className="chip chip-good">
+              <ShieldCheck size={10} /> Spend protected
+            </span>
+          </div>
+          <h1 className="page-title">Review the strategy. Control every launch.</h1>
+          <p className="page-subtitle max-w-3xl">
+            {headerSubtitle}
           </p>
         </div>
 
@@ -141,10 +172,13 @@ export default function ApprovalsPage({ params }: PageProps) {
         </button>
       </div>
 
+      <ApprovalJourney pending={pending.length} loading={loading} />
+
       {/* Toast */}
       {toast && (
         <div
           className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
+          role={toast.kind === 'error' ? 'alert' : 'status'}
           style={
             toast.kind === 'error'
               ? { background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }
@@ -165,28 +199,46 @@ export default function ApprovalsPage({ params }: PageProps) {
       {error && (
         <div
           className="rounded-xl p-4 mb-5 flex items-center gap-3 text-sm"
+          role="alert"
           style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
-          <AlertCircle size={14} className="shrink-0" /> {error}
+          <AlertCircle size={14} className="shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Approval data could not be loaded</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-2)' }}>{error}</p>
+          </div>
+          <button type="button" onClick={load} className="btn btn-ghost">
+            <RefreshCw size={12} /> Try again
+          </button>
         </div>
       )}
 
       {/* Content */}
       {loading ? (
-        <div
-          className="flex items-center justify-center py-20 gap-2.5"
-          style={{ color: 'var(--ink-2)' }}
-        >
-          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <span className="text-sm">Loading approvals…</span>
+        <div className="card flex items-center justify-center py-20 gap-3" aria-live="polite">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
+          >
+            <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Preparing your launch reviews</p>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Checking the latest campaign drafts and budget controls…</p>
+          </div>
         </div>
-      ) : pending.length === 0 ? (
+      ) : error ? null : pending.length === 0 ? (
         <div className="card">
           <EmptyState
             icon={ShieldCheck}
-            title="All caught up 🎉"
-            subtitle="The agent will drop new ad ideas here when it has them ready for you to approve."
+            title="Every launch decision is complete"
+            subtitle="Start a conversation with Campaign Copilot when you are ready to turn another growth goal into a campaign."
           />
+          <div className="flex justify-center pb-8 -mt-5">
+            <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent">
+              <Bot size={14} /> Build with Campaign Copilot
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5">
@@ -210,9 +262,62 @@ export default function ApprovalsPage({ params }: PageProps) {
   )
 }
 
+function ApprovalJourney({ pending, loading }: { pending: number; loading: boolean }) {
+  const steps = [
+    {
+      label: 'Strategy prepared',
+      detail: loading ? 'Checking campaign drafts…' : 'Goal, audience, budget and creative',
+      done: !loading,
+    },
+    { label: 'Safety review', detail: 'Destination, tracking and limits', done: false },
+    { label: 'Your decision', detail: pending ? `${pending} waiting for approval` : 'No decisions waiting', done: false },
+    { label: 'Meta launch', detail: 'Only after your approval', done: false },
+  ]
+
+  return (
+    <section className="card overflow-hidden mb-5" aria-label="Approval journey">
+      <div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-px"
+        style={{ background: 'var(--hairline-light)' }}
+      >
+        {steps.map((step, index) => {
+          const active = !loading && pending > 0 && (index === 1 || index === 2)
+          return (
+            <div
+              key={step.label}
+              className="px-4 py-3.5 flex items-center gap-3"
+              style={{ background: active ? 'var(--accent-bg)' : 'var(--surface)' }}
+            >
+              <span
+                className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+                style={{
+                  color: step.done ? '#fff' : active ? 'var(--accent)' : 'var(--ink-3)',
+                  background: step.done ? 'var(--good)' : active ? 'var(--surface)' : 'var(--muted)',
+                  border: active ? '1px solid var(--accent-border)' : undefined,
+                }}
+              >
+                {step.done ? <Check size={13} /> : index + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold truncate" style={{ color: 'var(--ink)' }}>
+                  {step.label}
+                </span>
+                <span className="block text-[10.5px] truncate" style={{ color: 'var(--ink-3)' }}>
+                  {step.detail}
+                </span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 // ── Weekly cap progress bar ────────────────────────────────────────────────
 function WeeklyCapBar({ committed, cap }: { committed: number; cap: number }) {
   const pct = Math.min(100, Math.round((committed / cap) * 100))
+  const remaining = Math.max(0, cap - committed)
   const tone =
     pct >= 90 ? { fg: 'var(--bad)', bar: 'var(--bad)', chip: 'chip-bad' }
     : pct >= 70 ? { fg: 'var(--warn)', bar: 'var(--warn)', chip: 'chip-warn' }
@@ -222,14 +327,20 @@ function WeeklyCapBar({ committed, cap }: { committed: number; cap: number }) {
     <div className="card px-5 py-4 mb-5">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
-          <span className="micro-label">Weekly budget in use</span>
+          <ShieldCheck size={14} style={{ color: tone.fg }} />
+          <div>
+            <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Weekly spend guard</span>
+            <p className="text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
+              Protects every Meridian-managed launch
+            </p>
+          </div>
         </div>
         <div className="flex items-baseline gap-1.5 tabular-nums">
           <span className="font-semibold" style={{ color: tone.fg }}>
             {formatCurrency(committed)}
           </span>
           <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>
-            of {formatCurrency(cap)} available
+            of {formatCurrency(cap)} used
           </span>
           <span className={`chip ${tone.chip} ml-1`}>{pct}% used</span>
         </div>
@@ -237,12 +348,20 @@ function WeeklyCapBar({ committed, cap }: { committed: number; cap: number }) {
       <div
         className="h-1.5 rounded-full overflow-hidden"
         style={{ background: 'var(--muted)' }}
+        role="progressbar"
+        aria-label="Weekly spend guard usage"
+        aria-valuemin={0}
+        aria-valuemax={cap}
+        aria-valuenow={Math.min(committed, cap)}
       >
         <div
           className="h-full rounded-full transition-all"
           style={{ width: `${pct}%`, background: tone.bar }}
         />
       </div>
+      <p className="text-[10.5px] mt-2 text-right" style={{ color: 'var(--ink-3)' }}>
+        {formatCurrency(remaining)} remains within this week&apos;s limit
+      </p>
     </div>
   )
 }
@@ -283,7 +402,11 @@ function ApprovalCard({
   // Prefer the account the campaign was built for (Create Campaign form, or
   // a prior manual pick) — audiences below are only valid on that same
   // account. Falls back to the tenant's first configured account.
-  const preferredAccountId = campaign.metaAccountId?.replace(/^act_/, '')
+  const preferredAccountId = campaign.metaAccountId
+    ? campaign.metaAccountId.startsWith('act_')
+      ? campaign.metaAccountId
+      : `act_${campaign.metaAccountId}`
+    : undefined
   const [accountId, setAccountId] = useState<string | null>(
     (preferredAccountId && accountIds.includes(preferredAccountId) ? preferredAccountId : accountIds[0]) ?? null,
   )
@@ -306,7 +429,7 @@ function ApprovalCard({
 
   function accountLabel(id: string) {
     const bare = id.replace(/^act_/, '')
-    const found = accountOptions.find((a) => a.id === id || a.id === `act_${bare}`)
+    const found = accountOptions.find((a) => a.id.replace(/^act_/, '') === bare)
     return found ? found.name : id
   }
 
@@ -332,24 +455,12 @@ function ApprovalCard({
   const adSets: AdSetConfig[] = campaign.campaignConfig?.adSets ?? []
 
   const budget = campaign.budget ?? 0
-  const projectedCommitted = committedWeekly + budget
+  const projectedWeeklyCampaign = budget * 7
+  const projectedCommitted = committedWeekly + projectedWeeklyCampaign
   const projectedPct = weeklyCap > 0
     ? Math.min(100, Math.round((projectedCommitted / weeklyCap) * 100))
     : 0
   const overCap = weeklyCap > 0 && projectedCommitted > weeklyCap
-
-  // Learned audience ROAS from learnings.campaign.audienceScores. Entries are
-  // { roas, n } objects (legacy: flat numbers) — Number() on the object shape
-  // rendered ₹NaN here. Normalize both shapes; this was also never CPA.
-  const audienceScores = company?.learnings?.campaign?.audienceScores ?? {}
-  const roasEntries = Object.entries(audienceScores)
-    .map(([audience, v]) => ({
-      audience,
-      roas: typeof v === 'number' ? v : Number((v as { roas?: number })?.roas) || 0,
-      n: typeof v === 'number' ? null : Number((v as { n?: number })?.n) || null,
-    }))
-    .sort((a, b) => b.roas - a.roas)
-    .slice(0, 4)
 
   async function saveBudget() {
     const parsed = Number(budgetDraft)
@@ -427,50 +538,70 @@ function ApprovalCard({
   }
 
   return (
-    <div className="card overflow-hidden">
+    <article className="card overflow-hidden animate-fade-up" aria-labelledby={`campaign-${campaign._id}`}>
       {/* Header strip */}
       <div
-        className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
+        className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
         style={{ borderBottom: '1px solid var(--hairline-light)', background: 'var(--surface-warm)' }}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <Megaphone size={14} style={{ color: 'var(--ink-3)' }} />
-          <Link
-            href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-            className="text-sm font-semibold truncate transition-opacity hover:opacity-70"
-            style={{ color: 'var(--ink)' }}
-            title={campaign.name || campaign.topic || 'Untitled'}
+        <div className="flex items-start gap-3 min-w-0">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
           >
-            {campaign.name || campaign.topic || 'Untitled campaign'}
-          </Link>
-          {campaign.name && campaign.topic && (
-            <span className="text-[11px] truncate" style={{ color: 'var(--ink-3)' }}>
-              · {campaign.topic}
-            </span>
-          )}
+            <Megaphone size={15} style={{ color: 'var(--accent)' }} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="chip chip-warn">Pending your decision</span>
+              <span className="text-[10.5px]" style={{ color: 'var(--ink-3)' }}>No spend started</span>
+            </div>
+            <Link
+              id={`campaign-${campaign._id}`}
+              href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
+              className="text-base font-semibold truncate block transition-opacity hover:opacity-70"
+              style={{ color: 'var(--ink)' }}
+              title={campaign.name || campaign.topic || 'Untitled'}
+            >
+              {campaign.name || campaign.topic || 'Untitled campaign'}
+            </Link>
+            {campaign.name && campaign.topic && (
+              <p className="text-[11px] truncate" style={{ color: 'var(--ink-3)' }}>
+                {campaign.topic}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-          <span className="chip chip-neutral" title={campaign.source === 'agent' ? 'Built by the AI pipeline' : campaign.source === 'human' ? 'Built via Create Campaign form' : 'Source unknown'}>
+          <span className="chip chip-accent" title={campaign.source === 'agent' ? 'Strategy and campaign prepared by Meridian' : campaign.source === 'human' ? 'Created using Meridian tools' : 'Created in Meridian'}>
             {campaign.source === 'agent' ? <Bot size={11} /> : <User size={11} />}
-            {campaign.source === 'agent' ? 'AI-built' : campaign.source === 'human' ? 'Manual' : campaign.source || 'Unknown'}
+            {campaign.source === 'agent' ? 'Built with AI' : 'Built in Meridian'}
           </span>
           <FormatBadge format={campaign.creativeFormat} />
-          <PromptsVersionBadge version={campaign.promptsVersion} />
           {campaign.runId && (
             <Link
               href={`/dashboard/${tenantId}/runs/${campaign.runId}`}
-              className="chip chip-neutral mono hover:opacity-75 transition-opacity"
+              className="chip chip-neutral hover:opacity-75 transition-opacity"
+              title={`Build record ${campaign.runId}`}
             >
-              run · {campaign.runId.slice(0, 8)}
+              View build record
             </Link>
           )}
         </div>
       </div>
 
-      <div className="p-5 grid gap-5 lg:grid-cols-[260px_1fr]">
+      <div className="p-4 sm:p-5 grid gap-5 lg:grid-cols-[minmax(240px,300px)_1fr]">
         {/* Left: Creative preview */}
         <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="micro-label">What customers will see</p>
+            {variants.length > 1 && (
+              <span className="text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
+                Creative {idx + 1} of {variants.length}
+              </span>
+            )}
+          </div>
           <div
             className="aspect-square w-full rounded-xl overflow-hidden flex items-center justify-center"
             style={{ background: 'var(--muted)', border: '1px solid var(--hairline)' }}
@@ -504,33 +635,23 @@ function ApprovalCard({
             </a>
           )}
 
-          {roasEntries.length > 0 && (
-            <div className="card-inset p-3 space-y-1.5">
-              <p className="micro-label">
-                Learned Audience ROAS
-              </p>
-              {roasEntries.map(({ audience, roas, n }) => (
-                <div key={audience} className="flex items-center justify-between gap-2">
-                  <span
-                    className="text-[11px] capitalize truncate"
-                    style={{ color: 'var(--ink-2)' }}
-                  >
-                    {audience.replace(/_/g, ' ')}
-                  </span>
-                  <span
-                    className="text-[11px] font-semibold mono tabular-nums"
-                    style={{ color: roas >= 1.5 ? 'var(--good)' : roas >= 1 ? 'var(--warn)' : 'var(--bad)' }}
-                  >
-                    {roas.toFixed(2)}x{n !== null ? ` · n=${n}` : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Right: Copy + actions */}
+        {/* Right: strategy, safety and launch decision */}
         <div className="min-w-0 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="micro-label">Campaign message</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+                Review the customer-facing copy, then verify how delivery is configured.
+              </p>
+            </div>
+            {campaign.objective && (
+              <span className="chip chip-accent capitalize">
+                <Target size={10} /> Goal · {campaignObjectiveLabel(campaign.objective)}
+              </span>
+            )}
+          </div>
           {variant ? (
             <div className="space-y-2">
               <p
@@ -558,23 +679,11 @@ function ApprovalCard({
                     {variant.hookStyle.replace(/_/g, ' ')}
                   </span>
                 )}
-                {campaign.objective && (
-                  <span className="chip chip-neutral capitalize">
-                    {campaign.objective.replace(/_/g, ' ')}
-                  </span>
-                )}
               </div>
             </div>
           ) : (
             <p className="text-xs italic" style={{ color: 'var(--ink-3)' }}>
               No copy variant selected yet — creative may still be in progress.
-            </p>
-          )}
-
-          {/* Audience-stage badges */}
-          {variants.length > 1 && (
-            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-              Showing variant {idx + 1} of {variants.length}
             </p>
           )}
 
@@ -657,7 +766,12 @@ function ApprovalCard({
             </div>
             {overCap && (
               <p className="text-[11px] mt-2" style={{ color: 'var(--bad)' }}>
-                Approving this campaign will exceed your weekly cap.
+                This campaign projects {formatCurrency(projectedWeeklyCampaign)} over seven days and would exceed your weekly cap.
+              </p>
+            )}
+            {!overCap && weeklyCap > 0 && (
+              <p className="text-[10.5px] mt-2" style={{ color: 'var(--ink-3)' }}>
+                Seven-day projection: {formatCurrency(projectedWeeklyCampaign)}. The server rechecks this limit atomically when you approve.
               </p>
             )}
           </div>
@@ -713,50 +827,67 @@ function ApprovalCard({
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3 flex-wrap pt-2">
-            <button
-              onClick={() => setApproveOpen(true)}
-              disabled={approveState === 'loading' || !accountId || launchBlocked}
-              className="btn btn-lg btn-primary"
-              title={
-                launchBlocked
-                  ? `Fix ${review!.blockers.length} thing${review!.blockers.length === 1 ? '' : 's'} above first`
-                  : undefined
-              }
-            >
-              {approveState === 'loading' ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <CheckCircle2 size={16} />
-              )}
-              {launchBlocked ? 'Fix the issues above first' : 'Yes, launch this ad'}
-            </button>
+          <div
+            className="rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-4 flex-wrap"
+            style={{
+              background: launchBlocked ? 'var(--warn-bg)' : 'var(--good-bg)',
+              border: `1px solid ${launchBlocked ? 'var(--warn-border)' : 'var(--good-border)'}`,
+            }}
+          >
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                {launchBlocked ? 'This launch still needs attention' : 'Final decision stays with you'}
+              </p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+                {launchBlocked
+                  ? 'Resolve the safety blockers above before Meta can receive this campaign.'
+                  : `Approval creates the campaign on ${accountId ? accountLabel(accountId) : 'your selected account'} with a ${formatCurrency(budget)}/day limit.`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setApproveOpen(true)}
+                disabled={approveState === 'loading' || !accountId || launchBlocked}
+                className="btn btn-lg btn-accent"
+                title={
+                  launchBlocked
+                    ? `Fix ${review!.blockers.length} thing${review!.blockers.length === 1 ? '' : 's'} above first`
+                    : undefined
+                }
+              >
+                {approveState === 'loading' ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={16} />
+                )}
+                {launchBlocked ? 'Resolve blockers first' : 'Approve & launch on Meta'}
+              </button>
 
-            <button
-              onClick={() => setRejectOpen(true)}
-              disabled={rejectState === 'loading'}
-              className="btn btn-lg btn-danger"
-            >
-              <XCircle size={16} />
-              No, reject this
-            </button>
+              <button
+                onClick={() => setRejectOpen(true)}
+                disabled={rejectState === 'loading'}
+                className="btn btn-danger"
+              >
+                <XCircle size={14} />
+                Reject
+              </button>
 
-            <button
-              onClick={() => setDeleteOpen(true)}
-              disabled={deleteState === 'loading'}
-              className="btn btn-ghost"
-              title="Remove this pending campaign entirely — different from Reject, which keeps a record with a reason"
-            >
-              {deleteState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              Delete
-            </button>
-
+              <button
+                onClick={() => setDeleteOpen(true)}
+                disabled={deleteState === 'loading'}
+                className="btn btn-ghost"
+                title="Remove this pending campaign entirely — different from Reject, which keeps a record with a reason"
+              >
+                {deleteState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Delete
+              </button>
+            </div>
             <Link
               href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-              className="ml-auto inline-flex items-center gap-1 font-medium hover:underline"
-              style={{ color: 'var(--accent-strong)', fontSize: 14 }}
+              className="w-full inline-flex items-center justify-end gap-1 font-medium hover:underline"
+              style={{ color: 'var(--accent-strong)', fontSize: 13 }}
             >
-              See full details <ChevronRight size={14} />
+              View every campaign detail <ChevronRight size={14} />
             </Link>
           </div>
 
@@ -771,11 +902,11 @@ function ApprovalCard({
       {/* Approve confirmation */}
       <ConfirmModal
         open={approveOpen}
-        title="Launch this ad on Meta?"
-        description={`We'll create the live ad on your ${accountId ? accountLabel(accountId) : 'selected'} account, spending up to ${formatCurrency(budget)} per day.${
+        title="Approve this campaign for Meta launch?"
+        description={`Meridian will create the campaign on ${accountId ? accountLabel(accountId) : 'your selected account'}, with a daily limit of ${formatCurrency(budget)}.${
           overCap ? ' Heads up: this will push you over your weekly budget.' : ''
         }`}
-        confirmLabel="Yes, launch it"
+        confirmLabel="Approve & launch"
         loading={approveState === 'loading'}
         onCancel={() => setApproveOpen(false)}
         onConfirm={doApprove}
@@ -831,7 +962,7 @@ function ApprovalCard({
           </div>
         </div>
       )}
-    </div>
+    </article>
   )
 }
 

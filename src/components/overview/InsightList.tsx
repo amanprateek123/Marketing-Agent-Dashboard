@@ -6,13 +6,13 @@ const STRENGTH_STYLE: Record<
   DashboardInsight['strength'],
   { chip: string; label: string; opacity: number }
 > = {
-  strong: { chip: 'chip chip-good', label: 'Well supported', opacity: 1 },
-  moderate: { chip: 'chip chip-warn', label: 'Some support', opacity: 0.95 },
-  weak: { chip: 'chip chip-neutral', label: 'Early signal', opacity: 0.8 },
+  strong: { chip: 'chip chip-good', label: 'Higher model support', opacity: 1 },
+  moderate: { chip: 'chip chip-warn', label: 'Moderate model support', opacity: 0.95 },
+  weak: { chip: 'chip chip-neutral', label: 'Early hypothesis', opacity: 0.8 },
 }
 
 /**
- * Learnings, one card each, weighted by how much they're actually backed by.
+ * AI hypotheses, one card each, weighted by their stored model support.
  *
  * The previous version rendered a single ~200-word paragraph containing three
  * separate findings — a budget misconfiguration, a landing-page conversion
@@ -35,7 +35,10 @@ export function InsightList({
         style={{ borderBottom: '1px solid var(--hairline)' }}
       >
         <Sparkles size={16} style={{ color: 'var(--accent)' }} />
-        <h2 className="section-title">What we&rsquo;re learning</h2>
+        <div>
+          <h2 className="section-title">AI hypotheses from prior campaigns</h2>
+          <p className="explain mt-0.5">Model-generated patterns—not causal proof</p>
+        </div>
       </div>
 
       {insights.length === 0 ? (
@@ -81,8 +84,8 @@ export function InsightList({
                     {s.label}
                   </span>
                   <span className="explain">
-                    {(ins.confidence * 100).toFixed(0)}% sure · {ins.dataPoints}{' '}
-                    campaign{ins.dataPoints === 1 ? '' : 's'}
+                    {(ins.confidence * 100).toFixed(0)}% model confidence · {ins.dataPoints}{' '}
+                    record{ins.dataPoints === 1 ? '' : 's'}
                   </span>
                   {ins.category && (
                     <span className="explain" style={{ marginLeft: 'auto' }}>

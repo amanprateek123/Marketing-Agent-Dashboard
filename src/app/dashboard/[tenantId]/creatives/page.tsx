@@ -4,6 +4,7 @@ import { useState, useEffect, use, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
+  ArrowRight, CheckCircle2, Clock3, FolderOpen,
 } from 'lucide-react'
 import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages } from '@/lib/api'
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
@@ -88,6 +89,14 @@ const VIDEO_RESOLUTIONS: { value: '480p' | '720p' | '1080p' | '4k'; label: strin
 
 // Cheapest-first — used to auto-pick the lowest resolution a given Higgsfield model actually supports.
 const RESOLUTION_ORDER = ['480p', '720p', '1080p', '4k'] as const
+
+function usableAssetCount(pkg: CreativePackage): number {
+  const images = (pkg.images ?? []).filter((image) => image.imageUrl && !image.rejected && !image.extendedFrom && !image.uploadedSizeOf).length
+  const videos = (pkg.videos ?? []).filter((video) => video.videoUrl && !video.rejected).length
+  const primaryVideo = pkg.video?.videoUrl && !pkg.video.rejected ? 1 : 0
+  const cards = (pkg.carouselCards ?? []).filter((card) => card.imageUrl).length
+  return images + videos + primaryVideo + cards
+}
 
 export default function CreativesPage({ params }: PageProps) {
   const { tenantId } = use(params)
@@ -186,15 +195,25 @@ export default function CreativesPage({ params }: PageProps) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const saved = window.localStorage.getItem(runKey)
-    if (saved && /^\d+$/.test(saved)) setCbRunId(Number(saved))
+    try {
+      const saved = window.localStorage.getItem(runKey)
+      if (saved && /^\d+$/.test(saved)) setCbRunId(Number(saved))
+    } catch {
+      // Private/locked-down browsers can block storage. The live run still
+      // works for this page session; only cross-refresh restoration is lost.
+    }
   }, [runKey])
 
   const rememberRun = useCallback((id: number | null) => {
     setCbRunId(id)
     if (typeof window === 'undefined') return
-    if (id === null) window.localStorage.removeItem(runKey)
-    else window.localStorage.setItem(runKey, String(id))
+    try {
+      if (id === null) window.localStorage.removeItem(runKey)
+      else window.localStorage.setItem(runKey, String(id))
+    } catch {
+      // Persistence is best-effort and must never make a successful run look
+      // like it failed.
+    }
   }, [runKey])
 
   /** Everything the operator typed or ticked, merged into what the API expects. */
@@ -458,8 +477,18 @@ export default function CreativesPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
+      <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto" role="status" aria-label="Loading Creative Studio">
+        <div className="skeleton h-9 w-64 mb-3" />
+        <div className="skeleton h-5 w-full max-w-xl mb-8" />
+        <div className="grid sm:grid-cols-3 gap-3 mb-8">
+          <div className="skeleton h-24" />
+          <div className="skeleton h-24" />
+          <div className="skeleton h-24" />
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton aspect-[4/5]" />)}
+        </div>
+        <span className="sr-only">Loading creative library…</span>
       </div>
     )
   }
@@ -476,6 +505,12 @@ export default function CreativesPage({ params }: PageProps) {
   // everywhere rather than surfacing it for a retry.
   const visiblePackages = packages.filter(pkg => creativePackageStatus(pkg).label !== 'All rejected')
   const hiddenRejectedCount = packages.length - visiblePackages.length
+  const readyPackages = visiblePackages.filter((pkg) => creativePackageStatus(pkg).label === 'Ready').length
+  const pendingPackages = packages.filter((pkg) => pkg.status === 'pending').length
+  const pendingBriefNotListed = pendingBriefId && !packages.some((pkg) => pkg.briefId === pendingBriefId) ? 1 : 0
+  const producingPackages = pendingPackages + pendingBriefNotListed + (cbRunId !== null ? 1 : 0)
+  const reusableAssets = visiblePackages.reduce((sum, pkg) => sum + usableAssetCount(pkg), 0)
+  const coveredProducts = new Set(visiblePackages.map((pkg) => pkg.productName).filter(Boolean)).size
   const selectedFormatSkipsVideo = formats.find(f => f.value === format)?.skipVideo ?? false
   // Image formats (skipVideo=true) vs video formats (skipVideo=false) — same
   // split the pipeline already uses internally, just surfaced as the type toggle.
@@ -489,33 +524,84 @@ export default function CreativesPage({ params }: PageProps) {
   }
 
   return (
-    <div className="px-8 py-8 max-w-[1600px] mx-auto stagger">
-      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
-        <div>
-          <p className="micro-label mb-2">Creative library</p>
-          <h1 className="page-title">Your ad creative</h1>
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
+      <div className="flex items-start justify-between gap-5 mb-6 flex-wrap">
+        <div className="max-w-2xl">
+          <p className="micro-label mb-2">Creative Studio</p>
+          <h1 className="page-title">Create once. Reuse everywhere.</h1>
           <p className="page-subtitle">
-            Generate ad copy, images, and video for a product — then attach them when you launch a campaign, instead of pasting URLs by hand.
+            Generate, upload and organize campaign-ready creative in one reusable system.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => loadPackages()} className="btn btn-ghost">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={() => loadPackages()} className="btn btn-ghost" aria-label="Refresh creative library">
             <RefreshCw size={14} /> Refresh
           </button>
-          <button onClick={() => setShowUploadForm(s => !s)} className="btn btn-ghost">
-            <Upload size={14} /> Upload existing creatives
+          <Link href={`/dashboard/${tenantId}/gallery`} className="btn btn-ghost">
+            <FolderOpen size={14} /> Open Gallery
+          </Link>
+          <button type="button" onClick={() => setShowUploadForm(s => !s)} className="btn btn-ghost" aria-expanded={showUploadForm}>
+            <Upload size={14} /> Upload creative
           </button>
-          <button onClick={() => setShowForm(s => !s)} className="btn btn-primary">
-            <Sparkles size={14} /> Generate new creative
+          <button type="button" onClick={() => setShowForm(s => !s)} className="btn btn-primary" aria-expanded={showForm}>
+            <Sparkles size={14} /> Generate with AI
           </button>
         </div>
       </div>
 
+      <div className="card p-5 mb-5" style={{ background: 'linear-gradient(120deg, var(--accent-bg), var(--surface) 55%)' }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <p className="micro-label mb-1">Reusable creative workflow</p>
+            <h2 className="section-title">From an idea to a campaign-ready asset</h2>
+          </div>
+          <Link href={`/dashboard/${tenantId}/gallery`} className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: 'var(--accent-strong)' }}>
+            Organize the library <ArrowRight size={14} />
+          </Link>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          {[
+            { step: '01', title: 'Create', copy: 'Generate with AI or upload approved work.', icon: Sparkles },
+            { step: '02', title: 'Organize', copy: 'Group assets by product, topic and campaign.', icon: LayoutGrid },
+            { step: '03', title: 'Reuse', copy: 'Attach reusable creative to future launches.', icon: CheckCircle2 },
+          ].map(({ step, title, copy, icon: Icon }) => (
+            <div key={step} className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'rgba(255,255,255,0.82)', border: '1px solid var(--hairline)' }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
+                <Icon size={16} />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold mb-0.5" style={{ color: 'var(--ink-3)' }}>{step}</p>
+                <p className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{title}</p>
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: 'var(--ink-3)' }}>{copy}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Ready packages', value: readyPackages, icon: CheckCircle2, color: 'var(--good)', background: 'var(--good-bg)' },
+          { label: 'Reusable assets', value: reusableAssets, icon: ImageIcon, color: 'var(--accent)', background: 'var(--accent-bg)' },
+          { label: 'Products covered', value: coveredProducts, icon: LayoutGrid, color: 'var(--info)', background: 'var(--info-bg)' },
+          { label: 'In production', value: producingPackages, icon: Clock3, color: producingPackages > 0 ? 'var(--warn)' : 'var(--ink-3)', background: producingPackages > 0 ? 'var(--warn-bg)' : 'var(--muted)' },
+        ].map(({ label, value, icon: Icon, color, background }) => (
+          <div key={label} className="card p-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ color, background }}><Icon size={16} /></div>
+            <div className="min-w-0">
+              <p className="micro-label truncate">{label}</p>
+              <p className="display-num text-[22px] mt-1" style={{ color: 'var(--ink)' }}>{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {showUploadForm && (
-        <div className="card p-6 mb-6">
-          <p className="micro-label mb-1">Upload existing creatives</p>
-          <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>
-            Already have images or videos made elsewhere? Add a row per asset — pick the file off your machine or paste a link — and submit them together. Each gets rehosted permanently on our own storage, registered as a real library entry, and auto-organized into the same Gallery topic, just like generated ones. One bad asset won&apos;t block the rest.
+        <div className="card p-5 sm:p-6 mb-6">
+          <p className="micro-label mb-1">Add existing work</p>
+          <h2 className="section-title">Upload campaign-ready creative</h2>
+          <p className="text-[13px] mt-1 mb-5 max-w-3xl" style={{ color: 'var(--ink-3)' }}>
+            Add files or links in one batch. Meridian stores each usable asset in the library and organizes it in Gallery without allowing one failed item to block the rest.
           </p>
           <CreativeUploadForm
             tenantId={tenantId}
@@ -538,10 +624,18 @@ export default function CreativesPage({ params }: PageProps) {
         </div>
       )}
 
+      {error && !showForm && (
+        <div className="rounded-xl px-4 py-3 mb-5 flex items-center justify-between gap-3 text-[13px]" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }} role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError('')} className="text-[12px] font-semibold underline">Dismiss</button>
+        </div>
+      )}
+
       {showForm && (
-        <div className="card p-6 mb-6">
-          <p className="micro-label mb-1">Generate new creative</p>
-          <p className="text-[12px] mb-5" style={{ color: 'var(--ink-4)' }}>A few quick choices, then generate.</p>
+        <div className="card p-5 sm:p-6 mb-6">
+          <p className="micro-label mb-1">AI production brief</p>
+          <h2 className="section-title">Generate campaign-ready creative</h2>
+          <p className="text-[13px] mt-1 mb-5" style={{ color: 'var(--ink-3)' }}>Set the essentials, then let the creative system produce reusable assets.</p>
           {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
 
           {/* ── Engine — which system makes this creative ──
@@ -549,7 +643,7 @@ export default function CreativesPage({ params }: PageProps) {
               path untouched. 'pipeline' hands the same form over to the
               external creative pipeline instead. */}
           <div className="mb-5">
-            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Which engine?</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Production path</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -560,8 +654,8 @@ export default function CreativesPage({ params }: PageProps) {
                   background: engine === 'standard' ? 'var(--accent-bg)' : 'var(--surface)',
                 }}
               >
-                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Original</span>
-                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The built-in generator. Images, video, carousels.</span>
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Meridian generator</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Guided production for images, video and carousels.</span>
               </button>
               <button
                 type="button"
@@ -572,8 +666,8 @@ export default function CreativesPage({ params }: PageProps) {
                   background: engine === 'pipeline' ? 'var(--accent-bg)' : 'var(--surface)',
                 }}
               >
-                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Slack</span>
-                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>The Slack pipeline. Describe it in a sentence and it handles the rest. Images only.</span>
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Autonomous creative team</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Describe the outcome in one sentence; the pipeline handles image production.</span>
               </button>
             </div>
           </div>
@@ -582,7 +676,7 @@ export default function CreativesPage({ params }: PageProps) {
             <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
               {cbOptionsError && (
                 <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                  Couldn&rsquo;t reach the Slack pipeline ({cbOptionsError}). You can still submit — it may just be starting up.
+                  The autonomous creative pipeline is unavailable ({cbOptionsError}). You can retry shortly or use the Meridian generator.
                 </p>
               )}
 
@@ -1191,6 +1285,17 @@ export default function CreativesPage({ params }: PageProps) {
         }}
       />
 
+      <div className="flex items-end justify-between gap-4 mt-8 mb-4 flex-wrap">
+        <div>
+          <p className="micro-label mb-1">Asset library</p>
+          <h2 className="section-title">Ready to review and reuse</h2>
+          <p className="text-[13px] mt-1" style={{ color: 'var(--ink-3)' }}>Every package keeps its copy, formats and production state together.</p>
+        </div>
+        <Link href={`/dashboard/${tenantId}/gallery`} className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: 'var(--accent-strong)' }}>
+          Browse by topic <ArrowRight size={14} />
+        </Link>
+      </div>
+
       {/* A load failure, said out loud. Without this, a failed refresh looks exactly like an empty
           library — which is how a perfectly intact set of creatives appeared to vanish. */}
       {packagesError && (
@@ -1210,7 +1315,7 @@ export default function CreativesPage({ params }: PageProps) {
 
       {/* Tab bar — underline style, matching runs/page.tsx's convention */}
       <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--hairline)' }}>
-        {([{ key: 'active' as const, label: 'Active' }, { key: 'rejected' as const, label: 'Rejected' }]).map(tab => {
+        {([{ key: 'active' as const, label: 'Library' }, { key: 'rejected' as const, label: 'Rejected' }]).map(tab => {
           const isActive = activeTab === tab.key
           return (
             <button
@@ -1237,14 +1342,20 @@ export default function CreativesPage({ params }: PageProps) {
         <>
           {/* Library filters */}
           <div className="flex items-center gap-3 mb-4 flex-wrap">
-            <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="input" style={{ maxWidth: 220 }}>
-              <option value="">All products</option>
-              {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-            </select>
-            <select value={filterLanguage} onChange={e => setFilterLanguage(e.target.value)} className="input" style={{ maxWidth: 180 }}>
-              <option value="">All languages</option>
-              {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
-            </select>
+            <label className="min-w-[200px]">
+              <span className="sr-only">Filter by product</span>
+              <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="input">
+                <option value="">All products</option>
+                {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+            </label>
+            <label className="min-w-[180px]">
+              <span className="sr-only">Filter by language</span>
+              <select value={filterLanguage} onChange={e => setFilterLanguage(e.target.value)} className="input">
+                <option value="">All languages</option>
+                {languages.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+              </select>
+            </label>
             {/* A breadcrumb, not a listing — the creative itself stays out of
                 this tab, but a silent drop in count reads as data loss. */}
             {hiddenRejectedCount > 0 && (
@@ -1254,7 +1365,7 @@ export default function CreativesPage({ params }: PageProps) {
                 style={{ color: 'var(--ink-4)' }}
                 title="Every asset on these creatives was rejected. Restore one from the Rejected tab to bring it back here."
               >
-                {hiddenRejectedCount} fully-rejected hidden
+                {hiddenRejectedCount} discarded package{hiddenRejectedCount === 1 ? '' : 's'} hidden
               </button>
             )}
           </div>
@@ -1262,12 +1373,12 @@ export default function CreativesPage({ params }: PageProps) {
           {visiblePackages.length === 0 ? (
             <div className="card px-6 py-14 text-center">
               <p style={{ color: 'var(--ink-3)' }}>
-                {packages.length === 0 ? 'No creative yet.' : 'No usable creative here.'}
+                {packages.length === 0 ? 'Your reusable library is ready for its first asset.' : 'No usable creative matches these filters.'}
               </p>
               <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
                 {packages.length === 0
-                  ? <>Click <b>Generate new creative</b> above to make your first one.</>
-                  : <>Every creative here has been rejected — see the <b>Rejected</b> tab to restore one.</>}
+                  ? <>Generate with AI or upload approved work to begin.</>
+                  : <>Clear the filters or restore an asset from <b>Rejected</b>.</>}
               </p>
             </div>
           ) : (
@@ -1290,8 +1401,14 @@ export default function CreativesPage({ params }: PageProps) {
                   || pkg.carouselCards?.[0]?.imageUrl
                   || pkg.video?.videoThumbnailUrl
                 const isVideo = !!pkg.video?.videoUrl
+                const assetCount = usableAssetCount(pkg)
                 return (
-                  <Link key={pkg._id} href={`/dashboard/${tenantId}/creatives/${pkg._id}`} className="card overflow-hidden block">
+                  <Link
+                    key={pkg._id}
+                    href={`/dashboard/${tenantId}/creatives/${pkg._id}`}
+                    className="card overflow-hidden block group"
+                    aria-label={`Open ${selected?.headline ?? pkg.productName ?? 'creative package'}`}
+                  >
                     <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
                       {/* object-contain, not -cover: the Slack pipeline's base deliverable is
                           1200x1200 (1:1), so cover would centre-crop a square into this 4:5 box
@@ -1316,13 +1433,19 @@ export default function CreativesPage({ params }: PageProps) {
                         })()}
                       </div>
                     </div>
-                    <div className="p-3">
+                    <div className="p-4">
                       <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--ink)' }}>
                         {selected?.headline || pkg.productName || 'Untitled'}
                       </p>
                       <p className="text-[11.5px] mt-0.5 truncate" style={{ color: 'var(--ink-3)' }}>
                         {pkg.productName || '—'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}
                       </p>
+                      <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+                        <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                          {assetCount} reusable asset{assetCount === 1 ? '' : 's'}
+                        </span>
+                        <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--accent)' }} />
+                      </div>
                     </div>
                   </Link>
                 )
@@ -1340,7 +1463,7 @@ export default function CreativesPage({ params }: PageProps) {
             <div className="card px-6 py-14 text-center">
               <p style={{ color: 'var(--ink-3)' }}>Nothing rejected.</p>
               <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
-                Reject an image or video from its package page, or from the Gallery, and it'll show up here — fully reversible.
+                Reject an image or video from its package page, or from the Gallery, and it will show up here — fully reversible.
               </p>
             </div>
           ) : (

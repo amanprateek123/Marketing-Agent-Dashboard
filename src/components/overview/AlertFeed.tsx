@@ -17,7 +17,7 @@ const SEVERITY_STYLE: Record<AlertSeverity, {
     color: 'var(--bad)',
     bg: 'var(--bad-bg)',
     border: 'var(--bad-border)',
-    label: 'Costing you money',
+    label: 'Urgent evidence',
   },
   warning: {
     icon: AlertTriangle,
@@ -39,9 +39,9 @@ const SEVERITY_STYLE: Record<AlertSeverity, {
  * The attention feed.
  *
  * Replaces an empty state that said "All caught up 🎉" whenever the approval
- * queue was empty — which it happily did while four of five campaigns sat
- * below breakeven. The queue being empty and the account being healthy are
- * different questions, and only the second one deserves a party emoji.
+ * queue was empty. The queue being empty and the available campaign evidence
+ * being healthy are different questions, so this state only summarizes the
+ * alerts the backend can support with the current data.
  */
 export function AlertFeed({ alerts }: { alerts: DashboardAlert[] }) {
   if (alerts.length === 0) {
@@ -56,7 +56,7 @@ export function AlertFeed({ alerts }: { alerts: DashboardAlert[] }) {
           Nothing needs attention.
         </p>
         <p className="explain mt-2">
-          No losing campaigns, no misconfigured budgets, no pending approvals.
+          No urgent evidence or configuration alerts in the current data.
         </p>
       </div>
     )

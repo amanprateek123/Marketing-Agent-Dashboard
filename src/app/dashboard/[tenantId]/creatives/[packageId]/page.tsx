@@ -588,10 +588,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
 
   if (error || !pkg) {
     return (
-      <div className="px-8 py-8 max-w-3xl mx-auto">
+      <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-3xl mx-auto">
         <p style={{ color: 'var(--bad)' }}>{error || 'Creative not found'}</p>
         <Link href={`/dashboard/${tenantId}/creatives`} className="text-sm font-medium mt-2 inline-block" style={{ color: 'var(--accent-strong)' }}>
-          ← Back to Creatives
+          ← Back to Creative studio
         </Link>
       </div>
     )
@@ -600,15 +600,16 @@ export default function CreativeDetailPage({ params }: PageProps) {
   const isCarousel = (pkg.carouselCards?.length ?? 0) > 0
 
   return (
-    <div className="px-8 py-8 max-w-4xl mx-auto stagger pb-20">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1280px] mx-auto stagger pb-20">
       <Link href={`/dashboard/${tenantId}/creatives`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5" style={{ color: 'var(--ink-3)' }}>
-        <ArrowLeft size={14} /> Creatives
+        <ArrowLeft size={14} /> Creative studio
       </Link>
 
       <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-        <div>
+        <div className="max-w-3xl">
           <p className="micro-label mb-2">{pkg.productName || 'Creative'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}{isCarousel ? ' · Carousel' : ''}</p>
-          <h1 className="page-title">Edit creative</h1>
+          <h1 className="page-title">Creative workspace</h1>
+          <p className="page-subtitle">Review the message, refine the media, and prepare every placement before this creative reaches a campaign.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Derived from usable assets, not `status` alone — a package whose
@@ -1183,7 +1184,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 <h3 className="text-[13px] font-semibold">Add voiceover (Cartesia — Hindi/English)</h3>
               </div>
               <p className="text-[11px] mb-3" style={{ color: 'var(--ink-4)' }}>
-                Narrates a COPY of the current video — the original video.videoUrl is never overwritten. Leave the script blank to let the backend write a Devanagari narration script sized to the video's length automatically.
+                Narrates a COPY of the current video — the original video.videoUrl is never overwritten. Leave the script blank to let the backend write a Devanagari narration script sized to the video&apos;s length automatically.
               </p>
               <textarea
                 value={voiceoverScriptDraft}

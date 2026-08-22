@@ -25,11 +25,144 @@ function roasBg(roas: number): string {
 
 const DOW_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
-export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; campaignId: string }) {
+export type SegmentObjectiveGroup = 'sales' | 'awareness' | 'traffic' | 'leads' | 'app' | 'engagement' | 'unknown'
+
+interface SegmentMetricSource {
+  spend: number
+  impressions: number
+  clicks: number
+  conversions: number
+  revenue?: number
+  ctr?: number
+  cpc?: number
+  cpm?: number
+  cpa?: number
+  roas?: number
+}
+
+interface SegmentMetricContext {
+  group: SegmentObjectiveGroup
+  resultLabel: string
+  efficiencyLabel: string
+  efficiencyFormat: 'currency' | 'percent' | 'roas'
+  returnUnavailable: boolean
+  result: (row: SegmentMetricSource) => number
+  efficiency: (row: SegmentMetricSource) => number
+}
+
+function metricContextFor(group: SegmentObjectiveGroup, returnEvidenceAvailable: boolean): SegmentMetricContext {
+  if (group === 'sales' && returnEvidenceAvailable) {
+    return {
+      group,
+      resultLabel: 'Purchases',
+      efficiencyLabel: 'Raw ROAS',
+      efficiencyFormat: 'roas',
+      returnUnavailable: false,
+      result: row => row.conversions,
+      efficiency: row => row.roas && row.roas > 0
+        ? row.roas
+        : row.spend > 0 && row.revenue && row.revenue > 0
+          ? row.revenue / row.spend
+          : 0,
+    }
+  }
+  if (group === 'sales') {
+    return {
+      group,
+      resultLabel: 'Clicks',
+      efficiencyLabel: 'CTR',
+      efficiencyFormat: 'percent',
+      returnUnavailable: true,
+      result: row => row.clicks,
+      efficiency: row => row.ctr ?? (row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0),
+    }
+  }
+  if (group === 'awareness') {
+    return {
+      group,
+      resultLabel: 'Impressions',
+      efficiencyLabel: 'CPM',
+      efficiencyFormat: 'currency',
+      returnUnavailable: false,
+      result: row => row.impressions,
+      efficiency: row => row.cpm ?? (row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0),
+    }
+  }
+  if (group === 'traffic' || group === 'engagement') {
+    return {
+      group,
+      resultLabel: 'Clicks',
+      efficiencyLabel: 'CPC',
+      efficiencyFormat: 'currency',
+      returnUnavailable: false,
+      result: row => row.clicks,
+      efficiency: row => row.cpc ?? (row.clicks > 0 ? row.spend / row.clicks : 0),
+    }
+  }
+
+  const resultLabel = group === 'leads'
+    ? 'Leads'
+    : group === 'app'
+      ? 'App results'
+      : 'Clicks'
+  const efficiencyLabel = group === 'leads'
+    ? 'Cost / lead'
+    : group === 'app'
+      ? 'Cost / result'
+      : 'CTR'
+
+  return {
+    group,
+    resultLabel,
+    efficiencyLabel,
+    efficiencyFormat: group === 'unknown' ? 'percent' : 'currency',
+    returnUnavailable: false,
+    result: row => group === 'unknown' ? row.clicks : row.conversions,
+    efficiency: row => group === 'unknown'
+      ? row.ctr ?? (row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0)
+      : row.cpa ?? (row.conversions > 0 ? row.spend / row.conversions : 0),
+  }
+}
+
+function formatResult(value: number): string {
+  return value > 0 ? Math.round(value).toLocaleString('en-IN') : '—'
+}
+
+function formatEfficiency(value: number, context: SegmentMetricContext): string {
+  if (value <= 0) return '—'
+  if (context.efficiencyFormat === 'roas') return `${value.toFixed(2)}x`
+  if (context.efficiencyFormat === 'percent') return `${value.toFixed(2)}%`
+  return formatCurrency(value)
+}
+
+function hasObjectiveResults(rows: BreakdownRow[], context: SegmentMetricContext): boolean {
+  // Delivery results remain available for delivery-based objectives even where
+  // Meta suppresses attributed conversion events for a geographic breakdown.
+  if (['awareness', 'traffic', 'engagement', 'unknown'].includes(context.group) || context.returnUnavailable) return true
+  return rows.some(row => context.result(row) > 0)
+}
+
+function unavailableResultNote(granularity: 'region' | 'country', context: SegmentMetricContext): string {
+  const result = context.resultLabel.toLowerCase()
+  return `Meta doesn't report ${result} at ${granularity} granularity — spend, clicks and CTR remain available.`
+}
+
+export function SegmentsPanel({
+  tenantId,
+  campaignId,
+  objectiveGroup = 'unknown',
+  returnEvidenceAvailable = false,
+}: {
+  tenantId: string
+  campaignId: string
+  objectiveGroup?: SegmentObjectiveGroup
+  returnEvidenceAvailable?: boolean
+}) {
   const [breakdowns, setBreakdowns] = useState<CampaignBreakdowns | null>(null)
   const [series, setSeries] = useState<TimeseriesPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const metricContext = metricContextFor(objectiveGroup, returnEvidenceAvailable)
 
   useEffect(() => {
     let cancelled = false
@@ -68,7 +201,12 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
 
   return (
     <div className="space-y-5">
-      {series.length > 1 && <TrendSection series={series} />}
+      {metricContext.returnUnavailable && (
+        <div className="card-inset px-4 py-3 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
+          Campaign return unavailable · showing delivery metrics only
+        </div>
+      )}
+      {series.length > 1 && <TrendSection series={series} context={metricContext} />}
 
       {breakdowns?.age_gender && breakdowns.age_gender.rows.length > 0 && (
         <SegmentTable
@@ -76,7 +214,8 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
           icon={<Users size={13} />}
           rows={breakdowns.age_gender.rows}
           segmentLabel={r => `${r.keys.age || '—'} · ${r.keys.gender || '—'}`}
-          showRoas
+          context={metricContext}
+          showObjectiveMetrics
         />
       )}
 
@@ -86,7 +225,8 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
           icon={<Layers size={13} />}
           rows={breakdowns.placement.rows}
           segmentLabel={r => [r.keys.publisherPlatform, r.keys.platformPosition, r.keys.devicePlatform].filter(Boolean).join(' · ') || '—'}
-          showRoas
+          context={metricContext}
+          showObjectiveMetrics
         />
       )}
 
@@ -96,40 +236,39 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
           icon={<MapPin size={13} />}
           rows={breakdowns.region.rows}
           segmentLabel={r => r.keys.region || '—'}
-          showRoas={false}
-          note="Meta doesn't report conversions at region granularity — spend, clicks and CTR only. Pair with first-party order data for regional ROAS."
+          context={metricContext}
+          showObjectiveMetrics={hasObjectiveResults(breakdowns.region.rows, metricContext)}
+          note={hasObjectiveResults(breakdowns.region.rows, metricContext) ? undefined : unavailableResultNote('region', metricContext)}
         />
       )}
 
-      {/* Coarser-granularity check on the same restriction as Region above —
-          Meta sometimes preserves conversion attribution at country level
-          even when the finer region/DMA breakdown suppresses it. Shows the
-          ROAS/Conv/CPA columns only if any row actually carries conversions;
-          otherwise falls back to the same "Meta withholds this" note. */}
+      {/* Meta sometimes preserves objective-result attribution at country level
+          even when the finer region breakdown suppresses it. */}
       {breakdowns?.country && breakdowns.country.rows.length > 0 && (() => {
-        const hasConversions = breakdowns.country!.rows.some(r => r.conversions > 0)
+        const showObjectiveMetrics = hasObjectiveResults(breakdowns.country!.rows, metricContext)
         return (
           <SegmentTable
             title="Country"
             icon={<MapPin size={13} />}
             rows={breakdowns.country!.rows}
             segmentLabel={r => r.keys.country || '—'}
-            showRoas={hasConversions}
-            note={hasConversions ? undefined : "Meta doesn't report conversions at country granularity either — spend, clicks and CTR only. Pair with first-party order data for regional/country ROAS."}
+            context={metricContext}
+            showObjectiveMetrics={showObjectiveMetrics}
+            note={showObjectiveMetrics ? undefined : unavailableResultNote('country', metricContext)}
           />
         )
       })()}
 
       {breakdowns?.hourly && breakdowns.hourly.rows.length > 0 && (
-        <HourBars rows={breakdowns.hourly.rows} />
+        <HourBars rows={breakdowns.hourly.rows} context={metricContext} />
       )}
 
       {breakdowns?.dow && breakdowns.dow.rows.length > 0 && (
-        <DowBars rows={breakdowns.dow.rows} />
+        <DowBars rows={breakdowns.dow.rows} context={metricContext} />
       )}
 
       {(breakdowns?.asset_body?.rows.length || breakdowns?.asset_title?.rows.length || breakdowns?.asset_video?.rows.length) ? (
-        <CreativeAssetSection breakdowns={breakdowns!} />
+        <CreativeAssetSection breakdowns={breakdowns!} context={metricContext} />
       ) : null}
     </div>
   )
@@ -140,22 +279,22 @@ export function SegmentsPanel({ tenantId, campaignId }: { tenantId: string; camp
    Same visual language as the Audit tab's trend cards, sourced from the
    full 90-day daily series instead of the last few audit snapshots.
    ═════════════════════════════════════════════════════════════════ */
-function TrendSection({ series }: { series: TimeseriesPoint[] }) {
+function TrendSection({ series, context }: { series: TimeseriesPoint[]; context: SegmentMetricContext }) {
   const spend = series.map(s => s.spend)
-  const roas = series.map(s => (s.spend > 0 && s.revenue > 0 ? s.revenue / s.spend : 0))
-  const conv = series.map(s => s.conversions)
+  const result = series.map(row => context.result(row))
+  const efficiency = series.map(row => context.efficiency(row))
 
   const cards = [
-    { label: 'Spend', data: spend, color: 'var(--accent)', unit: '₹', Icon: DollarSign },
-    { label: 'ROAS', data: roas, color: 'var(--good)', unit: 'x', Icon: TrendingUp },
-    { label: 'Conversions', data: conv, color: 'var(--info)', unit: '#', Icon: Target },
+    { label: 'Spend', data: spend, color: 'var(--accent)', format: formatCurrency, directional: false, Icon: DollarSign },
+    { label: context.efficiencyLabel, data: efficiency, color: context.efficiencyFormat === 'roas' ? 'var(--good)' : 'var(--accent-strong)', format: (value: number) => formatEfficiency(value, context), directional: context.efficiencyFormat === 'roas', Icon: TrendingUp },
+    { label: context.resultLabel, data: result, color: 'var(--info)', format: formatResult, directional: false, Icon: Target },
   ]
 
   return (
     <div className="card p-5">
       <p className="micro-label mb-4">Daily Trend · {series.length} days</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {cards.map(({ label, data, color, unit, Icon }) => {
+        {cards.map(({ label, data, color, format, directional, Icon }) => {
           const latest = data[data.length - 1] ?? 0
           const prevWindow = data.slice(0, -1)
           const prevAvg = prevWindow.length ? prevWindow.reduce((a, b) => a + b, 0) / prevWindow.length : latest
@@ -163,24 +302,23 @@ function TrendSection({ series }: { series: TimeseriesPoint[] }) {
           const min = Math.min(...data), max = Math.max(...data), rng = max - min || 1
           const W = 220, H = 52
           const pts = data.map((v, i) => `${(i / Math.max(1, data.length - 1)) * W},${H - ((v - min) / rng) * H}`).join(' ')
-          const fmt = (v: number) => (unit === '₹' ? formatCurrency(v) : unit === 'x' ? `${v.toFixed(2)}x` : Math.round(v).toLocaleString('en-IN'))
           return (
             <div key={label} className="card-inset p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5"><Icon size={12} style={{ color }} /><p className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>{label}</p></div>
                 {prevAvg > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: delta >= 0 ? 'var(--good-bg)' : 'var(--bad-bg)', color: delta >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={directional ? { background: delta >= 0 ? 'var(--good-bg)' : 'var(--bad-bg)', color: delta >= 0 ? 'var(--good)' : 'var(--bad)' } : { background: 'var(--muted)', color: 'var(--ink-3)' }}>
                     {delta >= 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(0)}% vs avg
                   </span>
                 )}
               </div>
-              <div className="flex items-end gap-4">
-                <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" className="shrink-0">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <svg height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" fill="none" className="w-full min-w-0 sm:max-w-[220px]">
                   <polyline points={pts} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-                  <circle cx={W} cy={H - ((latest - min) / rng) * H} r={3.5} fill={color} />
+                  <circle cx={W - 3.5} cy={H - ((latest - min) / rng) * H} r={3.5} fill={color} />
                 </svg>
-                <div>
-                  <p className="display-num text-lg" style={{ color }}>{fmt(latest)}</p>
+                <div className="shrink-0">
+                  <p className="display-num text-lg" style={{ color }}>{format(latest)}</p>
                   <p className="text-[10px] mt-0.5 font-semibold" style={{ color: 'var(--ink-3)' }}>Today</p>
                 </div>
               </div>
@@ -193,30 +331,40 @@ function TrendSection({ series }: { series: TimeseriesPoint[] }) {
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   SEGMENT TABLE — age×gender, placement, region. ROAS-colored when
-   conversions are available at that breakdown granularity (Meta withholds
-   them for region).
+   SEGMENT TABLE — age×gender, placement and geography. Only verified sales
+   return receives ROAS coloring; every other objective stays neutral.
    ═════════════════════════════════════════════════════════════════ */
 function SegmentTable({
-  title, icon, rows, segmentLabel, showRoas, note,
+  title, icon, rows, segmentLabel, context, showObjectiveMetrics, note,
 }: {
   title: string
   icon: React.ReactNode
   rows: BreakdownRow[]
   segmentLabel: (r: BreakdownRow) => string
-  showRoas: boolean
+  context: SegmentMetricContext
+  showObjectiveMetrics: boolean
   note?: string
 }) {
   const sorted = [...rows].sort((a, b) => b.spend - a.spend).slice(0, 12)
-  const headers = showRoas
-    ? ['Segment', 'Spend', 'Impr.', 'Clicks', 'CTR', 'Conv.', 'ROAS', 'CPA']
-    : ['Segment', 'Spend', 'Impr.', 'Clicks', 'CTR']
+  const showBaseImpressions = !showObjectiveMetrics || context.resultLabel !== 'Impressions'
+  const showBaseClicks = !showObjectiveMetrics || context.resultLabel !== 'Clicks'
+  const showBaseCtr = !showObjectiveMetrics || context.efficiencyLabel !== 'CTR'
+  const showSalesCpa = showObjectiveMetrics && context.efficiencyFormat === 'roas'
+  const headers = [
+    'Segment',
+    'Spend',
+    ...(showBaseImpressions ? ['Impr.'] : []),
+    ...(showBaseClicks ? ['Clicks'] : []),
+    ...(showBaseCtr ? ['CTR'] : []),
+    ...(showObjectiveMetrics ? [context.resultLabel, context.efficiencyLabel] : []),
+    ...(showSalesCpa ? ['CPA'] : []),
+  ]
 
   return (
     <div className="card overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
         <div className="flex items-center gap-2"><span style={{ color: 'var(--accent)' }}>{icon}</span><p className="micro-label mb-0">{title}</p></div>
-        {showRoas && (
+        {showSalesCpa && (
           <div className="flex items-center gap-3 text-[10px]" style={{ color: 'var(--ink-3)' }}>
             <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--good)' }} />≥2x</span>
             <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'var(--warn)' }} />≥1x</span>
@@ -232,18 +380,20 @@ function SegmentTable({
               <tr key={i}>
                 <td className="text-[13px] font-medium" style={{ color: 'var(--ink)' }}>{segmentLabel(r)}</td>
                 <td className="num mono text-xs" style={{ color: 'var(--ink-2)' }}>{formatCurrency(r.spend)}</td>
-                <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.impressions.toLocaleString('en-IN')}</td>
-                <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.clicks.toLocaleString('en-IN')}</td>
-                <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.ctr ? `${r.ctr.toFixed(2)}%` : '—'}</td>
-                {showRoas && <td className="num mono text-xs" style={{ color: 'var(--ink-2)' }}>{r.conversions || '—'}</td>}
-                {showRoas && (
+                {showBaseImpressions && <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.impressions.toLocaleString('en-IN')}</td>}
+                {showBaseClicks && <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.clicks.toLocaleString('en-IN')}</td>}
+                {showBaseCtr && <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.ctr ? `${r.ctr.toFixed(2)}%` : '—'}</td>}
+                {showObjectiveMetrics && <td className="num mono text-xs" style={{ color: 'var(--ink-2)' }}>{formatResult(context.result(r))}</td>}
+                {showObjectiveMetrics && context.efficiencyFormat === 'roas' ? (
                   <td className="num">
-                    <span className="mono text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: roasBg(r.roas), color: roasColor(r.roas) }}>
-                      {r.roas > 0 ? `${r.roas.toFixed(2)}x` : '—'}
+                    <span className="mono text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: roasBg(context.efficiency(r)), color: roasColor(context.efficiency(r)) }}>
+                      {formatEfficiency(context.efficiency(r), context)}
                     </span>
                   </td>
-                )}
-                {showRoas && <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.cpa > 0 ? formatCurrency(r.cpa) : '—'}</td>}
+                ) : showObjectiveMetrics ? (
+                  <td className="num mono text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{formatEfficiency(context.efficiency(r), context)}</td>
+                ) : null}
+                {showSalesCpa && <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>{r.cpa > 0 ? formatCurrency(r.cpa) : '—'}</td>}
               </tr>
             ))}
           </tbody>
@@ -256,27 +406,36 @@ function SegmentTable({
 
 /* ═════════════════════════════════════════════════════════════════
    HOUR-OF-DAY BARS — magnitude (spend) across 24 ordered bins, single hue.
-   Conversion count overlaid where present; lowest-CPA hours called out.
+   Objective-specific result is called out without treating cost movement as
+   inherently good or bad.
    ═════════════════════════════════════════════════════════════════ */
-function HourBars({ rows }: { rows: BreakdownRow[] }) {
+function HourBars({ rows, context }: { rows: BreakdownRow[]; context: SegmentMetricContext }) {
   const byHour = new Map<number, BreakdownRow>()
   for (const r of rows) {
     const h = parseInt(String(r.keys.hour ?? '').slice(0, 2), 10)
     if (Number.isFinite(h)) byHour.set(h, r)
   }
   const maxSpend = Math.max(...rows.map(r => r.spend), 1)
-  const bestHours = rows.filter(r => r.conversions > 0).sort((a, b) => a.cpa - b.cpa).slice(0, 3)
+  const topHours = rows
+    .filter(row => context.result(row) > 0)
+    .sort((a, b) => context.efficiencyFormat === 'roas'
+      ? context.efficiency(b) - context.efficiency(a)
+      : context.result(b) - context.result(a))
+    .slice(0, 3)
+  const highlightLabel = context.efficiencyFormat === 'roas'
+    ? 'Highest raw ROAS:'
+    : `Most ${context.resultLabel.toLowerCase()}:`
 
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2"><Clock size={13} style={{ color: 'var(--accent)' }} /><p className="micro-label mb-0">Hour of Day</p></div>
-        {bestHours.length > 0 && (
+        {topHours.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-3)' }}>Lowest CPA:</span>
-            {bestHours.map((r, i) => (
-              <span key={i} className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--good-bg)', color: 'var(--good)' }}>
-                {String(r.keys.hour ?? '').slice(0, 5)} · {formatCurrency(r.cpa)}
+            <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-3)' }}>{highlightLabel}</span>
+            {topHours.map((r, i) => (
+              <span key={i} className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={context.efficiencyFormat === 'roas' ? { background: 'var(--good-bg)', color: 'var(--good)' } : { background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
+                {String(r.keys.hour ?? '').slice(0, 5)} · {context.efficiencyFormat === 'roas' ? formatEfficiency(context.efficiency(r), context) : formatResult(context.result(r))}
               </span>
             ))}
           </div>
@@ -287,7 +446,7 @@ function HourBars({ rows }: { rows: BreakdownRow[] }) {
           const r = byHour.get(h)
           const pct = r ? Math.max(4, (r.spend / maxSpend) * 100) : 0
           return (
-            <div key={h} className="flex flex-col items-center gap-1" title={r ? `${h}:00 — ${formatCurrency(r.spend)} spend, ${r.conversions} conv.` : `${h}:00 — no data`}>
+            <div key={h} className="flex flex-col items-center gap-1" title={r ? `${h}:00 — ${formatCurrency(r.spend)} spend, ${formatResult(context.result(r))} ${context.resultLabel.toLowerCase()}, ${formatEfficiency(context.efficiency(r), context)} ${context.efficiencyLabel}` : `${h}:00 — no data`}>
               <div className="w-full rounded-t-sm" style={{ height: 64, display: 'flex', alignItems: 'flex-end', background: 'var(--muted)' }}>
                 <div className="w-full rounded-t-sm transition-all" style={{ height: `${pct}%`, background: 'var(--accent)', minHeight: r ? 3 : 0 }} />
               </div>
@@ -303,7 +462,7 @@ function HourBars({ rows }: { rows: BreakdownRow[] }) {
 /* ═════════════════════════════════════════════════════════════════
    DAY-OF-WEEK BARS
    ═════════════════════════════════════════════════════════════════ */
-function DowBars({ rows }: { rows: BreakdownRow[] }) {
+function DowBars({ rows, context }: { rows: BreakdownRow[]; context: SegmentMetricContext }) {
   const byDow = new Map<string, BreakdownRow>()
   for (const r of rows) if (r.keys.dow) byDow.set(r.keys.dow, r)
   const maxSpend = Math.max(...rows.map(r => r.spend), 1)
@@ -316,9 +475,9 @@ function DowBars({ rows }: { rows: BreakdownRow[] }) {
           const r = byDow.get(day)
           const pct = r ? Math.max(4, (r.spend / maxSpend) * 100) : 0
           return (
-            <div key={day} className="flex flex-col items-center gap-1.5" title={r ? `${day} — ${formatCurrency(r.spend)} spend, ${r.conversions} conv., ${r.roas > 0 ? r.roas.toFixed(2) + 'x' : '—'} ROAS` : day}>
+            <div key={day} className="flex flex-col items-center gap-1.5" title={r ? `${day} — ${formatCurrency(r.spend)} spend, ${formatResult(context.result(r))} ${context.resultLabel.toLowerCase()}, ${formatEfficiency(context.efficiency(r), context)} ${context.efficiencyLabel}` : day}>
               <div className="w-full rounded-t-sm" style={{ height: 56, display: 'flex', alignItems: 'flex-end', background: 'var(--muted)' }}>
-                <div className="w-full rounded-t-sm transition-all" style={{ height: `${pct}%`, background: r && r.roas > 0 ? roasColor(r.roas) : 'var(--accent)', minHeight: r ? 3 : 0 }} />
+                <div className="w-full rounded-t-sm transition-all" style={{ height: `${pct}%`, background: r && context.efficiencyFormat === 'roas' && context.efficiency(r) > 0 ? roasColor(context.efficiency(r)) : 'var(--accent)', minHeight: r ? 3 : 0 }} />
               </div>
               <span className="text-[10px] font-semibold capitalize" style={{ color: 'var(--ink-3)' }}>{day.slice(0, 3)}</span>
             </div>
@@ -334,7 +493,7 @@ function DowBars({ rows }: { rows: BreakdownRow[] }) {
    (Meta mixes variants at delivery; this is the only level real
    per-copy/per-video attribution exists at).
    ═════════════════════════════════════════════════════════════════ */
-function CreativeAssetSection({ breakdowns }: { breakdowns: CampaignBreakdowns }) {
+function CreativeAssetSection({ breakdowns, context }: { breakdowns: CampaignBreakdowns; context: SegmentMetricContext }) {
   const sections: Array<{ key: keyof CampaignBreakdowns; label: string; text: (r: BreakdownRow) => string }> = [
     { key: 'asset_video', label: 'Videos', text: r => r.keys.assetName || r.keys.video_asset || 'Untitled' },
     { key: 'asset_body', label: 'Body copy', text: r => r.keys.assetText || '—' },
@@ -348,7 +507,7 @@ function CreativeAssetSection({ breakdowns }: { breakdowns: CampaignBreakdowns }
         {sections.map(({ key, label, text }) => {
           const rows = breakdowns[key]?.rows ?? []
           if (rows.length === 0) return null
-          const top = [...rows].sort((a, b) => (b.conversions - a.conversions) || (b.spend - a.spend)).slice(0, 5)
+          const top = [...rows].sort((a, b) => (context.result(b) - context.result(a)) || (b.spend - a.spend)).slice(0, 5)
           return (
             <div key={key}>
               <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--ink-3)' }}>{label}</p>
@@ -358,8 +517,8 @@ function CreativeAssetSection({ breakdowns }: { breakdowns: CampaignBreakdowns }
                     <p className="text-[12px] leading-snug mb-1 line-clamp-2" style={{ color: 'var(--ink)' }} title={text(r)}>{text(r)}</p>
                     <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--ink-3)' }}>
                       <span className="mono">{formatCurrency(r.spend)}</span>
-                      {r.conversions > 0 && <span className="mono font-bold" style={{ color: roasColor(r.roas) }}>{r.roas.toFixed(2)}x</span>}
-                      {r.conversions > 0 && <span>· {r.conversions} conv.</span>}
+                      {context.efficiency(r) > 0 && <span className="mono font-bold" style={{ color: context.efficiencyFormat === 'roas' ? roasColor(context.efficiency(r)) : 'var(--ink-2)' }}>{formatEfficiency(context.efficiency(r), context)}</span>}
+                      {context.result(r) > 0 && <span>· {formatResult(context.result(r))} {context.resultLabel.toLowerCase()}</span>}
                     </div>
                   </div>
                 ))}

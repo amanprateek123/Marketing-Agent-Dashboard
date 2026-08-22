@@ -2,7 +2,7 @@ import { HelpCircle } from 'lucide-react'
 
 /** Shared plain-English definitions so wording stays consistent everywhere the term appears. */
 export const GLOSSARY = {
-  roas: 'Return on ad spend — for every ₹1 you spend, how many ₹ came back. 2.00x means you doubled your money; below 1.00x means you’re losing money.',
+  roas: 'Recorded action value per ₹1 of ad spend. Depending on the row, the value can come from Meta attribution or a configured estimate. 1.00x means recorded action value equals spend; it does not prove cash collected or profit after product costs.',
   ctr: 'Click-through rate — the percentage of people who saw the ad and clicked on it. Higher usually means the ad is more interesting to them.',
   cpa: 'Cost per acquisition — how much you paid, on average, for each purchase or signup this drove.',
   cpc: 'Cost per click — how much you pay, on average, each time someone clicks the ad.',
@@ -10,8 +10,8 @@ export const GLOSSARY = {
   cvr: 'Conversion rate — the percentage of clicks that turned into an actual purchase or signup.',
   freq: 'Frequency — the average number of times one person has seen this ad. Above ~4-5, people usually start tuning it out.',
   conv: 'Conversions — the number of purchases or signups counted from this ad.',
-  breakeven: 'Breakeven ROAS — the minimum return needed just to cover costs (product cost, fees, refunds). Below this line, you’re losing money on every sale.',
-  targetRoas: 'Target ROAS — the return we’re aiming for once healthy, not just breaking even. Set higher than breakeven so campaigns are actually profitable, not just paying for themselves.',
+  breakeven: 'Modeled breakeven ROAS based on configured product economics. Treat it as directional until the return and refund basis are fully reconciled.',
+  targetRoas: 'Target ROAS — the recorded action-value return the campaign is aiming for. It is an operating target, not proof of collected cash or contribution profit.',
 } as const
 
 interface Props {

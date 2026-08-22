@@ -23,8 +23,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Marketing Intelligence",
-  description: "The autonomous marketing pipeline, observed.",
+  title: {
+    default: "Meridian — AI Growth OS",
+    template: "%s · Meridian",
+  },
+  description:
+    "Plan, launch, diagnose, and improve growth campaigns with explainable AI and human-controlled safeguards.",
+  applicationName: "Meridian",
 };
 
 export default function RootLayout({
@@ -37,7 +42,7 @@ export default function RootLayout({
       lang="en"
       className={`${plusJakarta.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col meridian-root">
         <AuthGate>{children}</AuthGate>
       </body>
     </html>
