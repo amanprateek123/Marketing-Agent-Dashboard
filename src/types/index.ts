@@ -181,17 +181,30 @@ export interface IntelligenceDecision {
   tenantId: string
   campaignId: string
   metaCampaignId?: string
+  campaignName?: string
   cycleId: string
   actionId: string
   actionType: string
   targetType: string
   targetId: string
   parameters: Record<string, unknown>
+  /** Present on fresh goal-aware decisions; absent on historical rows. */
+  decisionContractVersion?: 'goal_aware_v1' | string
+  objective?: string
+  primaryKPI?: string
+  expectedImpact?: {
+    metric: string
+    deltaPct: number
+    confidence: number
+  }
+  /** For revenue goals, true only when product economics and return provenance passed. */
+  financialDataAvailable?: boolean
   expectedProfitDeltaINR7d: number
   reasoning: string
   evidenceChain: IntelligenceDecisionEvidenceStep[]
   risk: 'low' | 'medium' | 'high'
   score: number
+  confidence?: number
   gatedBy: string[]
   requiresHumanApproval: boolean
   evidenceSnapshot?: {

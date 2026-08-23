@@ -1134,9 +1134,23 @@ export interface DecisionTrace {
   steps: DecisionTraceStep[]
 }
 
+export interface CycleTrace {
+  cycleId: string
+  campaignName: string
+  decisionsInCycle: number
+  topDecisionId: string | null
+  stepsWithData: number
+  totalSteps: number
+  steps: DecisionTraceStep[]
+}
+
 /** Read-only: replays what the cycle already recorded, never re-runs an engine. */
 export const getDecisionTrace = (tenantId: string, decisionId: string) =>
   apiFetch<DecisionTrace>(`/intelligence/${tenantId}/decisions/${decisionId}/trace`)
+
+/** Read-only trace for a completed cycle, including cycles that proposed no action. */
+export const getCycleTrace = (tenantId: string, cycleId: string) =>
+  apiFetch<CycleTrace>(`/intelligence/${tenantId}/cycles/${cycleId}/trace`)
 
 export const getIntelligenceDecisionsSummary = (tenantId: string) =>
   apiFetch<DecisionsSummary>(`/intelligence/${tenantId}/decisions/summary`)

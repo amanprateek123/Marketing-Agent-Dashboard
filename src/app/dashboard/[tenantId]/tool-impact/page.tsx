@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import {
   AlertTriangle,
   BarChart3,
@@ -96,6 +97,12 @@ function formatDuration(hours: number | null | undefined): string {
   return hours < 24
     ? `${hours.toFixed(hours < 10 ? 1 : 0)}h`
     : `${(hours / 24).toFixed(1)}d`
+}
+
+function formatModeledDelta(deltaPct: number): string {
+  const rounded = Math.round(Math.abs(deltaPct) * 10) / 10
+  if (rounded === 0) return '0%'
+  return `${deltaPct > 0 ? '+' : '−'}${rounded}%`
 }
 
 function csvCell(value: unknown): string {
@@ -832,36 +839,76 @@ export default function AgentAchievementPage({ params }: PageProps) {
 
             {data.diagnosis.examples.length > 0 ? (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                {data.diagnosis.examples.map((example, index) => (
-                  <div
-                    key={`${example.campaignName}-${index}`}
-                    className="card-inset px-4 py-4"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold">{example.campaignName}</p>
-                        <span className="chip chip-accent mt-1.5">
-                          {plainLabel(example.actionType)}
-                        </span>
+                {data.diagnosis.examples.map((example, index) => {
+                  const goalContext =
+                    example.decisionContractVersion === 'goal_aware_v1' &&
+                    example.objective &&
+                    example.primaryKPI &&
+                    example.expectedImpact?.metric &&
+                    Number.isFinite(example.expectedImpact?.deltaPct) &&
+                    Number.isFinite(example.expectedImpact?.confidence)
+                      ? {
+                          objective: example.objective,
+                          primaryKPI: example.primaryKPI,
+                          expectedImpact: example.expectedImpact,
+                        }
+                      : null
+
+                  return (
+                    <div
+                      key={`${example.campaignName}-${index}`}
+                      className="card-inset px-4 py-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-semibold">{example.campaignName}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            <span className="chip chip-accent">
+                              {plainLabel(example.actionType)}
+                            </span>
+                            {goalContext && (
+                              <span className="chip chip-neutral">
+                                {plainLabel(goalContext.objective)} · {plainLabel(goalContext.primaryKPI)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="mono font-semibold">
+                            {goalContext
+                              ? `${formatModeledDelta(goalContext.expectedImpact.deltaPct)} ${plainLabel(goalContext.expectedImpact.metric)}`
+                              : 'Withheld'}
+                          </p>
+                          <p className="explain">
+                            {goalContext
+                              ? `${Math.round(goalContext.expectedImpact.confidence * 100)}% confidence · modeled KPI`
+                              : 'legacy contract'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="mono font-semibold">
-                          {formatSignedCurrency(example.expectedProfitDeltaINR7d)} / 7d
+                      {example.reasoning && goalContext && (
+                        <p className="text-sm mt-3" style={{ color: 'var(--ink-2)' }}>
+                          {example.reasoning}
                         </p>
-                        <p className="explain">model estimate</p>
+                      )}
+                      <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+                        <p className="explain">
+                          {DECISION_STATUS_LABEL[example.status] ??
+                            plainLabel(example.status)}
+                        </p>
+                        {goalContext && (
+                          <Link
+                            href={`/dashboard/${tenantId}/proposed-actions?campaignId=${encodeURIComponent(example.campaignId)}`}
+                            className="text-xs font-semibold"
+                            style={{ color: 'var(--accent-strong)' }}
+                          >
+                            Review 16-step trace →
+                          </Link>
+                        )}
                       </div>
                     </div>
-                    {example.reasoning && (
-                      <p className="text-sm mt-3" style={{ color: 'var(--ink-2)' }}>
-                        {example.reasoning}
-                      </p>
-                    )}
-                    <p className="explain mt-2">
-                      {DECISION_STATUS_LABEL[example.status] ??
-                        plainLabel(example.status)}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <p className="explain">No open decision examples in this cohort.</p>

@@ -17,7 +17,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, plainLabel } from '@/lib/utils'
 import {
   getIntelligenceDecisions,
   getIntelligenceDecisionsSummary,
@@ -26,9 +26,10 @@ import {
   primeIntelligence,
   getIntelligenceCycles,
   getDecisionTrace,
+  getCycleTrace,
   DecisionsSummary,
   IntelligenceCycle,
-  DecisionTrace,
+  DecisionTraceStep,
 } from '@/lib/api'
 import type {
   IntelligenceDecision,
@@ -46,10 +47,29 @@ interface Toast {
   text: string
 }
 
-// Legacy intelligence decisions do not persist the campaign objective,
-// optimization goal or return basis. Until that contract is migrated, raw
-// profit/ROAS reasoning and the detailed trace cannot be interpreted safely.
-const LEGACY_REASONING_HAS_REQUIRED_CONTEXT = false
+function hasGoalAwareContract(
+  decision: IntelligenceDecision | undefined,
+): decision is IntelligenceDecision & {
+  decisionContractVersion: 'goal_aware_v1'
+  objective: string
+  primaryKPI: string
+  expectedImpact: { metric: string; deltaPct: number; confidence: number }
+} {
+  return Boolean(
+    decision?.decisionContractVersion === 'goal_aware_v1' &&
+      decision.objective &&
+      decision.primaryKPI &&
+      decision.expectedImpact?.metric &&
+      Number.isFinite(decision.expectedImpact.deltaPct) &&
+      Number.isFinite(decision.expectedImpact.confidence),
+  )
+}
+
+function formatModeledDelta(deltaPct: number): string {
+  const rounded = Math.round(Math.abs(deltaPct) * 10) / 10
+  if (rounded === 0) return '0%'
+  return `${deltaPct > 0 ? '+' : '−'}${rounded}%`
+}
 
 // Human-friendly labels for the action-type enums the backend emits.
 const ACTION_LABEL: Record<string, string> = {
@@ -132,6 +152,7 @@ function cleanText(s: string): string {
  * Falls back to the target/campaign id if the pattern isn't found.
  */
 function extractCampaignName(d: IntelligenceDecision): string {
+  if (d.campaignName?.trim()) return d.campaignName.trim()
   const m = d.reasoning.match(/ on ([^.]+?)\./)
   if (m?.[1]) return m[1].trim()
   return d.targetId && d.targetId !== 'unknown' ? d.targetId : 'Campaign'
@@ -324,6 +345,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
   }, [decisions, filterCampaignId, filterTargetId, filterScope, isFiltered])
 
   const buckets = useMemo(() => bucketByCampaign(visibleDecisions), [visibleDecisions])
+  const hasLegacyVisibleDecisions = visibleDecisions.some((decision) => !hasGoalAwareContract(decision))
 
   // One row per campaign — its most recent cycle only. `cycles` comes back
   // newest-first from the API, so the first occurrence per campaignId wins.
@@ -369,11 +391,13 @@ export default function ProposedActionsPage({ params }: PageProps) {
           <p className="page-subtitle">
             {tab === 'shadow_review'
               ? buckets.length === 0
-                ? 'No recommendations need review. Run a fresh analysis whenever you want another check.'
-                : `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} need review. Economic forecasts are withheld until objective and return-basis context is stored.`
+                ? 'No recommendation currently passes every evidence gate. Open the latest campaign checks to see what was observed or withheld.'
+                : hasLegacyVisibleDecisions
+                  ? `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} need review. Records missing objective or return evidence are clearly labeled.`
+                  : `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} have goal-specific recommendations ready for review.`
               : `Showing ${decisions.length} ${tab.replace('_', ' ')} decision${decisions.length === 1 ? '' : 's'}.`}
           </p>
-          {tab === 'shadow_review' && buckets.length > 0 && (
+          {tab === 'shadow_review' && buckets.length > 0 && hasLegacyVisibleDecisions && (
             <p className="mt-2 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
               Review the action target and current Meta context. These legacy records cannot support a profit or ROAS claim.
             </p>
@@ -514,6 +538,9 @@ export default function ProposedActionsPage({ params }: PageProps) {
                       : ''}
                     analyzed {relativeTime(c.completedAt ?? c.startedAt)}
                   </p>
+                  {c.status === 'completed' && (
+                    <CycleTracePanel tenantId={tenantId} cycleId={c.cycleId} />
+                  )}
                 </div>
               </div>
             ))}
@@ -569,11 +596,11 @@ export default function ProposedActionsPage({ params }: PageProps) {
             <CheckCircle2 size={26} />
           </div>
           <h3 className="text-[17px] font-semibold" style={{ color: 'var(--ink)' }}>
-            {tab === 'shadow_review' ? 'All caught up' : `No ${tab.replace('_', ' ')} decisions`}
+            {tab === 'shadow_review' ? 'No recommendation passed the evidence gates' : `No ${tab.replace('_', ' ')} decisions`}
           </h3>
           <p className="text-[13.5px] mt-1.5 max-w-md mx-auto" style={{ color: 'var(--ink-3)' }}>
             {tab === 'shadow_review'
-              ? 'The agent found nothing that needs your attention. Click "Look again now" to force a fresh analysis.'
+              ? 'Open the latest campaign checks above to see what Meridian observed, why it withheld action, and all 16 engine steps.'
               : 'Nothing to show yet in this bucket.'}
           </p>
         </div>
@@ -622,7 +649,9 @@ export default function ProposedActionsPage({ params }: PageProps) {
         open={Boolean(approvalTarget)}
         title="Approve and apply this change to Meta?"
         description={approvalTarget
-          ? `${ACTION_LABEL[approvalTarget.actionType] ?? approvalTarget.actionType} will be attempted immediately on the live ${approvalTarget.targetType === 'adset' ? 'ad group' : approvalTarget.targetType === 'ad' ? 'ad' : 'campaign'}. This legacy record does not store objective or return-basis context, so verify the target in Meta first. The approval remains recorded even if Meta rejects execution.`
+          ? `${ACTION_LABEL[approvalTarget.actionType] ?? approvalTarget.actionType} will be attempted immediately on the live ${approvalTarget.targetType === 'adset' ? 'ad group' : approvalTarget.targetType === 'ad' ? 'ad' : 'campaign'}. ${hasGoalAwareContract(approvalTarget)
+            ? `This recommendation optimizes ${plainLabel(approvalTarget.primaryKPI)} for the ${plainLabel(approvalTarget.objective)} objective; its ${formatModeledDelta(approvalTarget.expectedImpact.deltaPct)} ${plainLabel(approvalTarget.expectedImpact.metric)} impact is a model estimate, not a guaranteed result.`
+            : 'This legacy record does not store objective or return-basis context, so verify the target in Meta first.'} The approval remains recorded even if Meta rejects execution.`
           : undefined}
         confirmLabel="Approve & apply to Meta"
         loading={Boolean(approvalTarget && busyId === approvalTarget._id)}
@@ -665,6 +694,7 @@ function CampaignBucketCard({
 
   // Use the first decision for the stored evidence snapshot.
   const primary = bucket.decisions[0]
+  const goalAware = hasGoalAwareContract(primary)
   const spend = Number(primary?.evidenceSnapshot?.metrics?.spend ?? 0)
 
   return (
@@ -689,21 +719,27 @@ function CampaignBucketCard({
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>Economic effect</p>
+          <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
+            {goalAware ? `Modeled ${plainLabel(primary.expectedImpact.metric)} change` : 'Economic effect'}
+          </p>
           <p
             className="text-[26px] font-semibold tabular-nums leading-none mt-0.5"
-            style={{ color: 'var(--warn)' }}
+            style={{ color: goalAware ? 'var(--accent-strong)' : 'var(--warn)' }}
           >
-            Withheld
+            {goalAware ? formatModeledDelta(primary.expectedImpact.deltaPct) : 'Withheld'}
           </p>
           <p className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>
-            Objective and return basis are not stored
+            {goalAware
+              ? `${Math.round(primary.expectedImpact.confidence * 100)}% confidence · model estimate`
+              : 'Objective and return basis are not stored'}
           </p>
         </div>
       </div>
 
       <p className="text-[13.5px] mt-1 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
-        Legacy recommendation. Validate its target against the live campaign objective before applying.
+        {goalAware
+          ? `${plainLabel(primary.objective)} objective · optimizing ${plainLabel(primary.primaryKPI)}.`
+          : 'Legacy recommendation. Validate its target against the live campaign objective before applying.'}
       </p>
 
       {/* Numeric snapshot chips */}
@@ -772,9 +808,27 @@ interface ActionOptionProps {
  *
  * Loads lazily on first open and caches thereafter.
  */
-function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisionId: string }) {
+interface TraceContent {
+  stepsWithData: number
+  totalSteps: number
+  steps: DecisionTraceStep[]
+}
+
+interface ReasoningTracePanelProps {
+  loadTrace: () => Promise<TraceContent>
+  triggerLabel: string
+  panelTitle: string
+  triggerClassName?: string
+}
+
+function ReasoningTracePanel({
+  loadTrace,
+  triggerLabel,
+  panelTitle,
+  triggerClassName = 'mt-2 ml-4',
+}: ReasoningTracePanelProps) {
   const [open, setOpen] = useState(false)
-  const [trace, setTrace] = useState<DecisionTrace | null>(null)
+  const [trace, setTrace] = useState<TraceContent | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -788,7 +842,7 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
     setLoading(true)
     setError('')
     try {
-      setTrace(await getDecisionTrace(tenantId, decisionId))
+      setTrace(await loadTrace())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the reasoning trace')
     } finally {
@@ -847,11 +901,11 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
         ref={triggerRef}
         type="button"
         onClick={openPanel}
-        className="mt-2 ml-4 inline-flex items-center gap-1 text-[12px] font-semibold"
+        className={`${triggerClassName} inline-flex items-center gap-1 text-[12px] font-semibold`}
         style={{ color: 'var(--accent-strong)' }}
       >
         <ChevronRight size={12} />
-        How it decided (16 steps)
+        {triggerLabel}
       </button>
 
       {/* Rendered through a portal into <body>.
@@ -885,7 +939,7 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
               style={{ borderBottom: '1px solid var(--hairline)', background: 'var(--paper)' }}
             >
               <div className="min-w-0">
-                <h2 id={titleId} className="section-title">How it decided</h2>
+                <h2 id={titleId} className="section-title">{panelTitle}</h2>
                 <p className="explain mt-0.5">
                   {trace
                     ? `${trace.stepsWithData} of ${trace.totalSteps} steps recorded output`
@@ -984,6 +1038,27 @@ function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisi
   )
 }
 
+function DecisionTracePanel({ tenantId, decisionId }: { tenantId: string; decisionId: string }) {
+  return (
+    <ReasoningTracePanel
+      loadTrace={() => getDecisionTrace(tenantId, decisionId)}
+      triggerLabel="How it decided (16 steps)"
+      panelTitle="How it decided"
+    />
+  )
+}
+
+function CycleTracePanel({ tenantId, cycleId }: { tenantId: string; cycleId: string }) {
+  return (
+    <ReasoningTracePanel
+      loadTrace={() => getCycleTrace(tenantId, cycleId)}
+      triggerLabel="View 16-step check"
+      panelTitle="16-step campaign check"
+      triggerClassName="mt-2"
+    />
+  )
+}
+
 function ActionOption({
   d,
   tenantId,
@@ -1002,6 +1077,7 @@ function ActionOption({
   const label = ACTION_LABEL[d.actionType] ?? d.actionType
   const effect = ACTION_EFFECT[d.actionType] ?? ''
   const parts = splitReasoning(d.reasoning)
+  const goalAware = hasGoalAwareContract(d)
   const reviewedAt = d.humanReviewedAt ?? d.reviewedAt
   const reviewNote = d.humanReviewNotes ?? d.rejectionReason
 
@@ -1065,12 +1141,18 @@ function ActionOption({
         )}
       </div>
 
-      <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
-        Legacy profit/ROAS reasoning is withheld because this decision record does not store the objective or return basis.
-      </div>
-
-      {LEGACY_REASONING_HAS_REQUIRED_CONTEXT && (
+      {goalAware ? (
         <>
+          <div
+            className="mt-2 rounded-lg px-3 py-2 text-[12px]"
+            style={{ color: 'var(--ink-2)', background: 'var(--accent-soft)', border: '1px solid var(--accent-border)' }}
+          >
+            <span className="font-semibold" style={{ color: 'var(--ink)' }}>
+              Modeled {formatModeledDelta(d.expectedImpact.deltaPct)} {plainLabel(d.expectedImpact.metric)}
+            </span>
+            {' · '}{Math.round(d.expectedImpact.confidence * 100)}% confidence
+            {' · '}{plainLabel(d.objective)} objective
+          </div>
           <button
             onClick={() => setShowWhy((s) => !s)}
             aria-expanded={showWhy}
@@ -1083,6 +1165,10 @@ function ActionOption({
           {showWhy && <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-2)' }}>{parts.effect}</p>}
           <DecisionTracePanel tenantId={tenantId} decisionId={d._id} />
         </>
+      ) : (
+        <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
+          Legacy profit/ROAS reasoning is withheld because this decision record does not store the objective or return basis.
+        </div>
       )}
 
       {/* Countdown / status footer */}
