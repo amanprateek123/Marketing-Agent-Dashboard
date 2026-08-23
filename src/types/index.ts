@@ -1,3 +1,13 @@
+import type {
+  IntelligenceReviewEvidenceBundle,
+  IntelligenceReviewResult,
+} from './intelligence-review'
+
+export type {
+  IntelligenceReviewEvidenceBundle,
+  IntelligenceReviewResult,
+} from './intelligence-review'
+
 export interface MetaConnection {
   accessToken?: string
   accountId?: string
@@ -182,6 +192,8 @@ export interface IntelligenceDecision {
   campaignId: string
   metaCampaignId?: string
   campaignName?: string
+  /** Meta-imported campaigns can be analyzed but remain diagnostic-only. */
+  campaignSource?: 'agent' | 'human' | 'manual'
   cycleId: string
   actionId: string
   actionType: string
@@ -196,6 +208,10 @@ export interface IntelligenceDecision {
     metric: string
     deltaPct: number
     confidence: number
+    basis?: 'modeled' | 'observed_gap' | 'not_estimated'
+    currentValue?: number
+    siblingBaselineValue?: number
+    observedGapPct?: number
   }
   /** For revenue goals, true only when product economics and return provenance passed. */
   financialDataAvailable?: boolean
@@ -207,6 +223,11 @@ export interface IntelligenceDecision {
   confidence?: number
   gatedBy: string[]
   requiresHumanApproval: boolean
+  /** Persisted, bounded Step-14 review. Missing on legacy or not-yet-reviewed rows. */
+  intelligenceReviewVersion?: string
+  intelligenceReview?: IntelligenceReviewResult
+  intelligenceEvidence?: IntelligenceReviewEvidenceBundle
+  intelligenceReviewedAt?: string
   evidenceSnapshot?: {
     kind: string
     reasoning: string

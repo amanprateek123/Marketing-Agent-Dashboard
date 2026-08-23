@@ -37,6 +37,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { CampaignQueries } from '@/components/intelligence/CampaignQueries'
 import {
   confirmCampaignCopilotSession,
   getCampaignCopilotSession,
@@ -855,6 +856,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
   const [restoring, setRestoring] = useState(true)
   const [sending, setSending] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  /** 'planner' builds a new campaign; 'queries' explains ones already running. */
+  const [mode, setMode] = useState<'planner' | 'queries'>('planner')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [error, setError] = useState('')
   const [pollError, setPollError] = useState('')
@@ -1133,17 +1136,63 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                 <Sparkles size={10} /> Guided by Meridian
               </span>
             </div>
-            <h1 className="page-title">Turn a growth goal into a launch-ready campaign</h1>
+            <h1 className="page-title">
+              {mode === 'planner'
+                ? 'Turn a growth goal into a launch-ready campaign'
+                : 'Ask anything about the ads you are already running'}
+            </h1>
             <p className="page-subtitle max-w-3xl">
-              Start with one sentence. Meridian shapes the strategy, fills the gaps with you, and prepares everything for a safe human-approved launch.
+              {mode === 'planner'
+                ? 'Start with one sentence. Meridian shapes the strategy, fills the gaps with you, and prepares everything for a safe human-approved launch.'
+                : 'Questions about any campaign, running or paused. Answers come only from figures recorded in your ad account — and you can see exactly which campaign is being read.'}
             </p>
           </div>
-          <button type="button" onClick={newConversation} className="btn btn-ghost">
-            <MessageSquarePlus size={15} />
-            New conversation
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Planner builds something new; Queries explains what already ran.
+                They share this workspace but no state — switching never
+                disturbs a plan in progress. */}
+            <div
+              role="tablist"
+              aria-label="Copilot mode"
+              className="flex items-center gap-0.5 rounded-lg p-0.5"
+              style={{ background: 'var(--muted)' }}
+            >
+              {(
+                [
+                  ['planner', 'Plan a campaign'],
+                  ['queries', 'Ask about ads'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === key}
+                  onClick={() => setMode(key)}
+                  className="rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all"
+                  style={
+                    mode === key
+                      ? { background: 'var(--surface)', color: 'var(--accent-strong)', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                      : { background: 'transparent', color: 'var(--ink-3)' }
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {mode === 'planner' && (
+              <button type="button" onClick={newConversation} className="btn btn-ghost">
+                <MessageSquarePlus size={15} />
+                New conversation
+              </button>
+            )}
+          </div>
         </header>
 
+        {mode === 'queries' && <CampaignQueries tenantId={tenantId} />}
+
+        {mode === 'planner' && (
+          <>
         <JourneyRail stage={journeyStage} />
 
         {(error || pollError) && (
@@ -1612,6 +1661,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
             )}
           </aside>
         </div>
+          </>
+        )}
       </div>
 
       <ConfirmModal

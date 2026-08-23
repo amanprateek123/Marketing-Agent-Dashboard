@@ -1419,3 +1419,25 @@ export const getCustomBriefEvents = (
   apiFetch<CustomBriefEvents>(
     `/pipeline-bridge/${tenantId}/runs/${runId}/events?after=${after}`,
   )
+
+// ── Campaign Copilot · Queries mode ──────────────────────────────────────────
+// Asking about campaigns that already ran. Stateless by design: the planner's
+// session machinery is untouched and the client owns the transcript.
+
+export const getInsightCampaigns = (tenantId: string) =>
+  apiFetch<import('@/types/campaign-insights').InsightsCampaignOption[]>(
+    `/campaign-copilot/${tenantId}/insights/campaigns`,
+  )
+
+export const askCampaignInsights = (
+  tenantId: string,
+  body: {
+    question: string
+    campaignId?: string
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  },
+) =>
+  apiFetch<import('@/types/campaign-insights').InsightsAskResult>(
+    `/campaign-copilot/${tenantId}/insights/ask`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )

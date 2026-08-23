@@ -45,7 +45,7 @@ interface CampaignProposalCounts {
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
-  searchParams: Promise<{ filter?: string; accountId?: string }>
+  searchParams: Promise<{ filter?: string; accountId?: string; source?: string }>
 }
 
 type SortKey = 'topic' | 'status' | 'objective' | 'budget' | 'spend' | 'result' | 'efficiency' | 'launchedAt'
@@ -58,6 +58,16 @@ const STATUS_FILTERS = [
   { key: 'needs_attention', label: 'Needs attention' },
   { key: 'paused', label: 'Paused' },
   { key: 'completed', label: 'Completed' },
+]
+
+// 'dashboard' = source 'agent' or 'human' — anything built and managed through
+// this tool, regardless of who clicked launch. 'manual' = synced in from a
+// campaign created directly in Meta Ads Manager, read-only, never tool-managed.
+type SourceFilter = 'all' | 'dashboard' | 'manual'
+const SOURCE_FILTERS: { key: SourceFilter; label: string }[] = [
+  { key: 'all', label: 'All sources' },
+  { key: 'dashboard', label: 'Dashboard built' },
+  { key: 'manual', label: 'Meta synced' },
 ]
 
 type ObjectiveGroup = 'sales' | 'awareness' | 'traffic' | 'leads' | 'app' | 'engagement' | 'unknown'
@@ -766,7 +776,7 @@ function StatCard({
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CampaignsPage({ params, searchParams }: PageProps) {
   const { tenantId }       = use(params)
-  const { filter: initFilter, accountId: initAccountId } = use(searchParams)
+  const { filter: initFilter, accountId: initAccountId, source: initSource } = use(searchParams)
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading]     = useState(true)
@@ -788,6 +798,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter] = useState(initFilter ?? 'active')
   const [accountFilter, setAccountFilter] = useState(initAccountId ?? 'all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>((initSource as SourceFilter) ?? 'all')
   const [sortKey, setSortKey]       = useState<SortKey>('launchedAt')
   const [sortDir, setSortDir]       = useState<SortDir>('desc')
 
@@ -950,6 +961,8 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       list = list.filter((c) => c.status === statusFilter)
     }
     if (accountFilter !== 'all') list = list.filter((c) => c.metaAccountId === accountFilter)
+    if (sourceFilter === 'dashboard') list = list.filter((c) => c.source === 'agent' || c.source === 'human')
+    else if (sourceFilter === 'manual') list = list.filter((c) => c.source === 'manual')
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -975,7 +988,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [campaigns, statusFilter, accountFilter, search, sortKey, sortDir, proposalsByCampaign])
+  }, [campaigns, statusFilter, accountFilter, sourceFilter, search, sortKey, sortDir, proposalsByCampaign])
 
   const numericCols: { key: SortKey; label: React.ReactNode }[] = [
     { key: 'budget', label: 'Daily budget' },
@@ -1168,6 +1181,20 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Source filter — dashboard-built (agent + human) vs. Meta-synced clutter */}
+            <select
+              aria-label="Filter by source"
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+              className="input text-xs"
+              style={{ width: 160 }}
+              title="Dashboard built = launched through this tool (AI or human). Meta synced = created directly in Meta Ads Manager, read-only."
+            >
+              {SOURCE_FILTERS.map((f) => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+
             {/* Ad account filter */}
             {accountOptions.length > 0 && (
               <select

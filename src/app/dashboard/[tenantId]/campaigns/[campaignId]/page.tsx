@@ -687,6 +687,7 @@ function AdSetRow({
   onBudgetChanged,
   onCreativeAdded,
   objectiveContext,
+  focusId,
 }: {
   adSet: CampaignAdSet
   formatTag?: 'video' | 'image'
@@ -699,12 +700,25 @@ function AdSetRow({
   onBudgetChanged?: () => void
   onCreativeAdded?: () => void
   objectiveContext: DetailObjectiveContext
+  focusId?: string
 }) {
-  const [open, setOpen] = useState(false)
+  // Arriving from a recommendation link (?focus=…): open this ad group and
+  // scroll it into view, so the operator lands on the exact row being
+  // discussed rather than hunting for it.
+  const isFocused =
+    !!focusId &&
+    (focusId === adSet.metaAdSetId ||
+      focusId === adSet.id ||
+      (adSet.ads ?? []).some((ad) => ad.id === focusId))
+  const [open, setOpen] = useState(isFocused)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [addCreativeOpen, setAddCreativeOpen] = useState(false)
   const [placementOpen, setPlacementOpen] = useState(false)
   const rowRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    if (!isFocused) return
+    rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [isFocused])
   const ads = adSet.ads || []
   const spend = adSet.metrics?.spend ?? adSet.spend
   const ctr = adSet.metrics?.ctr ?? adSet.ctr
@@ -757,6 +771,7 @@ function AdSetRow({
         ref={rowRef}
         className="group cursor-pointer relative"
         onClick={() => setOpen(!open)}
+        style={isFocused ? { background: C.accentLight, boxShadow: `inset 3px 0 0 ${C.accent}` } : undefined}
       >
         <td>
           <div className="flex items-center gap-2.5">
@@ -1691,10 +1706,16 @@ function groupSiblings(adSets: CampaignAdSet[]): AdSetGroupRow[] {
 /* ═════════════════════════════════════════════════════════════════
    MAIN PAGE
    ═════════════════════════════════════════════════════════════════ */
-interface PageProps { params: Promise<{ tenantId: string; campaignId: string }> }
+interface PageProps {
+  params: Promise<{ tenantId: string; campaignId: string }>
+  /** `?tab=adsets&focus=<metaAdSetId|metaAdId>` — lets the recommendations page
+   *  link straight to the ad group or ad it is talking about. */
+  searchParams: Promise<{ tab?: string; focus?: string }>
+}
 
-export default function CampaignDetailPage({ params }: PageProps) {
+export default function CampaignDetailPage({ params, searchParams }: PageProps) {
   const { tenantId, campaignId } = use(params)
+  const { tab: initialTab, focus: focusId } = use(searchParams)
 
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1724,7 +1745,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
   const [vidRewrite, setVidRewrite] = useState<string>('idle')
   const [snaps, setSnaps] = useState<AuditSnapshot[]>([])
   const [snapsLoading, setSnapsLoading] = useState(false)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(initialTab ?? 'overview')
   // Open shadow_review counts keyed by Meta adset ID, populated once per load.
   const [adsetProposals, setAdsetProposals] = useState<Record<string, number>>({})
   // Pre-launch review — what approving actually does (destination, pixel,
@@ -2613,7 +2634,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                 <div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Audience', 'Budget %', 'Age', 'Geo', 'Goal'].map((h, i) => <th key={h} className={i === 0 ? '' : 'num'}>{h}</th>)}</tr></thead>
                 <tbody>{planned.map((a, i) => <tr key={i}><td><p className="text-sm font-semibold" style={{ color: C.text }}>{a.name}</p><span className="text-[11px] px-1.5 py-0.5 rounded-md mt-1 inline-block" style={{ background: C.accentLight, color: C.accent }}>{a.audienceType}</span></td><td className="num" style={{ color: C.textSecondary }}>{a.audienceType}</td><td className="num mono font-bold" style={{ color: C.accent }}>{a.budgetPercent}%</td><td className="num mono" style={{ color: C.textSecondary }}>{a.ageMin && a.ageMax ? `${a.ageMin}–${a.ageMax}` : '—'}</td><td className="num" style={{ color: C.textSecondary }}>{a.geoLocations?.join(', ') || '—'}</td><td className="num text-xs" style={{ color: C.textMuted }}>{a.optimizationGoal?.replace(/_/g, ' ') || '—'}</td></tr>)}</tbody></table></div>
               ) : (
-                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Budget', 'Spend', objectiveContext.resultLabel, objectiveContext.efficiencyLabel, 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} campaignId={campaignId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} objectiveContext={objectiveContext} onViewAd={setViewAd} onBudgetChanged={fetchCampaign} onCreativeAdded={fetchCampaign} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
+                <><div className="overflow-x-auto"><table className="data-table"><thead><tr>{['Ad Set', 'Status', 'Budget', 'Spend', objectiveContext.resultLabel, objectiveContext.efficiencyLabel, 'Impr.', 'CTR', 'Details'].map((h, i) => <th key={h} className={i < 2 ? '' : 'num'}>{h}</th>)}</tr></thead><tbody>{groupSiblings(live).map((row, i) => <AdSetRow key={row.adSet.metaAdSetId || row.adSet.id || i} adSet={row.adSet} formatTag={row.formatTag} siblingFormat={row.siblingFormat} groupHead={row.groupHead} tenantId={tenantId} campaignId={campaignId} proposalsCount={row.adSet.id ? adsetProposals[row.adSet.id] : 0} objectiveContext={objectiveContext} focusId={focusId} onViewAd={setViewAd} onBudgetChanged={fetchCampaign} onCreativeAdded={fetchCampaign} />)}</tbody></table></div>{live.length === 0 && <div className="py-16 text-center"><p className="text-sm" style={{ color: C.textMuted }}>No ad sets synced yet</p></div>}</>
               )}
             </div>
           </Tabs.Content>

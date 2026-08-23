@@ -556,6 +556,88 @@ export interface ToolImpactCampaignDailyPerformance {
   }>
 }
 
+/**
+ * Independent audit checks for the 16-step intelligence system. These are
+ * intentionally not blended into a single score: trace completeness,
+ * evidence readiness, prediction coverage and observed outcomes answer
+ * different questions and mature on different timelines.
+ */
+export interface ToolImpactBrainReliability {
+  label: string
+  window: {
+    days: number
+    from: string
+    to: string
+    cohort: string
+  }
+  cycleCompleteness: {
+    requiredSteps: number
+    cyclesRun: number
+    statusCompleted: number
+    failed: number
+    pending: number
+    fullTraceCycles: number
+    partialTraceCycles: number
+    unavailableTraceCycles: number
+    fullTraceRatePct: number | null
+  }
+  gateReadiness: {
+    evaluatedCycles: number
+    unavailableCycles: number
+    recommendPassed: number
+    recommendHeld: number
+    recommendPassRatePct: number | null
+    executionEvidencePassed: number
+    topRecommendBlockers: Array<{ code: string; count: number }>
+  }
+  predictions: {
+    decisions: number
+    goalAwareDecisions: number
+    completePredictions: number
+    legacyOrIncomplete: number
+    contractCoveragePct: number | null
+    byStatus: {
+      shadow_review: number
+      approved: number
+      rejected: number
+      expired: number
+    }
+    executionSucceeded: number
+    executionFailedOrBlocked: number
+  }
+  outcomes: {
+    scope: string
+    recorded: number
+    due24h: number
+    measured24h: number
+    overdue24h: number
+    due72h: number
+    finalized72h: number
+    overdue72h: number
+    conclusive72h: number
+    byLabel: Record<string, number>
+    minimumConclusiveSample: number
+    improvedRatePct: number | null
+    reportable: boolean
+    predictionAccuracyPct: null
+    limitation: string
+  }
+  recentCycles: Array<{
+    cycleId: string
+    campaignId: string
+    campaignName: string
+    startedAt: string
+    status: string
+    stepsRecorded: number
+    requiredSteps: number
+    confidenceOverall: number | null
+    recommendGate: 'passed' | 'held' | 'unavailable'
+    executionEvidenceGate: 'passed' | 'held' | 'unavailable'
+    decisionsWritten: number
+    reasonsBlocked: string[]
+  }>
+}
+
 /** Founder-facing, auditable evidence for campaigns Meridian owns. */
 export interface ToolImpactOverview {
   tenantId: string
@@ -620,6 +702,9 @@ export interface ToolImpactOverview {
   economics: DashboardEconomics
 
   dailyPerformance: ToolImpactDailyPerformance
+
+  /** Optional during rolling deploys; the UI renders an explicit unavailable state. */
+  brainReliability?: ToolImpactBrainReliability
 
   automation: {
     pipelineRuns: {
@@ -691,6 +776,10 @@ export interface ToolImpactOverview {
         metric: string
         deltaPct: number
         confidence: number
+        basis?: 'modeled' | 'observed_gap' | 'not_estimated'
+        currentValue?: number
+        siblingBaselineValue?: number
+        observedGapPct?: number
       }
       confidence?: number
       isModelEstimate: true

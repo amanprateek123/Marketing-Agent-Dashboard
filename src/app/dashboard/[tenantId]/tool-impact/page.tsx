@@ -6,12 +6,17 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   BarChart3,
+  BrainCircuit,
+  CheckCircle2,
   ChevronDown,
+  ClipboardCheck,
   Database,
   Download,
+  Gauge,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  TimerReset,
   Zap,
 } from 'lucide-react'
 import {
@@ -24,6 +29,7 @@ import {
 import { getToolImpact } from '@/lib/api'
 import type {
   DashboardCampaignRow,
+  ToolImpactBrainReliability,
   ToolImpactOverview,
   ToolImpactScope,
 } from '@/types'
@@ -576,6 +582,11 @@ export default function AgentAchievementPage({ params }: PageProps) {
           </div>
         </section>
 
+        <BrainReliabilityPanel
+          reliability={data.brainReliability}
+          tenantId={tenantId}
+        />
+
         <section className="mb-8" aria-labelledby="campaign-performance-heading">
           <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
             <div className="flex items-center gap-2">
@@ -921,6 +932,337 @@ export default function AgentAchievementPage({ params }: PageProps) {
         </section>
       </div>
     </div>
+  )
+}
+
+type ReliabilityTone = 'good' | 'watch' | 'neutral'
+
+function coverageValue(numerator: number, denominator: number): string {
+  return `${numerator}/${denominator}`
+}
+
+function coverageTone(
+  numerator: number,
+  denominator: number,
+  incomplete: number,
+): ReliabilityTone {
+  if (denominator === 0) return 'neutral'
+  if (numerator === denominator && incomplete === 0) return 'good'
+  return 'watch'
+}
+
+function ReliabilityCard({
+  icon,
+  label,
+  value,
+  status,
+  detail,
+  footnote,
+  progressPct,
+  tone = 'neutral',
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  status: string
+  detail: string
+  footnote: string
+  progressPct: number | null
+  tone?: ReliabilityTone
+}) {
+  const color =
+    tone === 'good'
+      ? 'var(--good)'
+      : tone === 'watch'
+        ? 'var(--warn)'
+        : 'var(--accent)'
+  const background =
+    tone === 'good'
+      ? 'var(--good-bg)'
+      : tone === 'watch'
+        ? 'var(--warn-bg)'
+        : 'var(--accent-soft)'
+
+  return (
+    <div className="card px-4 py-4 min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <span
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background, color }}
+        >
+          {icon}
+        </span>
+        <span
+          className="text-[11px] font-semibold rounded-full px-2 py-1 text-right"
+          style={{ background, color }}
+        >
+          {status}
+        </span>
+      </div>
+      <p className="micro-label mt-4">{label}</p>
+      <p className="display-num mt-1" style={{ fontSize: 30 }}>
+        {value}
+      </p>
+      <p className="text-sm mt-1" style={{ color: 'var(--ink-2)' }}>
+        {detail}
+      </p>
+      <div
+        className="h-1.5 rounded-full overflow-hidden mt-3"
+        style={{ background: 'var(--surface-warm)' }}
+        aria-hidden="true"
+      >
+        <div
+          className="h-full rounded-full transition-[width]"
+          style={{
+            background: color,
+            width: `${Math.max(0, Math.min(100, progressPct ?? 0))}%`,
+          }}
+        />
+      </div>
+      <p className="explain mt-2">{footnote}</p>
+    </div>
+  )
+}
+
+function gateLabel(gate: 'passed' | 'held' | 'unavailable'): string {
+  if (gate === 'passed') return 'Passed'
+  if (gate === 'held') return 'Safety hold'
+  return 'Unavailable'
+}
+
+function gateChipClass(gate: 'passed' | 'held' | 'unavailable'): string {
+  if (gate === 'passed') return 'chip chip-good'
+  if (gate === 'held') return 'chip chip-warn'
+  return 'chip chip-neutral'
+}
+
+function BrainReliabilityPanel({
+  reliability,
+  tenantId,
+}: {
+  reliability?: ToolImpactBrainReliability
+  tenantId: string
+}) {
+  const trace = reliability?.cycleCompleteness
+  const gates = reliability?.gateReadiness
+  const predictions = reliability?.predictions
+  const outcomes = reliability?.outcomes
+
+  const traceStatus = !trace || trace.cyclesRun === 0
+    ? 'Building evidence'
+    : trace.fullTraceCycles === trace.cyclesRun
+      ? 'Complete traces'
+      : `${trace.partialTraceCycles + trace.unavailableTraceCycles} incomplete`
+  const gateStatus = !gates || gates.evaluatedCycles === 0
+    ? 'Building evidence'
+    : gates.recommendHeld > 0
+      ? `${gates.recommendHeld} safety hold${gates.recommendHeld === 1 ? '' : 's'}`
+      : 'All eligible passed'
+  const predictionStatus = !predictions || predictions.decisions === 0
+    ? 'Awaiting decisions'
+    : predictions.legacyOrIncomplete === 0
+      ? 'Contracts complete'
+      : `${predictions.legacyOrIncomplete} incomplete`
+  const outcomeStatus = !outcomes || (outcomes.due24h === 0 && outcomes.due72h === 0)
+    ? 'Building evidence'
+    : outcomes.reportable
+      ? 'Sample reportable'
+      : 'Measurement active'
+
+  const topBlocker = gates?.topRecommendBlockers[0]
+
+  return (
+    <section className="mb-8" aria-labelledby="brain-reliability-heading">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <BrainCircuit size={19} style={{ color: 'var(--accent)' }} />
+          <div>
+            <h2 id="brain-reliability-heading" className="section-title">
+              16-step brain reliability
+            </h2>
+            {reliability && (
+              <p className="explain mt-0.5">
+                {reliability.window.days}d operating evidence · {reliability.window.cohort}
+              </p>
+            )}
+          </div>
+        </div>
+        <span className="chip chip-neutral">4 independent checks · no blended score</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <ReliabilityCard
+          icon={<CheckCircle2 size={18} />}
+          label="16-step completeness"
+          value={trace ? coverageValue(trace.fullTraceCycles, trace.cyclesRun) : '—'}
+          status={traceStatus}
+          detail={trace ? `${trace.requiredSteps}/${trace.requiredSteps} steps required per cycle` : 'Cycle trace contract unavailable'}
+          footnote={trace
+            ? `${trace.statusCompleted} completed · ${trace.failed} failed · ${trace.pending} pending`
+            : 'Available after the reliability contract is deployed'}
+          progressPct={trace?.fullTraceRatePct ?? null}
+          tone={trace
+            ? coverageTone(
+                trace.fullTraceCycles,
+                trace.cyclesRun,
+                trace.partialTraceCycles + trace.unavailableTraceCycles,
+              )
+            : 'neutral'}
+        />
+        <ReliabilityCard
+          icon={<ClipboardCheck size={18} />}
+          label="Current evidence readiness"
+          value={gates ? coverageValue(gates.recommendPassed, gates.evaluatedCycles) : '—'}
+          status={gateStatus}
+          detail={gates
+            ? `${gates.executionEvidencePassed} also passed execution evidence`
+            : 'Evidence-gate contract unavailable'}
+          footnote={gates
+            ? topBlocker
+              ? `Top hold: ${plainLabel(topBlocker.code)} (${topBlocker.count}) · ${gates.unavailableCycles} legacy/unavailable`
+              : `${gates.unavailableCycles} legacy/unavailable cycles`
+            : 'Safety holds prevent weak actions from being proposed'}
+          progressPct={gates?.recommendPassRatePct ?? null}
+          tone={gates
+            ? coverageTone(
+                gates.recommendPassed,
+                gates.evaluatedCycles,
+                gates.recommendHeld + gates.unavailableCycles,
+              )
+            : 'neutral'}
+        />
+        <ReliabilityCard
+          icon={<Gauge size={18} />}
+          label="Goal-aware predictions"
+          value={predictions ? coverageValue(predictions.completePredictions, predictions.decisions) : '—'}
+          status={predictionStatus}
+          detail={predictions
+            ? `${predictions.goalAwareDecisions} decisions use goal-aware contracts`
+            : 'Prediction contract unavailable'}
+          footnote={predictions
+            ? `${predictions.byStatus.shadow_review} awaiting review · ${predictions.executionSucceeded} executed`
+            : 'Counts only complete KPI + delta + confidence predictions'}
+          progressPct={predictions?.contractCoveragePct ?? null}
+          tone={predictions
+            ? coverageTone(
+                predictions.completePredictions,
+                predictions.decisions,
+                predictions.legacyOrIncomplete,
+              )
+            : 'neutral'}
+        />
+        <ReliabilityCard
+          icon={<TimerReset size={18} />}
+          label="Observed measurement"
+          value={outcomes ? `24h ${coverageValue(outcomes.measured24h, outcomes.due24h)}` : '—'}
+          status={outcomeStatus}
+          detail={outcomes
+            ? `72h ${coverageValue(outcomes.finalized72h, outcomes.due72h)} · ${outcomes.conclusive72h} conclusive`
+            : 'Outcome contract unavailable'}
+          footnote={outcomes
+            ? `Prediction accuracy unavailable · need ${outcomes.minimumConclusiveSample} conclusive outcomes`
+            : '24h and 72h checks begin after an action executes'}
+          progressPct={outcomes && outcomes.due72h > 0
+            ? (outcomes.finalized72h / outcomes.due72h) * 100
+            : null}
+          tone={outcomes?.reportable ? 'good' : 'neutral'}
+        />
+      </div>
+
+      <div className="card overflow-hidden mt-4">
+        <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>
+              Recent brain cycles
+            </p>
+            <p className="explain">Trace, evidence gate and decision output</p>
+          </div>
+          <span className="chip chip-neutral">
+            {reliability
+              ? `${Math.min(reliability.recentCycles.length, 5)} shown`
+              : 'Unavailable'}
+          </span>
+        </div>
+
+        {reliability && reliability.recentCycles.length > 0 ? (
+          <div style={{ borderTop: '1px solid var(--hairline)' }}>
+            {reliability.recentCycles.slice(0, 5).map((cycle) => {
+              const traceComplete =
+                cycle.stepsRecorded === cycle.requiredSteps &&
+                cycle.requiredSteps > 0
+              const holdReason = cycle.reasonsBlocked[0]
+              return (
+                <div
+                  key={cycle.cycleId}
+                  className="px-4 sm:px-5 py-3 grid grid-cols-1 lg:grid-cols-[minmax(220px,1.5fr)_0.7fr_0.9fr_0.9fr_0.8fr] gap-2 lg:gap-4 items-center"
+                  style={{ borderTop: '1px solid var(--hairline-light)' }}
+                >
+                  <div className="min-w-0">
+                    <Link
+                      href={`/dashboard/${tenantId}/proposed-actions?campaignId=${encodeURIComponent(cycle.campaignId)}`}
+                      className="font-semibold text-sm block truncate"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      {cycle.campaignName}
+                    </Link>
+                    <p className="explain truncate">
+                      {formatRelativeTime(cycle.startedAt)} · {plainLabel(cycle.status)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="micro-label">Trace</p>
+                    <span className={traceComplete ? 'chip chip-good mt-1' : 'chip chip-warn mt-1'}>
+                      {cycle.stepsRecorded}/{cycle.requiredSteps} steps
+                    </span>
+                  </div>
+                  <div>
+                    <p className="micro-label">Recommend gate</p>
+                    <span className={`${gateChipClass(cycle.recommendGate)} mt-1`}>
+                      {gateLabel(cycle.recommendGate)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="micro-label">Execution evidence</p>
+                    <span className={`${gateChipClass(cycle.executionEvidenceGate)} mt-1`}>
+                      {gateLabel(cycle.executionEvidenceGate)}
+                    </span>
+                    {holdReason && (
+                      <p className="explain truncate mt-1" title={holdReason}>
+                        {plainLabel(holdReason)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="lg:text-right">
+                    <p className="micro-label">Decision output</p>
+                    <p className="font-semibold text-sm mt-1" style={{ color: 'var(--ink)' }}>
+                      {cycle.decisionsWritten > 0
+                        ? `${cycle.decisionsWritten} proposed`
+                        : cycle.recommendGate === 'held'
+                          ? '0 · safety hold'
+                          : '0 actions'}
+                    </p>
+                    {cycle.confidenceOverall != null && (
+                      <p className="explain">
+                        {Math.round(cycle.confidenceOverall * 100)}% confidence
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div
+            className="px-4 sm:px-5 py-4 explain"
+            style={{ borderTop: '1px solid var(--hairline)' }}
+          >
+            {reliability
+              ? 'No intelligence cycles in this evidence window.'
+              : 'Cycle evidence unavailable in this snapshot.'}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 

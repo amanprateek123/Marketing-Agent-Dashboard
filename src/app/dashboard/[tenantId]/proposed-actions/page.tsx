@@ -27,15 +27,18 @@ import {
   getIntelligenceCycles,
   getDecisionTrace,
   getCycleTrace,
+  getCampaigns,
   DecisionsSummary,
   IntelligenceCycle,
   DecisionTraceStep,
 } from '@/lib/api'
 import type {
+  Campaign,
   IntelligenceDecision,
   IntelligenceDecisionStatus,
 } from '@/types'
 import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
+import { MeridianReviewPanel } from '@/components/intelligence/MeridianReviewPanel'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 interface PageProps {
@@ -53,7 +56,15 @@ function hasGoalAwareContract(
   decisionContractVersion: 'goal_aware_v1'
   objective: string
   primaryKPI: string
-  expectedImpact: { metric: string; deltaPct: number; confidence: number }
+  expectedImpact: {
+    metric: string
+    deltaPct: number
+    confidence: number
+    basis?: 'modeled' | 'observed_gap' | 'not_estimated'
+    currentValue?: number
+    siblingBaselineValue?: number
+    observedGapPct?: number
+  }
 } {
   return Boolean(
     decision?.decisionContractVersion === 'goal_aware_v1' &&
@@ -63,6 +74,126 @@ function hasGoalAwareContract(
       Number.isFinite(decision.expectedImpact.deltaPct) &&
       Number.isFinite(decision.expectedImpact.confidence),
   )
+}
+
+function impactCopy(impact: NonNullable<IntelligenceDecision['expectedImpact']>): {
+  label: string
+  value: string
+  detail: string
+} {
+  const metric = plainLabel(impact.metric)
+  if (impact.basis === 'not_estimated') {
+    return {
+      label: `Validation metric · ${metric}`,
+      value:
+        typeof impact.currentValue === 'number'
+          ? impact.currentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+          : 'Measure next',
+      detail: 'Observed baseline · uplift not estimated',
+    }
+  }
+  if (impact.basis === 'observed_gap') {
+    const gap = impact.observedGapPct ?? impact.deltaPct
+    return {
+      label: `Observed peer gap · ${metric}`,
+      value: formatModeledDelta(gap),
+      detail: 'Measured comparison · not promised uplift',
+    }
+  }
+  return {
+    label: `Modeled ${metric} change`,
+    value: formatModeledDelta(impact.deltaPct),
+    detail: `${Math.round(impact.confidence * 100)}% confidence · model estimate`,
+  }
+}
+
+function approvalImpactCopy(impact: NonNullable<IntelligenceDecision['expectedImpact']>): string {
+  if (impact.basis === 'not_estimated') {
+    return `${plainLabel(impact.metric)} is the validation metric; no causal uplift is estimated before measurement.`
+  }
+  if (impact.basis === 'observed_gap') {
+    return `The ${formatModeledDelta(impact.observedGapPct ?? impact.deltaPct)} ${plainLabel(impact.metric)} figure is an observed peer gap, not a promised result.`
+  }
+  return `Its ${formatModeledDelta(impact.deltaPct)} ${plainLabel(impact.metric)} impact is a model estimate, not a guaranteed result.`
+}
+
+interface ExecutionReviewGate {
+  allowed: boolean
+  label: string
+  reason: string
+}
+
+/**
+ * Fresh goal-aware decisions are executable only after the bounded OpenAI
+ * critic has supported the immutable action and its server-side validation
+ * has passed. Historical records keep their previous operator flow because
+ * they predate this persisted review contract.
+ */
+function getExecutionReviewGate(decision: IntelligenceDecision): ExecutionReviewGate {
+  if (!decision.decisionContractVersion) {
+    return {
+      allowed: true,
+      label: 'Legacy operator review',
+      reason: 'This historical decision predates the OpenAI evidence-review contract.',
+    }
+  }
+  if (decision.decisionContractVersion !== 'goal_aware_v1') {
+    return {
+      allowed: false,
+      label: 'Unsupported decision contract',
+      reason: 'Execution stays locked because this decision contract is not recognized by the current review gate.',
+    }
+  }
+
+  const review = decision.intelligenceReview
+  if (!review) {
+    return {
+      allowed: false,
+      label: 'OpenAI review pending',
+      reason: 'Execution stays locked until a persisted OpenAI evidence review is available.',
+    }
+  }
+  if (review.source !== 'openai') {
+    return {
+      allowed: false,
+      label: 'OpenAI review unavailable',
+      reason: 'A deterministic fallback can explain the hold, but it cannot authorize execution.',
+    }
+  }
+  if (review.validation.valid !== true) {
+    return {
+      allowed: false,
+      label: 'Evidence validation held',
+      reason: 'The OpenAI response did not pass the deterministic evidence validator.',
+    }
+  }
+  if (review.verdict === 'hold') {
+    return {
+      allowed: false,
+      label: 'Action held by review',
+      reason: 'OpenAI found insufficient evidence to support this action.',
+    }
+  }
+  if (review.verdict === 'reject') {
+    return {
+      allowed: false,
+      label: 'Action rejected by review',
+      reason: 'OpenAI found that the bounded evidence does not support this action.',
+    }
+  }
+  if (review.verdict !== 'support') {
+    return {
+      allowed: false,
+      label: 'Review state unavailable',
+      reason: 'No supported execution verdict is recorded.',
+    }
+  }
+
+  return {
+    allowed: true,
+    label: 'Supported for operator approval',
+    reason: 'OpenAI supports the immutable action and deterministic validation passed.',
+  }
 }
 
 function formatModeledDelta(deltaPct: number): string {
@@ -99,10 +230,29 @@ const ACTION_EFFECT: Record<string, string> = {
   dayparting: 'Runs ads only during the hours that actually convert.',
 }
 
+// Describes how big the change is, never whether it is a good idea — the
+// verdict does that. "Safe to try" read as an endorsement and could sit in
+// green directly above a review saying "wait before doing this".
 const RISK_LABEL: Record<string, string> = {
-  low: 'Safe to try',
+  low: 'Small change',
   medium: 'Moderate change',
   high: 'Big change',
+}
+
+/** How each success metric is described to a non-technical operator. */
+const KPI_PHRASE: Record<string, string> = {
+  roas: 'how much money comes back for every ₹1 spent',
+  cpa: 'what each sale costs to win',
+  cpc: 'what each click costs',
+  cpm: 'what it costs to reach 1,000 people',
+  ctr: 'how often people click the ad',
+  cvr: 'how often clicks turn into sales',
+  reach: 'how many different people see the ad',
+  frequency: 'how often the same person sees the ad',
+}
+
+function kpiPhrase(kpi: string): string {
+  return KPI_PHRASE[kpi?.toLowerCase()] ?? plainLabel(kpi)
 }
 
 const RISK_STYLE: Record<string, string> = {
@@ -229,6 +379,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
   const [decisions, setDecisions] = useState<IntelligenceDecision[]>([])
   const [summary, setSummary] = useState<DecisionsSummary | null>(null)
   const [cycles, setCycles] = useState<IntelligenceCycle[]>([])
+  const [budgetByCampaign, setBudgetByCampaign] = useState<Record<string, number>>({})
   const [tab, setTab] = useState<IntelligenceDecisionStatus>('shadow_review')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -249,14 +400,25 @@ export default function ProposedActionsPage({ params }: PageProps) {
     setLoading(true)
     setError(null)
     try {
-      const [list, sum, cyc] = await Promise.all([
+      // Campaigns are best-effort: they only supply the live daily budget so a
+      // "cut by 20%" can also be shown in rupees. A failure here must never
+      // block the recommendations themselves.
+      const [list, sum, cyc, camps] = await Promise.all([
         getIntelligenceDecisions(tenantId, { status: tab, limit: 200 }),
         getIntelligenceDecisionsSummary(tenantId).catch(() => null),
         getIntelligenceCycles(tenantId, { limit: 50 }).catch(() => null),
+        getCampaigns(tenantId).catch(() => [] as Campaign[]),
       ])
       setDecisions(list.decisions)
       setSummary(sum)
       setCycles(cyc?.cycles ?? [])
+      setBudgetByCampaign(
+        Object.fromEntries(
+          (camps ?? [])
+            .filter((c) => typeof c.budget === 'number' && c.budget > 0)
+            .map((c) => [c._id, c.budget as number]),
+        ),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -275,6 +437,12 @@ export default function ProposedActionsPage({ params }: PageProps) {
   void now
 
   async function handleApprove(d: IntelligenceDecision) {
+    const reviewGate = getExecutionReviewGate(d)
+    if (!reviewGate.allowed) {
+      flash('error', reviewGate.reason)
+      setApprovalTarget(null)
+      return
+    }
     setBusyId(d._id)
     try {
       const result = await approveIntelligenceDecision(tenantId, d._id)
@@ -394,7 +562,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
                 ? 'No recommendation currently passes every evidence gate. Open the latest campaign checks to see what was observed or withheld.'
                 : hasLegacyVisibleDecisions
                   ? `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} need review. Records missing objective or return evidence are clearly labeled.`
-                  : `${buckets.length} campaign${buckets.length === 1 ? '' : 's'} have goal-specific recommendations ready for review.`
+                  : `${buckets.length} campaign${buckets.length === 1 ? ' has' : 's have'} something waiting for your review.`
               : `Showing ${decisions.length} ${tab.replace('_', ' ')} decision${decisions.length === 1 ? '' : 's'}.`}
           </p>
           {tab === 'shadow_review' && buckets.length > 0 && hasLegacyVisibleDecisions && (
@@ -626,6 +794,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
               key={b.campaignId}
               bucket={b}
               tenantId={tenantId}
+              campaignDailyBudget={budgetByCampaign[b.campaignId] ?? null}
               busyId={busyId}
               rejectingId={rejectingId}
               rejectReason={rejectReason}
@@ -650,7 +819,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
         title="Approve and apply this change to Meta?"
         description={approvalTarget
           ? `${ACTION_LABEL[approvalTarget.actionType] ?? approvalTarget.actionType} will be attempted immediately on the live ${approvalTarget.targetType === 'adset' ? 'ad group' : approvalTarget.targetType === 'ad' ? 'ad' : 'campaign'}. ${hasGoalAwareContract(approvalTarget)
-            ? `This recommendation optimizes ${plainLabel(approvalTarget.primaryKPI)} for the ${plainLabel(approvalTarget.objective)} objective; its ${formatModeledDelta(approvalTarget.expectedImpact.deltaPct)} ${plainLabel(approvalTarget.expectedImpact.metric)} impact is a model estimate, not a guaranteed result.`
+            ? `This recommendation optimizes ${plainLabel(approvalTarget.primaryKPI)} for the ${plainLabel(approvalTarget.objective)} objective. ${approvalImpactCopy(approvalTarget.expectedImpact)}`
             : 'This legacy record does not store objective or return-basis context, so verify the target in Meta first.'} The approval remains recorded even if Meta rejects execution.`
           : undefined}
         confirmLabel="Approve & apply to Meta"
@@ -667,6 +836,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
 interface CampaignBucketCardProps {
   bucket: CampaignBucket
   tenantId: string
+  campaignDailyBudget?: number | null
   busyId: string | null
   rejectingId: string | null
   rejectReason: string
@@ -680,6 +850,7 @@ interface CampaignBucketCardProps {
 function CampaignBucketCard({
   bucket,
   tenantId,
+  campaignDailyBudget,
   busyId,
   rejectingId,
   rejectReason,
@@ -695,6 +866,7 @@ function CampaignBucketCard({
   // Use the first decision for the stored evidence snapshot.
   const primary = bucket.decisions[0]
   const goalAware = hasGoalAwareContract(primary)
+  const primaryImpact = goalAware ? impactCopy(primary.expectedImpact) : null
   const spend = Number(primary?.evidenceSnapshot?.metrics?.spend ?? 0)
 
   return (
@@ -718,47 +890,47 @@ function CampaignBucketCard({
             {bucket.decisions.length} option{bucket.decisions.length === 1 ? '' : 's'} · updated {relativeTime(bucket.createdAtNewest)}
           </p>
         </div>
-        <div className="text-right shrink-0">
+        {/* Deliberately not a hero number. This is a modeled estimate, and the
+            forecast layer behind it is not yet calibrated — so it stays small
+            and neutral rather than reading as a promised gain. The real money
+            story is told in plain language by the review panel below. */}
+        <div className="text-right shrink-0 max-w-[190px]">
           <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
-            {goalAware ? `Modeled ${plainLabel(primary.expectedImpact.metric)} change` : 'Economic effect'}
+            {primaryImpact?.label ?? 'Economic effect'}
           </p>
-          <p
-            className="text-[26px] font-semibold tabular-nums leading-none mt-0.5"
-            style={{ color: goalAware ? 'var(--accent-strong)' : 'var(--warn)' }}
-          >
-            {goalAware ? formatModeledDelta(primary.expectedImpact.deltaPct) : 'Withheld'}
+          <p className="text-[15px] font-semibold tabular-nums leading-none mt-0.5" style={{ color: 'var(--ink-2)' }}>
+            {primaryImpact?.value ?? 'Withheld'}
           </p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>
-            {goalAware
-              ? `${Math.round(primary.expectedImpact.confidence * 100)}% confidence · model estimate`
-              : 'Objective and return basis are not stored'}
+          <p className="text-[10.5px] mt-1 leading-snug" style={{ color: 'var(--ink-3)' }}>
+            {primaryImpact ? 'Estimate only — not a measured result' : 'Objective and return basis are not stored'}
           </p>
         </div>
       </div>
 
       <p className="text-[13.5px] mt-1 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
         {goalAware
-          ? `${plainLabel(primary.objective)} objective · optimizing ${plainLabel(primary.primaryKPI)}.`
-          : 'Legacy recommendation. Validate its target against the live campaign objective before applying.'}
+          ? `This campaign is set up to drive ${plainLabel(primary.objective).toLowerCase()}, so it is judged on ${kpiPhrase(primary.primaryKPI)}.`
+          : 'Older recommendation. Check its target against the live campaign before applying anything.'}
       </p>
 
       {/* Numeric snapshot chips */}
       {spend > 0 && (
         <div className="flex flex-wrap gap-2 mt-3">
-          <NumberChip label="Evidence snapshot spend" value={formatCurrency(spend)} tone={statusStyle.color} />
+          <NumberChip label="Spent so far" value={formatCurrency(spend)} tone={statusStyle.color} />
         </div>
       )}
 
       {/* Options — one row per alternative action */}
       <div className="mt-5 pt-4 flex flex-col gap-2" style={{ borderTop: '1px solid var(--hairline-light)' }}>
         <p className="text-[11px] uppercase tracking-wide font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>
-          {bucket.decisions.length === 1 ? 'The agent recommends' : "The agent's options"}
+          {bucket.decisions.length === 1 ? 'Meridian suggests' : 'Meridian’s options'}
         </p>
         {bucket.decisions.map((d) => (
           <ActionOption
             key={d._id}
             d={d}
             tenantId={tenantId}
+            campaignDailyBudget={campaignDailyBudget}
             busy={busyId === d._id}
             rejectingOpen={rejectingId === d._id}
             rejectReason={rejectReason}
@@ -779,6 +951,8 @@ function CampaignBucketCard({
 interface ActionOptionProps {
   d: IntelligenceDecision
   tenantId: string
+  /** Live daily budget for this campaign, so a % change reads in rupees. */
+  campaignDailyBudget?: number | null
   busy: boolean
   rejectingOpen: boolean
   rejectReason: string
@@ -1062,6 +1236,7 @@ function CycleTracePanel({ tenantId, cycleId }: { tenantId: string; cycleId: str
 function ActionOption({
   d,
   tenantId,
+  campaignDailyBudget,
   busy,
   rejectingOpen,
   rejectReason,
@@ -1078,6 +1253,9 @@ function ActionOption({
   const effect = ACTION_EFFECT[d.actionType] ?? ''
   const parts = splitReasoning(d.reasoning)
   const goalAware = hasGoalAwareContract(d)
+  const goalAwareVersion = d.decisionContractVersion === 'goal_aware_v1'
+  const readOnlyDiagnostic = d.campaignSource === 'manual'
+  const executionReviewGate = getExecutionReviewGate(d)
   const reviewedAt = d.humanReviewedAt ?? d.reviewedAt
   const reviewNote = d.humanReviewNotes ?? d.rejectionReason
 
@@ -1109,6 +1287,15 @@ function ActionOption({
                   ? `Ad · …${(d.targetId || '').slice(-6)}`
                   : 'Whole campaign'}
             </span>
+            {readOnlyDiagnostic && (
+              <span
+                className="chip chip-warn"
+                style={{ fontSize: '10.5px', padding: '2px 8px' }}
+                title="Created directly in Meta Ads Manager. Meridian can diagnose it, but cannot change it."
+              >
+                Read-only Meta diagnostic
+              </span>
+            )}
           </div>
           {effect && (
             <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
@@ -1126,33 +1313,47 @@ function ActionOption({
               style={{ fontSize: '12.5px', padding: '6px 12px' }}
             >
               <XCircle size={13} />
-              Reject
+              {readOnlyDiagnostic ? 'Dismiss' : 'Reject'}
             </button>
-            <button
-              onClick={onApprove}
-              disabled={busy}
-              className="btn btn-primary"
-              style={{ fontSize: '12.5px', padding: '6px 14px' }}
-            >
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-              Apply to Meta
-            </button>
+            {!readOnlyDiagnostic && executionReviewGate.allowed && (
+              <button
+                onClick={onApprove}
+                disabled={busy}
+                className="btn btn-primary"
+                style={{ fontSize: '12.5px', padding: '6px 14px' }}
+              >
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                Apply to Meta
+              </button>
+            )}
+            {!readOnlyDiagnostic && !executionReviewGate.allowed && (
+              <span
+                role="status"
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-semibold"
+                style={{ color: 'var(--warn)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
+                title={executionReviewGate.reason}
+              >
+                <ShieldCheck size={13} aria-hidden="true" />
+                {executionReviewGate.label}
+              </span>
+            )}
           </div>
         )}
       </div>
 
       {goalAware ? (
         <>
-          <div
-            className="mt-2 rounded-lg px-3 py-2 text-[12px]"
-            style={{ color: 'var(--ink-2)', background: 'var(--accent-soft)', border: '1px solid var(--accent-border)' }}
-          >
-            <span className="font-semibold" style={{ color: 'var(--ink)' }}>
-              Modeled {formatModeledDelta(d.expectedImpact.deltaPct)} {plainLabel(d.expectedImpact.metric)}
-            </span>
-            {' · '}{Math.round(d.expectedImpact.confidence * 100)}% confidence
-            {' · '}{plainLabel(d.objective)} objective
-          </div>
+          {readOnlyDiagnostic && (
+            <div
+              className="mt-2 rounded-lg px-3 py-2 text-[12px]"
+              style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
+            >
+              Observed on a campaign created directly in Meta. Use this to verify Meridian&apos;s diagnosis; it is excluded from Meridian impact and cannot be applied here.
+            </div>
+          )}
+          {/* The modeled estimate is already stated once in the card header and
+              again, fully qualified, inside the evidence drawer. Repeating it
+              here in an accent box made a projection look like a result. */}
           <button
             onClick={() => setShowWhy((s) => !s)}
             aria-expanded={showWhy}
@@ -1165,11 +1366,23 @@ function ActionOption({
           {showWhy && <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ink-2)' }}>{parts.effect}</p>}
           <DecisionTracePanel tenantId={tenantId} decisionId={d._id} />
         </>
+      ) : goalAwareVersion ? (
+        <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
+          Goal-aware decision context is incomplete. Execution remains locked until objective, KPI, and modeled-impact fields are restored and reviewed.
+        </div>
       ) : (
         <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
           Legacy profit/ROAS reasoning is withheld because this decision record does not store the objective or return basis.
         </div>
       )}
+
+      <div className="mt-3">
+        <MeridianReviewPanel
+          review={d.intelligenceReview}
+          evidence={d.intelligenceEvidence}
+          currentDailyBudget={campaignDailyBudget}
+        />
+      </div>
 
       {/* Countdown / status footer */}
       <div className="mt-3 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
