@@ -1,0 +1,34 @@
+import type { Metadata } from 'next'
+import { BrainConsole } from '@/components/brain/BrainConsole'
+import { isBrainTabKey } from '@/types/brain'
+
+export const metadata: Metadata = {
+  title: 'Brain',
+  description:
+    'The Foundry marketing agents in one place — decisions, the core pipeline, the approvals that need a human, and the agents you can run yourself.',
+}
+
+/**
+ * Server component on purpose, even though every other page in this dashboard
+ * is `'use client'`.
+ *
+ * Reading `searchParams` here opts the route into dynamic rendering, which is
+ * what we want anyway, and it keeps `useSearchParams` out of the client tree —
+ * a production build fails on a prerendered client page that calls it without a
+ * Suspense boundary. The tab arrives as a plain prop instead.
+ */
+interface BrainPageProps {
+  params: Promise<{ tenantId: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function BrainPage({ params, searchParams }: BrainPageProps) {
+  const { tenantId } = await params
+  const { tab } = await searchParams
+
+  const requested = Array.isArray(tab) ? tab[0] : tab
+
+  return (
+    <BrainConsole tenantId={tenantId} initialTab={isBrainTabKey(requested) ? requested : 'pulse'} />
+  )
+}

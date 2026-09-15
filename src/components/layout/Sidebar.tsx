@@ -7,6 +7,7 @@ import {
   Activity,
   BookOpen,
   Brain,
+  BrainCircuit,
   Home,
   Image as ImageIcon,
   Inbox,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
+import { getBrainGates } from '@/lib/brain-api'
 import { logout } from '@/lib/auth'
 import { MeridianGlyph } from '@/components/ui/MeridianMark'
 import styles from './Sidebar.module.css'
@@ -43,7 +45,12 @@ interface NavGroup {
   items: NavItem[]
 }
 
-function navGroups(tenantId: string, pendingCount: number, proposedCount: number): NavGroup[] {
+function navGroups(
+  tenantId: string,
+  pendingCount: number,
+  proposedCount: number,
+  openGateCount: number,
+): NavGroup[] {
   const root = `/dashboard/${tenantId}`
 
   return [
@@ -98,6 +105,13 @@ function navGroups(tenantId: string, pendingCount: number, proposedCount: number
     {
       label: 'Intelligence',
       items: [
+        {
+          href: `${root}/brain`,
+          label: 'Brain',
+          hint: 'The marketing head: decisions, pipeline and approvals',
+          icon: BrainCircuit,
+          badge: openGateCount,
+        },
         {
           href: `${root}/proposed-actions`,
           label: 'AI recommendations',
@@ -156,6 +170,7 @@ interface SidebarContentProps {
   pathname: string
   pendingCount: number
   proposedCount: number
+  openGateCount: number
   reachable: boolean | null
   onNavigate?: () => void
   onClose?: () => void
@@ -166,12 +181,13 @@ function SidebarContent({
   pathname,
   pendingCount,
   proposedCount,
+  openGateCount,
   reachable,
   onNavigate,
   onClose,
 }: SidebarContentProps) {
   const root = `/dashboard/${tenantId}`
-  const groups = navGroups(tenantId, pendingCount, proposedCount)
+  const groups = navGroups(tenantId, pendingCount, proposedCount, openGateCount)
   const status = reachable === null
     ? { label: 'Checking data', className: styles.statusConnecting }
     : reachable
@@ -269,6 +285,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
   const pathname = usePathname()
   const [pendingCount, setPendingCount] = useState(0)
   const [proposedCount, setProposedCount] = useState(0)
+  const [openGateCount, setOpenGateCount] = useState(0)
   const [reachable, setReachable] = useState<boolean | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -290,6 +307,29 @@ export function Sidebar({ tenantId }: SidebarProps) {
         }
       } catch {
         if (!cancelled) setReachable(false)
+      }
+    }
+
+    void tick()
+    const id = window.setInterval(tick, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [tenantId])
+
+  // Foundry is reached through its own bridge, not the dashboard API, so it
+  // polls separately: one being down must not blank the other's badge, and an
+  // unreachable Foundry must not report the whole workspace as offline.
+  useEffect(() => {
+    let cancelled = false
+
+    async function tick() {
+      try {
+        const gates = await getBrainGates(tenantId)
+        if (!cancelled) setOpenGateCount(gates.length)
+      } catch {
+        if (!cancelled) setOpenGateCount(0)
       }
     }
 
@@ -342,6 +382,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
     pathname,
     pendingCount,
     proposedCount,
+    openGateCount,
     reachable,
   }
 
