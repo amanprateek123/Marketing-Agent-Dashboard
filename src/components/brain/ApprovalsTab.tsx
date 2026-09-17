@@ -7,6 +7,7 @@ import {
   Clock3,
   ImageIcon,
   Info,
+  CalendarCheck,
   Lightbulb,
   Loader2,
   MessageSquare,
@@ -21,6 +22,7 @@ import type {
   BrainGateActionKey,
   BrainGateCampaign,
   BrainGateCreative,
+  BrainGatePlan,
   BrainIdea,
 } from '@/types/brain'
 import { SectionCard } from './shared'
@@ -32,6 +34,9 @@ const KIND_META: Record<
   creative_craft: { label: 'Craft gate', chip: 'chip-info', Icon: ShieldCheck },
   idea_selection: { label: 'Idea gate', chip: 'chip-accent', Icon: Lightbulb },
   campaign_launch: { label: 'Launch gate', chip: 'chip-warn', Icon: BadgeCheck },
+  // A plan gate spends the day's money. Warn rather than accent: it is the one gate on this page
+  // where approving commits real budget before a single creative exists.
+  plan_approval: { label: 'Day plan', chip: 'chip-warn', Icon: CalendarCheck },
 }
 
 interface ApprovalsTabProps {
@@ -298,7 +303,44 @@ function GatePayload({
       )
     case 'campaign_launch':
       return <CampaignPreview campaign={gate.payload.campaign} />
+    case 'plan_approval':
+      return <PlanPreview plan={gate.payload.plan} />
   }
+}
+
+/**
+ * The day's spend plan, presented as the Brain wrote it.
+ *
+ * Deliberately not parsed into fields. A plan gate's `summary` IS the review — the allocation, its
+ * basis, month-to-date spend against the ceiling — written by the agent for a person to read, and
+ * chopping it into a table here would mean this component deciding which sentences matter. Rendered
+ * whole, in a monospaced block, so what is approved is exactly what was read.
+ */
+function PlanPreview({ plan }: { plan: BrainGatePlan }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {plan.planDate && <span className="chip chip-neutral">Plan date {plan.planDate}</span>}
+        {plan.budgetInr !== null && (
+          <span className="chip chip-neutral">Amount override ₹{plan.budgetInr.toLocaleString('en-IN')}</span>
+        )}
+        {!plan.posted && (
+          <span
+            className="chip chip-warn"
+            title="The gate has not reached Slack yet. You are seeing it before the daemon posts it — deciding here is what closes it."
+          >
+            Not yet posted to Slack
+          </span>
+        )}
+      </div>
+      <pre
+        className="overflow-x-auto whitespace-pre-wrap rounded-xl p-4 text-sm"
+        style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' }}
+      >
+        {plan.summary}
+      </pre>
+    </div>
+  )
 }
 
 const VERDICT_META: Record<BrainGateCreative['verdict'], { label: string; chip: string }> = {

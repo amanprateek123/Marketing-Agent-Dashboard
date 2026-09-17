@@ -28,6 +28,7 @@ import { DecisionsTab } from './DecisionsTab'
 import { PipelineTab } from './PipelineTab'
 import { ApprovalsTab } from './ApprovalsTab'
 import { AgentsTab } from './AgentsTab'
+import { ConversationTab } from './ConversationTab'
 import { BrainError, BrainSkeleton } from './shared'
 
 interface Snapshot {
@@ -35,7 +36,8 @@ interface Snapshot {
   agents: BrainAgent[]
   decisions: BrainDecision[]
   gates: BrainGate[]
-  pipeline: BrainPipelineRun
+  /** Null when nothing is being built — a normal day, not an error. */
+  pipeline: BrainPipelineRun | null
   runs: BrainRunSummary[]
 }
 
@@ -198,6 +200,7 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
             onRunFinished={() => void load('refresh')}
           />
         )}
+        {tab === 'conversation' && <ConversationTab tenantId={tenantId} />}
       </div>
     </main>
   )

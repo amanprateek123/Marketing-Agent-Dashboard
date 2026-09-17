@@ -300,7 +300,17 @@ export interface BrainPipelineRun {
 
 // ── Human-in-the-loop gates (the Slack gates, on the platform) ─────────────
 
-export type BrainGateKind = 'creative_craft' | 'idea_selection' | 'campaign_launch'
+/**
+ * `plan_approval` was added when the bridge was wired to the real brain, and it is not an
+ * invention: `approvals.gate` allows plan | build | launch | scale, and a `plan` gate is the day's
+ * spend plan with no campaign attached. Forcing it into `campaign_launch` would have meant
+ * rendering a campaign name, budget and placements for something that has none.
+ */
+export type BrainGateKind =
+  | 'creative_craft'
+  | 'idea_selection'
+  | 'campaign_launch'
+  | 'plan_approval'
 
 export interface BrainGateCreative {
   id: string
@@ -319,6 +329,15 @@ export interface BrainGateCampaignLevel {
   note: string | null
 }
 
+export interface BrainGatePlan {
+  planDate: string | null
+  budgetInr: number | null
+  /** The whole review the Brain wrote for a person to read. Presented verbatim, not parsed. */
+  summary: string
+  /** False means the gate has not reached Slack yet — this console is seeing it first. */
+  posted: boolean
+}
+
 export interface BrainGateCampaign {
   name: string
   objective: string
@@ -335,6 +354,7 @@ export type BrainGatePayload =
   | { kind: 'creative_craft'; creatives: BrainGateCreative[] }
   | { kind: 'idea_selection'; ideas: BrainIdea[] }
   | { kind: 'campaign_launch'; campaign: BrainGateCampaign }
+  | { kind: 'plan_approval'; plan: BrainGatePlan }
 
 export type BrainGateActionKey = 'approve' | 'reject' | 'revise'
 
@@ -405,6 +425,38 @@ export interface BrainState {
   attention: BrainAttentionItem[]
 }
 
+// ── Conversation ───────────────────────────────────────────────────────────
+
+/**
+ * One turn of a thread with the Brain.
+ *
+ * A turn is an EXCHANGE, not a message: the user turn and the brain turn answering it carry the
+ * same `turnIndex`. That is the brain's own shape (`conversation_turns` is unique on session, turn
+ * and role) and flattening it into a message list here would lose which answer belongs to which
+ * question the moment two questions are asked in quick succession.
+ *
+ * A brain turn always carries the run that produced it. An answer that cannot be traced back to
+ * what it was read from is the untraceable claim this system refuses, and a conversation is the
+ * easiest place for one to hide.
+ */
+export interface BrainConversationTurn {
+  turnIndex: number
+  role: 'user' | 'brain'
+  content: string
+  /** True when the stored turn is longer than what was returned. */
+  contentClipped: boolean
+  evidenceRefs: string[]
+  runId: string | null
+}
+
+export interface BrainConversation {
+  sessionId: string
+  turns: BrainConversationTurn[]
+  /** How many older turns exist beyond the ones returned. */
+  omittedOlder: number
+  lastTurn: number
+}
+
 // ── Console navigation ─────────────────────────────────────────────────────
 
 export type BrainTabKey =
@@ -413,6 +465,7 @@ export type BrainTabKey =
   | 'pipeline'
   | 'approvals'
   | 'agents'
+  | 'conversation'
 
 export const BRAIN_TAB_KEYS: BrainTabKey[] = [
   'pulse',
@@ -420,6 +473,7 @@ export const BRAIN_TAB_KEYS: BrainTabKey[] = [
   'pipeline',
   'approvals',
   'agents',
+  'conversation',
 ]
 
 export function isBrainTabKey(value: string | undefined): value is BrainTabKey {

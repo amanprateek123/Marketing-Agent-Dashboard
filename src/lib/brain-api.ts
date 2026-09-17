@@ -23,6 +23,8 @@
  *   POST /brain/:tenantId/agents/:agentKey/runs
  *   POST /brain/:tenantId/runs/:runId/cancel
  *   POST /brain/:tenantId/gates/:gateId/decision
+ *   GET  /brain/:tenantId/conversation/:sessionId
+ *   POST /brain/:tenantId/conversation/:sessionId/messages
  *
  * The Foundry run token is never sent from the browser. It is held by the
  * bridge, exactly as the creative pipeline's token is today.
@@ -31,6 +33,7 @@
 import { apiFetch } from './api'
 import {
   readAgents,
+  readConversation,
   readDecisions,
   readEvents,
   readGates,
@@ -38,6 +41,7 @@ import {
   readRun,
   readRuns,
   readState,
+  writeConversationMessage,
   writeGateDecision,
   writeRunCancel,
   writeRunStart,
@@ -45,6 +49,7 @@ import {
 import type {
   BrainAgent,
   BrainAgentKey,
+  BrainConversation,
   BrainDecision,
   BrainEventPage,
   BrainGate,
@@ -100,9 +105,13 @@ export function getBrainGates(tenantId: string): Promise<BrainGate[]> {
   return apiFetch<BrainGate[]>(`${base(tenantId)}/gates`)
 }
 
-export function getBrainPipeline(tenantId: string): Promise<BrainPipelineRun> {
+/**
+ * Null is a real answer: no campaign is being built right now. The tab draws an empty pipeline for
+ * it rather than an error — "nothing is running" is the most common state a healthy day is in.
+ */
+export function getBrainPipeline(tenantId: string): Promise<BrainPipelineRun | null> {
   if (BRAIN_MOCK) return settle(readPipeline)
-  return apiFetch<BrainPipelineRun>(`${base(tenantId)}/pipeline`)
+  return apiFetch<BrainPipelineRun | null>(`${base(tenantId)}/pipeline`)
 }
 
 export function getBrainRuns(tenantId: string): Promise<BrainRunSummary[]> {
@@ -182,4 +191,45 @@ export function decideBrainGate(
     method: 'POST',
     body: JSON.stringify(body),
   })
+}
+
+// ── Conversation ───────────────────────────────────────────────────────────
+
+/**
+ * The thread so far, oldest first.
+ *
+ * The session id is the console's to choose and to KEEP. It is a durable thread, not a request:
+ * the same id tomorrow continues the same conversation, which is the whole reason the brain has a
+ * `conversation_turns` table rather than a questions queue. `brain-session.ts` holds the id.
+ */
+export function getBrainConversation(
+  tenantId: string,
+  sessionId: string,
+  limit = 20,
+): Promise<BrainConversation> {
+  if (BRAIN_MOCK) return settle(() => readConversation(sessionId, limit))
+  return apiFetch<BrainConversation>(
+    `${base(tenantId)}/conversation/${encodeURIComponent(sessionId)}?limit=${limit}`,
+  )
+}
+
+/**
+ * Say something, and get back the run that will answer it.
+ *
+ * The reply is NOT in this response and cannot be: a Brain review reads the account, the learnings
+ * and the wiki before it says anything, which takes minutes. The turn is recorded immediately, the
+ * run id comes back, and the answer arrives in the thread when the Brain commits it — so the caller
+ * polls the conversation rather than holding a request open across a real piece of work.
+ */
+export function sendBrainMessage(
+  tenantId: string,
+  sessionId: string,
+  message: string,
+  mode?: string,
+): Promise<{ runId: string; sessionId: string }> {
+  if (BRAIN_MOCK) return settle(() => writeConversationMessage(sessionId, message), 600)
+  return apiFetch<{ runId: string; sessionId: string }>(
+    `${base(tenantId)}/conversation/${encodeURIComponent(sessionId)}/messages`,
+    { method: 'POST', body: JSON.stringify({ message, ...(mode ? { mode } : {}) }) },
+  )
 }

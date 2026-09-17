@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Activity, Gavel, Gauge, ScrollText, Workflow } from 'lucide-react'
+import { Activity, Gavel, Gauge, MessagesSquare, ScrollText, Workflow } from 'lucide-react'
 import type { BrainTabKey } from '@/types/brain'
 
 interface TabDef {
@@ -17,6 +17,7 @@ const TABS: TabDef[] = [
   { key: 'pipeline', label: 'Pipeline', description: 'Producer → Curator → Builder → Launcher', Icon: Workflow },
   { key: 'approvals', label: 'Approvals', description: 'The gates that need a human', Icon: Gavel },
   { key: 'agents', label: 'Agents', description: 'Run an agent and read its output', Icon: Activity },
+  { key: 'conversation', label: 'Conversation', description: 'Ask it something and keep the thread', Icon: MessagesSquare },
 ]
 
 interface BrainTabsProps {
@@ -37,7 +38,7 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
     <div
       role="tablist"
       aria-label="Brain console sections"
-      className="grid grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-3 lg:grid-cols-5"
+      className="grid grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-3 lg:grid-cols-6"
       style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
     >
       {TABS.map(({ key, label, description, Icon }, index) => {

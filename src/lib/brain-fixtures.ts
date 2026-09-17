@@ -19,6 +19,8 @@
 import type {
   BrainAgent,
   BrainAgentKey,
+  BrainConversation,
+  BrainConversationTurn,
   BrainDecision,
   BrainEventPage,
   BrainGate,
@@ -217,7 +219,11 @@ function seedAgents(): BrainAgent[] {
   return [
     {
       key: 'brain',
-      foundryAgentId: 'agt_01a06ffbcad170d08890150a61e209d3',
+      // Brain **v2**, and that is a correction: this said `agt_01a06ffb…` — v1 — which is the
+      // Brain that records no goal, reason or evidence with a decision and cannot hold a thread.
+      // The bridge targets v2; a fixture pointing elsewhere would make mock and live disagree
+      // about which Brain this console is even for.
+      foundryAgentId: 'agt_01a08a637be471038bba2efa34cb8c92',
       name: 'Brain — Marketing Head',
       whatItDoes:
         'The autonomous marketing head. Allocates the daily budget across products, consolidates results into product context, records every decision with its evidence, and answers questions about strategy.',
@@ -1170,4 +1176,55 @@ function countSelectable(gate: BrainGate): number {
     default:
       return 0
   }
+}
+
+// ── Conversation ───────────────────────────────────────────────────────────
+
+interface ConversationSeed {
+  turns: BrainConversationTurn[]
+}
+
+/**
+ * Threads are per-session and kept in module state, exactly like the rest of this file: the mock is
+ * stateful so that sending a message and re-reading the thread behaves the way the real one does.
+ *
+ * The stand-in reply is written as one, and says so. A fixture that answered like the Brain —
+ * confident, sourced, specific — would be the most misleading thing in this file, because the whole
+ * value of the real answer is that its evidence can be chased.
+ */
+const conversations = new Map<string, ConversationSeed>()
+
+export function readConversation(sessionId: string, limit = 20): BrainConversation {
+  const seed = conversations.get(sessionId) ?? { turns: [] }
+  const turns = seed.turns.slice(-limit)
+  return {
+    sessionId,
+    turns,
+    omittedOlder: Math.max(0, seed.turns.length - turns.length),
+    lastTurn: seed.turns.length ? seed.turns[seed.turns.length - 1].turnIndex : 0,
+  }
+}
+
+export function writeConversationMessage(
+  sessionId: string,
+  message: string,
+): { runId: string; sessionId: string } {
+  const seed = conversations.get(sessionId) ?? { turns: [] }
+  const turnIndex = (seed.turns.length ? seed.turns[seed.turns.length - 1].turnIndex : 0) + 1
+  const runId = `run_mock_${Math.random().toString(36).slice(2, 10)}`
+  seed.turns.push({ turnIndex, role: 'user', content: message, contentClipped: false, evidenceRefs: [], runId: null })
+  seed.turns.push({
+    turnIndex,
+    role: 'brain',
+    content:
+      'Sample data — the bridge is not connected, so this is a stand-in, not the Brain. With ' +
+      'NEXT_PUBLIC_BRAIN_MOCK=false this turn is answered by a real run that reads the account, ' +
+      'the accepted learnings and the company wiki, and the answer arrives here carrying the ' +
+      'sources it was read from.',
+    contentClipped: false,
+    evidenceRefs: [],
+    runId,
+  })
+  conversations.set(sessionId, seed)
+  return { runId, sessionId }
 }
