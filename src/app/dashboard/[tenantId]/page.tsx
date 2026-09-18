@@ -1,453 +1,618 @@
 'use client'
 
-import { useState, useEffect, use, useMemo } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  Megaphone, Wifi, WifiOff, ArrowRight, Play,
-  Loader2, CheckCircle, Activity, AlertTriangle,
-  Settings, ChevronRight, Inbox, Zap, Rocket, Radio,
-} from 'lucide-react'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatCurrency, formatDateTime, formatRelativeTime } from '@/lib/utils'
-import { getActionOutcomes } from '@/lib/api'
-import type { Company, Campaign, PipelineRun, ExecutedActionRecord } from '@/types'
 import { useRouter } from 'next/navigation'
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Gauge,
+  Loader2,
+  Play,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Target,
+} from 'lucide-react'
+import {
+  formatCurrency,
+  formatRelativeTime,
+} from '@/lib/utils'
+import { getDashboardOverview } from '@/lib/api'
+import { ActivityGrid } from '@/components/overview/ActivityGrid'
+import { AlertFeed } from '@/components/overview/AlertFeed'
+import { GrowthLoop } from '@/components/overview/GrowthLoop'
+import { InsightList } from '@/components/overview/InsightList'
+import { ObjectiveHealth } from '@/components/overview/ObjectiveHealth'
+import type { DashboardOverview } from '@/types'
 
-const API_BASE = 'http://localhost:8082/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
+const WINDOWS = [7, 30, 90] as const
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
 }
 
-/* One unified event stream synthesized from runs + launches + optimizer
-   actions — the "what has my agent been doing" answer at a glance. */
-interface FeedItem {
-  t: number
-  time: string
-  kind: 'run' | 'launch' | 'action'
-  label: string
-  detail: string
-  href?: string
-  chip?: { text: string; cls: string }
-}
-
-const KIND_META: Record<FeedItem['kind'], { icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; className?: string }>; color: string }> = {
-  run:    { icon: Activity, color: 'var(--accent-strong)' },
-  launch: { icon: Rocket,   color: 'var(--good)' },
-  action: { icon: Zap,      color: 'var(--warn)' },
-}
-
-export default function DashboardPage({ params }: PageProps) {
+export default function HomePage({ params }: PageProps) {
   const { tenantId } = use(params)
   const router = useRouter()
-
-  const [company, setCompany]     = useState<Company | null>(null)
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [runs, setRuns]           = useState<PipelineRun[]>([])
-  const [actions, setActions]     = useState<ExecutedActionRecord[]>([])
-  const [companyError, setCompanyError]     = useState<string | null>(null)
-  const [campaignsError, setCampaignsError] = useState<string | null>(null)
-  const [triggerState, setTriggerState]     = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [data, setData] = useState<DashboardOverview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [windowDays, setWindowDays] = useState<number>(30)
+  const [triggerState, setTriggerState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [triggerMessage, setTriggerMessage] = useState('')
 
-  useEffect(() => {
-    async function fetchAll() {
-      try {
-        const res = await fetch(`${API_BASE}/companies/${tenantId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setCompany(await res.json())
-      } catch (err) {
-        setCompanyError(err instanceof Error ? err.message : 'Failed to load company')
-      }
-      try {
-        const res = await fetch(`${API_BASE}/campaigns/${tenantId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setCampaigns(await res.json())
-      } catch (err) {
-        setCampaignsError(err instanceof Error ? err.message : 'Failed to load campaigns')
-      }
-      try {
-        const res = await fetch(`${API_BASE}/pipeline/${tenantId}/runs`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setRuns(await res.json())
-      } catch { /* non-critical */ }
-      try {
-        const out = await getActionOutcomes(tenantId)
-        setActions(out.recent ?? [])
-      } catch { /* non-critical — feed degrades to runs+launches */ }
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setData(await getDashboardOverview(tenantId, windowDays))
+    } catch {
+      setError("We couldn't refresh the latest Meta and Meridian data.")
+    } finally {
+      setLoading(false)
     }
-    fetchAll()
-  }, [tenantId])
+  }, [tenantId, windowDays])
+
+  useEffect(() => {
+    void load()
+  }, [load])
 
   async function handleTrigger() {
     setTriggerState('loading')
     setTriggerMessage('')
     try {
-      const res = await fetch(`${API_BASE}/pipeline/${tenantId}/trigger`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
+      const res = await fetch(`${API_BASE}/pipeline/${tenantId}/trigger`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const body = await res.json()
       setTriggerState('success')
-      const newRunId: string | undefined = data?.runId
-      setTriggerMessage(newRunId ? 'Run started' : 'Pipeline triggered!')
-      if (newRunId) setTimeout(() => router.push(`/dashboard/${tenantId}/runs/${newRunId}`), 900)
-      else setTimeout(() => setTriggerState('idle'), 5000)
-    } catch (err) {
+      setTriggerMessage('Meridian is developing new ad ideas now.')
+      if (body?.runId) {
+        setTimeout(() => router.push(`/dashboard/${tenantId}/runs/${body.runId}`), 900)
+      } else {
+        setTimeout(() => setTriggerState('idle'), 5000)
+      }
+    } catch {
       setTriggerState('error')
-      setTriggerMessage(err instanceof Error ? err.message : 'Failed')
+      setTriggerMessage("New ad ideas couldn't start. Please try again.")
       setTimeout(() => setTriggerState('idle'), 4000)
     }
   }
 
-  const totalSpend      = campaigns.reduce((s, c) => s + (c.spend || 0), 0)
-  const allRoas         = campaigns.filter(c => c.roas && c.roas > 0).map(c => c.roas as number)
-  const avgRoas         = allRoas.length ? allRoas.reduce((a, b) => a + b, 0) / allRoas.length : 0
-  const activeCampaigns = campaigns.filter(c => c.status === 'active').length
-  const pendingList     = campaigns.filter(c => c.status === 'pending_approval')
-  const metaConnected   = !!(company?.meta?.accessToken)
+  if (loading && !data) return <CommandCenterSkeleton />
 
-  const recentCampaigns = [...campaigns]
-    .sort((a, b) => new Date(b.launchedAt || 0).getTime() - new Date(a.launchedAt || 0).getTime())
-    .slice(0, 7)
+  if (error || !data) {
+    return (
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div
+          role="alert"
+          className="card mx-auto flex max-w-2xl flex-col items-start gap-4 px-5 py-5 sm:flex-row sm:items-center"
+          style={{ background: 'var(--bad-bg)', borderColor: 'var(--bad-border)' }}
+        >
+          <span
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: 'var(--surface)', color: 'var(--bad)' }}
+          >
+            <AlertTriangle size={18} aria-hidden="true" />
+          </span>
+          <div className="flex-1">
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>
+              The latest growth view could not be loaded
+            </p>
+            <p className="explain mt-1">{error ?? 'No dashboard data was returned.'}</p>
+          </div>
+          <button type="button" onClick={() => void load()} className="btn btn-ghost">
+            <RefreshCw size={14} aria-hidden="true" /> Retry
+          </button>
+        </div>
+      </main>
+    )
+  }
 
-  /* The machine's most confident recent learning, in its own voice */
-  const topInsight = useMemo(() => {
-    const insights = company?.learnings?.causalInsights ?? []
-    return [...insights].sort((a, b) => (b.confidence * Math.log(1 + b.dataPoints)) - (a.confidence * Math.log(1 + a.dataPoints)))[0] ?? null
-  }, [company])
+  const { activity, alerts, campaigns, lifetime, portfolio, window: win } = data
+  const metaConnected = activity.meta.connected
+  const partialCoverage = win.metricsSource === 'partial-timeseries'
+  const criticalCount = alerts.filter((alert) => alert.severity === 'critical').length
+  const allGoalsHaveNoSpend = portfolio.totalSpendAllObjectives <= 0
+  const salesHaveSpend = portfolio.spend > 0
+  const returnEvidence = portfolio.returnEvidence
+  const hasKnownReturn = returnEvidence.knownCampaigns > 0
+  const completeReturnEvidence = returnEvidence.status !== 'incomplete'
+  const resolvedMetaReturn = returnEvidence.status === 'complete_meta'
+  const rawValueGap = returnEvidence.knownRevenue - returnEvidence.knownSpend
+  const rawReturnAboveSpend = hasKnownReturn && returnEvidence.knownRoas >= 1
+  const openProposals = activity.queue.pendingActions + activity.queue.pendingDecisions
 
-  const feed = useMemo<FeedItem[]>(() => {
-    const items: FeedItem[] = []
-    for (const r of runs.slice(0, 10)) {
-      const t = new Date(r.startedAt ?? 0).getTime()
-      if (!t) continue
-      items.push({
-        t, time: formatRelativeTime(r.startedAt!),
-        kind: 'run',
-        label: 'pipeline',
-        detail: `${r.runId.slice(0, 8)} · ${r.status.replace(/_/g, ' ')}`,
-        href: `/dashboard/${tenantId}/runs/${r.runId}`,
-        chip: r.status === 'failed' ? { text: 'FAILED', cls: 'chip-bad' }
-            : r.status === 'completed' ? { text: 'DONE', cls: 'chip-good' }
-            : { text: 'LIVE', cls: 'chip-accent' },
-      })
-    }
-    for (const c of campaigns) {
-      const t = new Date(c.launchedAt ?? 0).getTime()
-      if (!t) continue
-      items.push({
-        t, time: formatRelativeTime(c.launchedAt!),
-        kind: 'launch',
-        label: 'launch',
-        detail: c.name || c.topic || 'campaign',
-        href: `/dashboard/${tenantId}/campaigns/${c._id}`,
-        chip: { text: (c.status ?? '').replace(/_/g, ' ').toUpperCase().slice(0, 12), cls: c.status === 'active' ? 'chip-good' : 'chip-neutral' },
-      })
-    }
-    for (const a of actions) {
-      const t = new Date(a.executedAt ?? 0).getTime()
-      if (!t) continue
-      items.push({
-        t, time: formatRelativeTime(a.executedAt),
-        kind: 'action',
-        label: a.action.type.replace(/_/g, ' '),
-        detail: a.action.targetName ?? a.action.targetId,
-        href: `/dashboard/${tenantId}/campaigns/${a.campaignId}`,
-        chip: a.status === 'final' && a.outcomeLabel
-          ? { text: a.outcomeLabel.toUpperCase(), cls: a.outcomeLabel === 'improved' ? 'chip-good' : a.outcomeLabel === 'worsened' ? 'chip-bad' : 'chip-neutral' }
-          : { text: '+72H PENDING', cls: 'chip-accent' },
-      })
-    }
-    return items.sort((a, b) => b.t - a.t).slice(0, 14)
-  }, [runs, campaigns, actions, tenantId])
+  const heroMetric = allGoalsHaveNoSpend
+    ? 'Ready'
+    : formatCurrency(Math.round(portfolio.totalSpendAllObjectives))
+  const heroMetricLabel = allGoalsHaveNoSpend
+    ? 'to plan your next growth campaign'
+    : 'ad spend monitored'
 
-  const kpis = [
-    { label: 'Total spend', value: formatCurrency(totalSpend), tone: 'var(--ink)', sub: `${campaigns.length} campaigns all-time` },
-    { label: 'Avg ROAS', value: avgRoas > 0 ? `${avgRoas.toFixed(2)}×` : '—',
-      tone: avgRoas >= 1.5 ? 'var(--good)' : avgRoas >= 1 ? 'var(--warn)' : avgRoas > 0 ? 'var(--bad)' : 'var(--ink-4)',
-      sub: `${allRoas.length} measured` },
-    { label: 'Active', value: String(activeCampaigns), tone: 'var(--accent-strong)', sub: 'spending now' },
-    { label: 'Queue', value: String(pendingList.length), tone: pendingList.length > 0 ? 'var(--warn)' : 'var(--ink-4)', sub: 'awaiting approval' },
+  return (
+    <main className="min-h-screen">
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="chip chip-accent">
+                <Bot size={12} aria-hidden="true" /> Growth Command Center
+              </span>
+              <span className={metaConnected ? 'chip chip-good' : 'chip chip-warn'}>
+                <span className={metaConnected ? 'beacon' : 'beacon beacon-bad'} aria-hidden="true" />
+                {metaConnected ? 'Meta connected' : 'Meta needs connection'}
+              </span>
+            </div>
+            <h1 className="page-title">{data.companyName || 'Your business'} growth, in one view</h1>
+            <p className="page-subtitle">
+              {data.industry ? `${data.industry} · ` : ''}
+              View generated {formatRelativeTime(data.generatedAt)}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex items-center gap-1 rounded-xl p-1"
+              style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }}
+              aria-label="Reporting window"
+            >
+              {WINDOWS.map((window) => (
+                <button
+                  key={window}
+                  type="button"
+                  onClick={() => setWindowDays(window)}
+                  aria-pressed={windowDays === window}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    background: windowDays === window ? 'var(--ink)' : 'transparent',
+                    color: windowDays === window ? 'var(--paper)' : 'var(--ink-3)',
+                  }}
+                >
+                  {window} days
+                </button>
+              ))}
+            </div>
+            <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent">
+              <Sparkles size={14} aria-hidden="true" /> Plan with Copilot
+            </Link>
+            <button
+              type="button"
+              onClick={handleTrigger}
+              disabled={triggerState === 'loading' || !metaConnected}
+              className={triggerState === 'error' ? 'btn btn-danger' : 'btn btn-ghost'}
+              title={!metaConnected ? 'Connect Meta first in Settings' : undefined}
+            >
+              {triggerState === 'loading' ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              ) : triggerState === 'success' ? (
+                <CheckCircle2 size={14} aria-hidden="true" />
+              ) : (
+                <Play size={13} fill="currentColor" aria-hidden="true" />
+              )}
+              {triggerState === 'loading'
+                ? 'Developing ideas…'
+                : triggerState === 'success'
+                  ? 'Ideas in progress'
+                  : triggerState === 'error'
+                    ? 'Try ideas again'
+                    : 'Generate ad ideas'}
+            </button>
+          </div>
+        </header>
+
+        <div aria-live="polite" className="min-h-0">
+          {triggerMessage && (
+            <p
+              className="mb-4 text-sm font-medium"
+              style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}
+            >
+              {triggerMessage}
+            </p>
+          )}
+        </div>
+
+        {!metaConnected && (
+          <section
+            className="card mb-5 flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center"
+            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
+          >
+            <AlertTriangle size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Connect Meta to activate the growth loop</p>
+              <p className="explain mt-0.5">Meridian needs account, Page and measurement access before it can sync evidence or prepare launches.</p>
+            </div>
+            <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost">
+              <Settings size={14} aria-hidden="true" /> Open settings
+            </Link>
+          </section>
+        )}
+
+        {partialCoverage && (
+          <section
+            className="card mb-5 flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center"
+            style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
+            role="status"
+          >
+            <Database size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Daily evidence is incomplete</p>
+              <p className="explain mt-0.5">
+                This view covers {win.coverage.campaignsWithRows} of {win.coverage.eligibleCampaigns} campaigns expected to have delivered in this window. Totals exclude {win.coverage.campaignsWithoutRows} campaign{win.coverage.campaignsWithoutRows === 1 ? '' : 's'} without daily rows.
+              </p>
+            </div>
+            <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">Review sync coverage</Link>
+          </section>
+        )}
+
+        <section
+          aria-labelledby="business-outcome-title"
+          className="card card-hero noise-bg relative mb-5 overflow-hidden"
+          style={{ borderColor: completeReturnEvidence && rawReturnAboveSpend ? 'var(--good-border)' : 'var(--accent-border)' }}
+        >
+          <div
+            className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full blur-3xl"
+            style={{ background: completeReturnEvidence && rawReturnAboveSpend ? 'var(--good-bg)' : 'var(--accent-bg)' }}
+            aria-hidden="true"
+          />
+          <div className="relative grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.5fr)]">
+            <div className="px-5 py-6 sm:px-7 sm:py-7 lg:px-8">
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <p className="micro-label">Account-wide growth oversight · {win.label.toLowerCase()}</p>
+                {!completeReturnEvidence && salesHaveSpend && (
+                  <Link href={`/dashboard/${tenantId}/campaigns`} className="chip chip-warn">
+                    Revenue coverage {returnEvidence.knownCampaigns}/{returnEvidence.campaignsWithSpend}
+                    <ArrowRight size={12} aria-hidden="true" />
+                  </Link>
+                )}
+              </div>
+              <h2
+                id="business-outcome-title"
+                className="max-w-4xl font-semibold tracking-[-0.035em]"
+                style={{ color: 'var(--ink)', fontSize: 'clamp(2.35rem, 4vw, 3.75rem)', lineHeight: 1.02 }}
+              >
+                <span className="display-num block">{heroMetric}</span>
+                <span
+                  className="mt-2 block font-semibold tracking-[-0.025em]"
+                  style={{ color: 'var(--ink-2)', fontSize: 'clamp(1.15rem, 1.8vw, 1.65rem)', lineHeight: 1.2 }}
+                >
+                  {heroMetricLabel}
+                </span>
+              </h2>
+              <p className="mt-4 max-w-3xl text-sm leading-6 sm:text-base" style={{ color: 'var(--ink-2)' }}>
+                {allGoalsHaveNoSpend
+                  ? 'Start with a business goal. Copilot can shape the audience, budget, creative and measurement plan for review.'
+                  : `Meridian is monitoring ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} across sales and objective-specific growth goals. Results from campaigns launched by Meridian are isolated on the Impact page.`}
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Link href={`/dashboard/${tenantId}/tool-impact`} className="btn btn-primary">
+                  Open Meridian impact <ArrowRight size={14} aria-hidden="true" />
+                </Link>
+                {!completeReturnEvidence && salesHaveSpend ? (
+                  <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">
+                    Review revenue coverage
+                  </Link>
+                ) : (
+                  <p className="explain max-w-xl">
+                    {win.metricsSource === 'timeseries'
+                      ? `Measured from true daily campaign data for this ${win.days}-day window.`
+                      : partialCoverage
+                        ? `${win.coverage.campaignsWithRows} of ${win.coverage.eligibleCampaigns} expected campaigns have daily rows.`
+                        : `Daily data is not synced, so this view uses the available campaign totals.`}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div
+              className="relative flex flex-col justify-between px-5 py-6 sm:px-7 xl:border-l xl:px-6"
+              style={{ borderColor: 'var(--hairline)', background: 'rgba(255,255,255,0.68)' }}
+            >
+              <div>
+                <p className="micro-label">Workspace status</p>
+                <div className="mt-5 space-y-5">
+                  <HeroSignal
+                    icon={Gauge}
+                    value={portfolio.campaignCount}
+                    label={`campaign${portfolio.campaignCount === 1 ? '' : 's'} monitored · ${win.label.toLowerCase()}`}
+                  />
+                  <HeroSignal icon={Sparkles} value={activity.creatives.ready} label="creative assets ready now" />
+                  <HeroSignal
+                    icon={Target}
+                    value={openProposals}
+                    label={`growth decision${openProposals === 1 ? '' : 's'} awaiting review`}
+                  />
+                </div>
+              </div>
+              <Link
+                href={`/dashboard/${tenantId}/runs`}
+                className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
+                style={{ color: 'var(--accent-strong)' }}
+              >
+                See AI activity <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Growth outcome metrics" className="stagger mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {hasKnownReturn ? (
+            <>
+              <OutcomeMetric
+                label={partialCoverage ? 'Covered investment · all goals' : 'Account investment · all goals'}
+                value={formatCurrency(Math.round(portfolio.totalSpendAllObjectives))}
+                detail={portfolio.nonRevenueSpend > 0
+                  ? `${formatCurrency(Math.round(portfolio.spend))} sales · ${formatCurrency(Math.round(portfolio.nonRevenueSpend))} other goals`
+                  : `${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} in view`}
+                icon={Gauge}
+              />
+              <OutcomeMetric
+                label={resolvedMetaReturn ? 'Meta-attributed action value' : 'Verified recorded action value'}
+                value={formatCurrency(Math.round(returnEvidence.knownRevenue))}
+                detail={`Covers ${returnEvidence.knownCampaigns}/${returnEvidence.campaignsWithSpend} sales campaigns`}
+                icon={ArrowUpRight}
+                tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
+              />
+              <OutcomeMetric
+                label="Verified-evidence raw ROAS"
+                value={`${returnEvidence.knownRoas.toFixed(2)}x`}
+                detail="Campaign-scoped recorded action value ÷ covered sales spend"
+                icon={Activity}
+                tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
+              />
+              <OutcomeMetric
+                label="Known action-value gap"
+                value={`${rawValueGap >= 0 ? '+' : '−'}${formatCurrency(Math.round(Math.abs(rawValueGap)))}`}
+                detail={completeReturnEvidence ? 'Recorded action value minus sales spend; not contribution profit' : 'Verified campaigns only; unresolved rows remain withheld'}
+                icon={Gauge}
+                tone={completeReturnEvidence ? (rawValueGap >= 0 ? 'good' : 'bad') : 'neutral'}
+              />
+            </>
+          ) : (
+            <>
+              <OutcomeMetric
+                label={partialCoverage ? 'Covered sales spend' : 'Sales spend monitored'}
+                value={formatCurrency(Math.round(portfolio.spend))}
+                detail={`${returnEvidence.campaignsWithSpend} sales campaign${returnEvidence.campaignsWithSpend === 1 ? '' : 's'} with spend`}
+                icon={Gauge}
+              />
+              <OutcomeMetric
+                label="Other growth goals"
+                value={formatCurrency(Math.round(portfolio.nonRevenueSpend))}
+                detail={`${portfolio.nonRevenueCampaigns} awareness, reach, traffic or engagement campaign${portfolio.nonRevenueCampaigns === 1 ? '' : 's'}`}
+                icon={Target}
+              />
+              <OutcomeMetric
+                label="Campaigns monitored"
+                value={portfolio.campaignCount.toLocaleString('en-IN')}
+                detail={`Delivery evidence for the ${win.label.toLowerCase()} reporting window`}
+                icon={Activity}
+              />
+              <OutcomeMetric
+                label="Revenue-ready campaigns"
+                value={`${returnEvidence.knownCampaigns} / ${returnEvidence.campaignsWithSpend}`}
+                detail="Product mapping and a fresh Meta sync are required before raw ROAS is shown"
+                icon={Database}
+                tone="warn"
+              />
+            </>
+          )}
+        </section>
+
+        <div className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.4fr)]">
+          <ObjectiveHealth campaigns={campaigns} objectives={data.facets.byObjective} tenantId={tenantId} />
+          <TrustPanel data={data} tenantId={tenantId} />
+        </div>
+
+        <div className="mb-5">
+          <GrowthLoop activity={activity} insights={data.insights} portfolio={portfolio} tenantId={tenantId} />
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <section className="card overflow-hidden lg:col-span-2" aria-labelledby="attention-title">
+            <div
+              className="flex items-center gap-2.5 px-5 py-4"
+              style={{ borderBottom: '1px solid var(--hairline)' }}
+            >
+              <AlertTriangle size={17} style={{ color: criticalCount > 0 ? 'var(--bad)' : 'var(--ink-3)' }} aria-hidden="true" />
+              <div>
+                <p className="micro-label">Next best action</p>
+                <h2 id="attention-title" className="section-title">What needs a decision</h2>
+              </div>
+              <span className={`ml-auto ${criticalCount > 0 ? 'chip chip-bad' : 'chip chip-good'}`}>
+                {criticalCount > 0 ? `${criticalCount} urgent` : 'No urgent risks'}
+              </span>
+            </div>
+            <AlertFeed alerts={alerts} />
+          </section>
+          <InsightList insights={data.insights} tenantId={tenantId} />
+        </div>
+
+        <section aria-labelledby="system-pulse-title">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="micro-label mb-1">Operations</p>
+              <h2 id="system-pulse-title" className="section-title">System pulse</h2>
+            </div>
+            <p className="explain">Connections, production, review queues and evidence freshness</p>
+          </div>
+          <ActivityGrid activity={activity} tenantId={tenantId} />
+        </section>
+
+        <footer className="mt-8 flex flex-col gap-2 border-t pt-4 text-xs sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--hairline)', color: 'var(--ink-4)' }}>
+          <span>Reporting window: {win.label} · Generated {formatRelativeTime(data.generatedAt)}</span>
+          <span>Account lifetime: {formatCurrency(Math.round(lifetime.spend))} spend · open Campaigns for basis-aware return evidence</span>
+        </footer>
+      </div>
+    </main>
+  )
+}
+
+function CommandCenterSkeleton() {
+  return (
+    <main aria-busy="true" aria-label="Loading growth command center" className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <span className="sr-only" role="status">Loading the latest growth evidence</span>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <div className="skeleton mb-3 h-6 w-44" />
+          <div className="skeleton h-9 w-72 max-w-full" />
+        </div>
+        <div className="skeleton hidden h-10 w-64 sm:block" />
+      </div>
+      <div className="skeleton mb-4 h-80 w-full rounded-2xl" />
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton h-32" />)}
+      </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="skeleton h-72 lg:col-span-2" />
+        <div className="skeleton h-72" />
+      </div>
+    </main>
+  )
+}
+
+function OutcomeMetric({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  detail: string
+  icon: typeof Activity
+  tone?: 'good' | 'bad' | 'warn' | 'neutral'
+}) {
+  const color = tone === 'good'
+    ? 'var(--good)'
+    : tone === 'bad'
+      ? 'var(--bad)'
+      : tone === 'warn'
+        ? 'var(--warn)'
+        : 'var(--ink)'
+  const background = tone === 'good'
+    ? 'var(--good-bg)'
+    : tone === 'bad'
+      ? 'var(--bad-bg)'
+      : tone === 'warn'
+        ? 'var(--warn-bg)'
+        : 'var(--surface-warm)'
+  return (
+    <article className="card card-metric min-w-0 px-5 py-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="micro-label">{label}</p>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ color, background }}>
+          <Icon size={15} aria-hidden="true" />
+        </span>
+      </div>
+      <p className="display-num text-3xl" style={{ color }}>{value}</p>
+      <p className="explain mt-2">{detail}</p>
+    </article>
+  )
+}
+
+function HeroSignal({ icon: Icon, value, label }: { icon: typeof Activity; value: number; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+        style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}
+      >
+        <Icon size={16} aria-hidden="true" />
+      </span>
+      <div>
+        <span className="display-num text-xl" style={{ color: 'var(--ink)' }}>{value.toLocaleString('en-IN')}</span>
+        <p className="explain">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function TrustPanel({ data, tenantId }: { data: DashboardOverview; tenantId: string }) {
+  const { activity, economics } = data
+  const trustRows = [
+    {
+      icon: ShieldCheck,
+      label: 'Human review',
+      value: `${activity.queue.pendingApprovalCampaigns} campaign${activity.queue.pendingApprovalCampaigns === 1 ? '' : 's'} awaiting approval`,
+      href: `/dashboard/${tenantId}/approvals`,
+      healthy: true,
+    },
+    {
+      icon: RefreshCw,
+      label: 'Evidence freshness',
+      value: activity.sync.campaignsWithoutFreshness > 0
+        ? `${activity.sync.campaignsWithoutFreshness}/${activity.sync.activeCampaignCount} active campaigns lack a metrics timestamp`
+        : activity.sync.lastSyncAt
+          ? `${activity.sync.staleCampaignCount === 0 ? 'All timestamped active campaigns are within threshold' : `${activity.sync.staleCampaignCount} stale`} · latest evidence ${formatRelativeTime(activity.sync.lastSyncAt)}`
+          : 'No active campaign metrics timestamp',
+      href: `/dashboard/${tenantId}/campaigns`,
+      healthy: activity.sync.campaignsWithoutFreshness === 0 && activity.sync.staleCampaignCount === 0 && Boolean(activity.sync.lastSyncAt),
+    },
+    {
+      icon: Gauge,
+      label: 'Economics basis',
+      value: economics.isEstimated
+        ? 'Margin is assumed; raw command-center proof excludes contribution'
+        : economics.hasMixedMargins
+          ? 'Product margins are stored; contribution is withheld from this demo'
+          : `${economics.productName ?? 'Primary product'} economics stored; raw proof shown above`,
+      href: `/dashboard/${tenantId}/settings`,
+      healthy: !economics.isEstimated,
+    },
+    {
+      icon: Clock3,
+      label: 'Reporting evidence',
+      value: data.window.metricsSource === 'timeseries'
+        ? `True daily evidence · ${data.window.label.toLowerCase()}`
+        : data.window.metricsSource === 'partial-timeseries'
+          ? `Partial daily evidence · ${data.window.coverage.campaignsWithRows}/${data.window.coverage.eligibleCampaigns} campaigns covered`
+          : `Campaign lifetime fallback · ${data.window.label.toLowerCase()}`,
+      href: `/dashboard/${tenantId}/tool-impact`,
+      healthy: data.window.metricsSource === 'timeseries',
+    },
   ]
 
   return (
-    <div className="min-h-screen">
-      {/* ── Status bar ───────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 px-6 py-3 flex items-center justify-between gap-4 flex-wrap"
-        style={{ background: 'rgba(12,10,9,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--hairline)' }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="beacon" />
-          <div className="min-w-0">
-            <p className="mono text-[13px] font-semibold tracking-wide truncate" style={{ color: 'var(--ink)' }}>
-              {(company?.name || tenantId).toUpperCase()}
-            </p>
-            <p className="mono text-[9.5px] tracking-widest" style={{ color: 'var(--ink-3)' }}>
-              {company?.industry?.toUpperCase() ?? 'WORKSPACE'}{company?.pipelineConfig?.campaignStrategy ? ` · ${company.pipelineConfig.campaignStrategy.toUpperCase()}` : ''}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <span className={metaConnected ? 'chip chip-good' : 'chip chip-bad'}>
-            {metaConnected ? <Wifi size={10} /> : <WifiOff size={10} />}
-            META {metaConnected ? 'LINKED' : 'OFFLINE'}
-          </span>
-          <button
-            onClick={handleTrigger}
-            disabled={triggerState === 'loading'}
-            className={
-              triggerState === 'success' ? 'btn chip-good border'
-              : triggerState === 'error' ? 'btn btn-danger'
-              : 'btn btn-accent'
-            }
-          >
-            {triggerState === 'loading' ? <Loader2 size={13} className="animate-spin" />
-             : triggerState === 'success' ? <CheckCircle size={13} />
-             : <Play size={12} fill="currentColor" />}
-            {triggerState === 'loading' ? 'Starting…'
-              : triggerState === 'success' ? 'Started'
-              : triggerState === 'error' ? 'Retry'
-              : 'Run Pipeline'}
-          </button>
-          {triggerMessage && (
-            <span className="mono text-[11px] hidden sm:inline" style={{ color: triggerState === 'success' ? 'var(--good)' : 'var(--bad)' }}>
-              {triggerMessage}
-            </span>
-          )}
-        </div>
+    <aside className="card overflow-hidden" aria-labelledby="trust-panel-title">
+      <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
+        <p className="micro-label mb-1.5">Proof &amp; safety</p>
+        <h2 id="trust-panel-title" className="section-title">Trust the number before acting</h2>
       </div>
-
-      <div className="px-6 py-6 max-w-7xl mx-auto stagger">
-
-        {/* ── Alerts ─────────────────────────────────────────────────── */}
-        {companyError && (
-          <div className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm mb-5"
-            style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
-            <AlertTriangle size={14} className="shrink-0" /> {companyError}
-          </div>
-        )}
-        {company && !metaConnected && (
-          <div className="card flex items-center justify-between gap-4 px-5 py-3.5 flex-wrap mb-5"
-            style={{ borderColor: 'var(--warn-border)' }}>
-            <div className="flex items-center gap-3 min-w-0">
-              <AlertTriangle size={15} style={{ color: 'var(--warn)' }} className="shrink-0" />
-              <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
-                <span className="font-semibold" style={{ color: 'var(--warn)' }}>Meta not connected.</span> Pipeline runs can&apos;t launch campaigns.
-              </p>
-            </div>
-            <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost shrink-0">
-              <Settings size={12} /> Config
-            </Link>
-          </div>
-        )}
-
-        {/* ── KPI strip ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-          {kpis.map((k) => (
-            <div key={k.label} className="card px-5 py-4">
-              <p className="micro-label mb-2.5">{k.label}</p>
-              <p className="display-num text-[30px]" style={{ color: k.tone }}>{k.value}</p>
-              <p className="mono text-[10px] mt-2" style={{ color: 'var(--ink-4)' }}>{k.sub}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Main grid: feed + right rail ───────────────────────────── */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start mb-5">
-
-          {/* LIVE FEED — the agent's activity stream */}
-          <div className="xl:col-span-2 card overflow-hidden">
-            <div className="flex items-center gap-2.5 px-5 py-3.5" style={{ borderBottom: '1px solid var(--hairline)' }}>
-              <Radio size={13} style={{ color: 'var(--accent-strong)' }} />
-              <h2 className="section-title">Live Feed</h2>
-              <span className="mono text-[10px] ml-auto" style={{ color: 'var(--ink-4)' }}>
-                runs · launches · optimizer actions
+      <div>
+        {trustRows.map((row, index) => {
+          const Icon = row.icon
+          return (
+            <Link
+              key={row.label}
+              href={row.href}
+              className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-warm)]"
+              style={{ borderTop: index > 0 ? '1px solid var(--hairline-light)' : undefined }}
+            >
+              <span
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: row.healthy ? 'var(--good-bg)' : 'var(--warn-bg)', color: row.healthy ? 'var(--good)' : 'var(--warn)' }}
+              >
+                <Icon size={14} aria-hidden="true" />
               </span>
-            </div>
-
-            {feed.length === 0 ? (
-              <div className="px-5 py-12 text-center">
-                <p className="text-sm" style={{ color: 'var(--ink-3)' }}>No activity yet — run the pipeline to wake the agent.</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{row.label}</p>
+                <p className="explain mt-0.5">{row.value}</p>
               </div>
-            ) : (
-              <div>
-                {feed.map((item, i) => {
-                  const Meta = KIND_META[item.kind]
-                  const Icon = Meta.icon
-                  const inner = (
-                    <div
-                      className="flex items-center gap-3 px-5 py-2.5 animate-feed-in transition-colors"
-                      style={{ borderTop: i > 0 ? '1px solid var(--hairline-light)' : 'none', animationDelay: `${Math.min(i * 30, 300)}ms` }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <span className="mono text-[10px] w-16 shrink-0 tabular-nums" style={{ color: 'var(--ink-4)' }}>
-                        {item.time}
-                      </span>
-                      <Icon size={12} style={{ color: Meta.color }} className="shrink-0" />
-                      <span className="mono text-[11px] w-28 shrink-0 truncate" style={{ color: Meta.color }}>
-                        {item.label}
-                      </span>
-                      <span className="text-[12.5px] flex-1 min-w-0 truncate" style={{ color: 'var(--ink-2)' }} title={item.detail}>
-                        {item.detail}
-                      </span>
-                      {item.chip && <span className={`chip ${item.chip.cls} shrink-0`}>{item.chip.text}</span>}
-                    </div>
-                  )
-                  return item.href
-                    ? <Link key={`${item.kind}-${item.t}-${i}`} href={item.href} className="block">{inner}</Link>
-                    : <div key={`${item.kind}-${item.t}-${i}`}>{inner}</div>
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Right rail */}
-          <div className="flex flex-col gap-4">
-
-            {/* Approval queue */}
-            <div className="card overflow-hidden" style={pendingList.length > 0 ? { borderColor: 'var(--warn-border)' } : undefined}>
-              <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
-                <Inbox size={13} style={{ color: pendingList.length > 0 ? 'var(--warn)' : 'var(--ink-3)' }} />
-                <h2 className="section-title">Approval Queue</h2>
-                <span className="mono text-[11px] ml-auto font-bold" style={{ color: pendingList.length > 0 ? 'var(--warn)' : 'var(--ink-4)' }}>
-                  {pendingList.length}
-                </span>
-              </div>
-              {pendingList.length === 0 ? (
-                <p className="px-4 py-5 text-xs" style={{ color: 'var(--ink-4)' }}>Queue clear — nothing waiting on you.</p>
-              ) : (
-                <div>
-                  {pendingList.slice(0, 4).map((c, i) => (
-                    <Link key={c._id} href={`/dashboard/${tenantId}/approvals`}
-                      className="flex items-center gap-2.5 px-4 py-2.5 transition-colors"
-                      style={{ borderTop: i > 0 ? '1px solid var(--hairline-light)' : 'none' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <span className="text-[12px] flex-1 min-w-0 truncate" style={{ color: 'var(--ink-2)' }}>
-                        {c.name || c.topic || 'Untitled'}
-                      </span>
-                      <span className="mono text-[10px] shrink-0" style={{ color: 'var(--ink-4)' }}>
-                        {c.budget ? formatCurrency(c.budget) : ''}
-                      </span>
-                      <ArrowRight size={11} style={{ color: 'var(--warn)' }} className="shrink-0" />
-                    </Link>
-                  ))}
-                  <Link href={`/dashboard/${tenantId}/approvals`}
-                    className="block px-4 py-2.5 text-center mono text-[10.5px] font-semibold tracking-wider transition-opacity hover:opacity-75"
-                    style={{ borderTop: '1px solid var(--hairline-light)', color: 'var(--warn)' }}>
-                    REVIEW QUEUE →
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* The machine's voice — top causal learning as a pull-quote */}
-            {topInsight && (
-              <div className="card px-5 py-4" style={{ background: 'var(--surface-warm)' }}>
-                <p className="micro-label mb-3">Latest conviction</p>
-                <p className="insight-quote">&ldquo;{topInsight.finding}&rdquo;</p>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="chip chip-accent">{(topInsight.confidence * 100).toFixed(0)}% CONF</span>
-                  <span className="mono text-[10px]" style={{ color: 'var(--ink-4)' }}>n={topInsight.dataPoints}</span>
-                  <Link href={`/dashboard/${tenantId}/learnings`}
-                    className="mono text-[10px] ml-auto transition-opacity hover:opacity-75"
-                    style={{ color: 'var(--accent-strong)' }}>
-                    ALL LEARNINGS →
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            {/* Intelligence shortcut */}
-            <Link href={`/dashboard/${tenantId}/intelligence`}
-              className="card card-hover px-5 py-3.5 flex items-center gap-3">
-              <Zap size={14} style={{ color: 'var(--accent-strong)' }} />
-              <div className="flex-1">
-                <p className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>System Intelligence</p>
-                <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Action outcomes · regret · signal accuracy</p>
-              </div>
-              <ChevronRight size={13} style={{ color: 'var(--ink-4)' }} />
+              <ArrowRight size={14} className="mt-1 shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--ink-4)' }} aria-hidden="true" />
             </Link>
-          </div>
-        </div>
-
-        {/* ── Campaign board ─────────────────────────────────────────── */}
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid var(--hairline)' }}>
-            <div className="flex items-center gap-2.5">
-              <Megaphone size={13} style={{ color: 'var(--ink-3)' }} />
-              <h2 className="section-title">Campaign Board</h2>
-            </div>
-            <Link href={`/dashboard/${tenantId}/campaigns`}
-              className="mono text-[10.5px] font-semibold tracking-wider transition-opacity hover:opacity-75"
-              style={{ color: 'var(--accent-strong)' }}>
-              ALL CAMPAIGNS →
-            </Link>
-          </div>
-
-          {campaignsError ? (
-            <div className="px-5 py-10 text-center text-sm" style={{ color: 'var(--bad)' }}>{campaignsError}</div>
-          ) : recentCampaigns.length === 0 ? (
-            <div className="px-5 py-12 text-center">
-              <p className="text-sm" style={{ color: 'var(--ink-3)' }}>No campaigns yet.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '38%' }}>Campaign</th>
-                    <th>Status</th>
-                    <th className="num">Budget</th>
-                    <th className="num">Spend</th>
-                    <th className="num">ROAS</th>
-                    <th className="num">Launched</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentCampaigns.map((campaign, idx) => (
-                    <tr key={campaign._id || idx}>
-                      <td style={{ maxWidth: 0 }}>
-                        <Link href={`/dashboard/${tenantId}/campaigns/${campaign._id}`}
-                          className="block text-[12.5px] font-semibold truncate transition-opacity hover:opacity-75"
-                          style={{ color: 'var(--ink)' }}
-                          title={campaign.name || campaign.topic || 'Untitled'}>
-                          {campaign.name || campaign.topic || 'Untitled'}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap"><StatusBadge status={campaign.status} /></td>
-                      <td className="num whitespace-nowrap mono text-[11.5px]">
-                        {campaign.budget ? formatCurrency(campaign.budget) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
-                      </td>
-                      <td className="num whitespace-nowrap mono text-[11.5px]">
-                        {campaign.spend ? formatCurrency(campaign.spend) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
-                      </td>
-                      <td className="num whitespace-nowrap">
-                        {campaign.roas != null ? (
-                          <span className="mono text-[11.5px] font-bold" style={{
-                            color: campaign.roas >= 2 ? 'var(--good)' : campaign.roas >= 1 ? 'var(--warn)' : 'var(--bad)',
-                          }}>
-                            {campaign.roas.toFixed(2)}×
-                          </span>
-                        ) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
-                      </td>
-                      <td className="num whitespace-nowrap mono text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
-                        {formatDateTime(campaign.launchedAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+          )
+        })}
       </div>
-    </div>
+    </aside>
   )
 }

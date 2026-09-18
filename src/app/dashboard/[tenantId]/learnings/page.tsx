@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import {
   BookOpen,
   Loader2,
@@ -12,12 +12,16 @@ import {
   Trophy,
   LayoutGrid,
   GitBranch,
+  BrainCircuit,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react'
 import { HookStyleChip } from '@/components/badges'
+import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
 import { cn, formatCurrency, formatRelativeTime } from '@/lib/utils'
 import type { Company, CaseStudy, WinningExemplar, CausalInsight, AudienceScoreEntry } from '@/types'
 
-const API_BASE = 'http://localhost:8082/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -49,44 +53,43 @@ function TagList({
   )
 }
 
-// Backend audienceScores entries migrated from flat numbers to { roas, n,
-// updatedAt }. Rendering `score.toFixed(1)` on the object shape crashed this
-// page (the "Learning tab error"). Normalize both shapes to one row model.
-function normalizeAudienceScores(
+// This legacy field is named `roas` in storage, but its producer asks the
+// model for a normalized 0–1 audience score. Keep that distinction explicit:
+// it is a hypothesis index, not observed return evidence.
+function normalizeLegacyAudienceIndex(
   scores: Record<string, number | AudienceScoreEntry> | undefined,
-): Array<{ audience: string; roas: number; n: number | null }> {
+): Array<{ audience: string; score: number; n: number | null }> {
   if (!scores) return []
   return Object.entries(scores)
     .map(([audience, v]) => {
-      if (typeof v === 'number') return { audience, roas: v, n: null }
-      const roas = Number((v as AudienceScoreEntry)?.roas)
+      if (typeof v === 'number') return { audience, score: v, n: null }
+      const score = Number((v as AudienceScoreEntry)?.roas)
       const n = Number((v as AudienceScoreEntry)?.n)
-      return { audience, roas: Number.isFinite(roas) ? roas : 0, n: Number.isFinite(n) ? n : null }
+      return { audience, score: Number.isFinite(score) ? score : 0, n: Number.isFinite(n) ? n : null }
     })
-    .sort((a, b) => b.roas - a.roas)
+    .sort((a, b) => b.score - a.score)
 }
 
-function AudienceScoreRows({ scores }: { scores: Array<{ audience: string; roas: number; n: number | null }> }) {
-  const maxRoas = Math.max(1.5, ...scores.map((s) => s.roas))
+function AudienceIndexRows({ scores }: { scores: Array<{ audience: string; score: number; n: number | null }> }) {
   return (
-    <div className="flex flex-col gap-2">
-      {scores.map(({ audience, roas, n }) => (
+    <div className="flex flex-col gap-3">
+      {scores.map(({ audience, score, n }) => (
         <div key={audience} className="flex items-center justify-between gap-3">
-          <span className="text-sm capitalize truncate" style={{ color: 'var(--ink-2)' }}>
+          <span className="min-w-0 flex-1 truncate text-sm capitalize" style={{ color: 'var(--ink-2)' }}>
             {audience.replace(/_/g, ' ')}
           </span>
-          <div className="flex items-center gap-2 flex-1 max-w-[200px]">
+          <div className="flex w-[55%] max-w-[240px] items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--muted)' }}>
               <div
                 className="h-full rounded-full animate-bar-grow"
                 style={{
-                  width: `${Math.min((roas / maxRoas) * 100, 100)}%`,
-                  background: roas >= 1.5 ? 'var(--good)' : roas >= 1 ? 'var(--warn)' : 'var(--bad)',
+                  width: `${Math.max(0, Math.min(score, 1)) * 100}%`,
+                  background: 'var(--accent)',
                 }}
               />
             </div>
             <span className="mono text-xs font-semibold w-14 text-right tabular-nums" style={{ color: 'var(--ink)' }}>
-              {roas.toFixed(2)}x
+              {Math.round(Math.max(0, Math.min(score, 1)) * 100)}/100
             </span>
             {n !== null && (
               <span
@@ -94,7 +97,7 @@ function AudienceScoreRows({ scores }: { scores: Array<{ audience: string; roas:
                 title={`${n} campaigns/ad sets behind this score`}
                 style={
                   n >= 5
-                    ? { background: 'var(--muted)', color: 'var(--ink-3)', border: '1px solid var(--hairline)' }
+                    ? { background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info-border)' }
                     : { background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }
                 }
               >
@@ -147,8 +150,8 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             </span>
           )}
           {study.totalSpend !== undefined && (
-            <span className="mono text-xs font-semibold shrink-0" style={{ color: 'var(--good)' }}>
-              {formatCurrency(study.totalSpend)}
+            <span className="mono text-xs font-semibold shrink-0" style={{ color: 'var(--ink-2)' }}>
+              {formatCurrency(study.totalSpend)} spent
             </span>
           )}
           {study.totalConversions !== undefined && (
@@ -167,16 +170,21 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
           {study.context && (
-            <p className="text-sm leading-relaxed mt-4" style={{ color: 'var(--ink-2)' }}>
-              {study.context}
-            </p>
+            <div className="mt-4">
+              <p className="micro-label mb-1">Model-inferred context</p>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.context}</p>
+            </div>
           )}
+
+          <p className="text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+            Narrative hypotheses are model-generated from imported metrics. Spend, conversions and CPA are system-computed; the narrative is not causal proof.
+          </p>
 
           {study.whatWorked && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs">✅</span>
-                <p className="micro-label" style={{ color: 'var(--good)' }}>What Worked</p>
+                <CheckCircle size={13} style={{ color: 'var(--good)' }} />
+                <p className="micro-label" style={{ color: 'var(--good)' }}>Model-inferred strengths</p>
               </div>
               {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
                 <div>
@@ -205,14 +213,6 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
                     </p>
                   </div>
                 )}
-                {study.whatWorked.bestROAS !== undefined && (
-                  <div className="card-inset px-3 py-2">
-                    <p className="micro-label">Best ROAS</p>
-                    <p className="mono text-xs font-semibold" style={{ color: 'var(--good)' }}>
-                      {Number(study.whatWorked.bestROAS).toFixed(2)}x
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -223,8 +223,8 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               study.whatFailed.reason) && (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs">❌</span>
-                  <p className="micro-label" style={{ color: 'var(--bad)' }}>What Failed</p>
+                  <AlertCircle size={13} style={{ color: 'var(--bad)' }} />
+                  <p className="micro-label" style={{ color: 'var(--bad)' }}>Model-inferred weaknesses</p>
                 </div>
                 {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
                   <div>
@@ -248,8 +248,11 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 
           {study.lesson && (
             <div className="rounded-xl p-3" style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
-              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--accent)' }}>💡 Lesson</p>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--accent)' }}>{study.lesson}</p>
+              <div className="mb-1 flex items-center gap-1.5">
+                <Sparkles size={13} style={{ color: 'var(--accent-strong)' }} />
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent-strong)' }}>Model-inferred lesson</p>
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.lesson}</p>
             </div>
           )}
         </div>
@@ -281,7 +284,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
             className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
             style={
               segmentFilter === 'all'
-                ? { background: 'var(--accent)', color: '#0c0a09' }
+                ? { background: 'var(--accent)', color: '#fff' }
                 : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
             }
           >
@@ -297,7 +300,7 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                 className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
                 style={
                   active
-                    ? { background: 'var(--accent)', color: '#0c0a09' }
+                    ? { background: 'var(--accent)', color: '#fff' }
                     : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
                 }
               >
@@ -477,15 +480,15 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
       <div className="flex items-center gap-3 mt-3 text-[11px]" style={{ color: 'var(--ink-3)' }}>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--good-bg)', border: '1px solid var(--good-border)' }} />
-          &lt;60% fresh
+          &lt;60% modeled exposure
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }} />
-          60–80% saturating
+          60–80% elevated
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)' }} />
-          &gt;80% burned out
+          &gt;80% high
         </div>
         <span className="ml-auto" style={{ color: 'var(--ink-3)' }}>
           Faded cells = stale data
@@ -506,9 +509,10 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
           : conf >= 0.6 ? 'chip chip-warn'
           : 'chip chip-neutral'
         return (
-          <div key={i} className="card p-4">
+          <article key={i} className="card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
+                <span className="chip chip-accent mb-2">Model hypothesis</span>
                 <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
                   {insight.finding}
                 </p>
@@ -560,7 +564,10 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
                 <p className="text-xs" style={{ color: 'var(--ink-2)' }}>{insight.rootCause}</p>
               </div>
             </div>
-          </div>
+            <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+              Inferred from matched historical observations—not randomized causal proof.
+            </p>
+          </article>
         )
       })}
     </div>
@@ -586,20 +593,25 @@ export default function LearningsPage({ params }: PageProps) {
   } | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const studiesPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function fetchCompany() {
     const res = await fetch(`${API_BASE}/companies/${tenantId}`)
-    if (res.ok) setCompany(await res.json())
+    if (!res.ok) throw new Error('Could not load Meridian learning memory.')
+    setCompany(await res.json())
   }
 
   async function fetchCaseStudies() {
     const res = await fetch(`${API_BASE}/companies/${tenantId}/case-studies`)
-    if (res.ok) setCaseStudies(await res.json())
+    if (!res.ok) throw new Error('Could not load campaign evidence.')
+    setCaseStudies(await res.json())
   }
 
   async function fetchData() {
     try {
       setLoading(true)
+      setError(null)
       await Promise.all([fetchCompany(), fetchCaseStudies()])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load learnings')
@@ -613,7 +625,16 @@ export default function LearningsPage({ params }: PageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId])
 
+  useEffect(() => {
+    return () => {
+      if (statusPollRef.current) clearInterval(statusPollRef.current)
+      if (studiesPollRef.current) clearInterval(studiesPollRef.current)
+    }
+  }, [])
+
   async function handleImport() {
+    if (statusPollRef.current) clearInterval(statusPollRef.current)
+    if (studiesPollRef.current) clearInterval(studiesPollRef.current)
     setImportPhase('importing')
     setImportProgress(null)
     setImportError(null)
@@ -622,7 +643,7 @@ export default function LearningsPage({ params }: PageProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
       // Poll status every 3s
-      const statusPoll = setInterval(async () => {
+      statusPollRef.current = setInterval(async () => {
         try {
           const statusRes = await fetch(`${API_BASE}/companies/${tenantId}/import-status`)
           if (!statusRes.ok) return
@@ -636,14 +657,14 @@ export default function LearningsPage({ params }: PageProps) {
             caseStudyCount: data.caseStudyCount ?? 0,
           })
           if (data.status === 'completed') {
-            clearInterval(statusPoll)
-            clearInterval(studiesPoll)
+            if (statusPollRef.current) clearInterval(statusPollRef.current)
+            if (studiesPollRef.current) clearInterval(studiesPollRef.current)
             setImportPhase('completed')
             // Final fetch of company learnings + full case study list
             await Promise.all([fetchCompany(), fetchCaseStudies()])
           } else if (data.status === 'failed') {
-            clearInterval(statusPoll)
-            clearInterval(studiesPoll)
+            if (statusPollRef.current) clearInterval(statusPollRef.current)
+            if (studiesPollRef.current) clearInterval(studiesPollRef.current)
             setImportPhase('failed')
             setImportError('Import failed on the server.')
           }
@@ -651,7 +672,7 @@ export default function LearningsPage({ params }: PageProps) {
       }, 3000)
 
       // Poll case studies every 5s to append in real time
-      const studiesPoll = setInterval(async () => {
+      studiesPollRef.current = setInterval(async () => {
         try {
           const studiesRes = await fetch(`${API_BASE}/companies/${tenantId}/case-studies`)
           if (studiesRes.ok) setCaseStudies(await studiesRes.json())
@@ -665,10 +686,25 @@ export default function LearningsPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <p className="text-sm" style={{ color: 'var(--ink-3)' }}>Loading learnings...</p>
+      <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <IntelligenceCenterNav tenantId={tenantId} active="patterns" />
+        <div role="status" aria-label="Loading winning patterns">
+          <div className="skeleton h-4 w-32 rounded" />
+          <div className="skeleton mt-3 h-9 w-full max-w-lg rounded-lg" />
+          <div className="skeleton mt-3 h-4 w-full max-w-2xl rounded" />
+          <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="card p-4">
+                <div className="skeleton h-3 w-2/3 rounded" />
+                <div className="skeleton mt-3 h-7 w-1/3 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="skeleton h-52 rounded-2xl" />
+            <div className="skeleton h-52 rounded-2xl" />
+          </div>
+          <span className="sr-only">Loading winning patterns…</span>
         </div>
       </div>
     )
@@ -684,7 +720,13 @@ export default function LearningsPage({ params }: PageProps) {
       const q = search.toLowerCase()
       return s.campaignName.toLowerCase().includes(q) || s.product.toLowerCase().includes(q)
     })
-    .sort((a, b) => (b.whatWorked?.bestROAS ?? 0) - (a.whatWorked?.bestROAS ?? 0))
+    .sort((a, b) => {
+      const conversionDelta = (b.totalConversions ?? 0) - (a.totalConversions ?? 0)
+      if (conversionDelta !== 0) return conversionDelta
+      const aCpa = a.whatWorked?.bestCPA ?? Number.POSITIVE_INFINITY
+      const bCpa = b.whatWorked?.bestCPA ?? Number.POSITIVE_INFINITY
+      return aCpa - bCpa
+    })
 
   const hasPatternData =
     creative?.winningHooks?.length ||
@@ -695,30 +737,35 @@ export default function LearningsPage({ params }: PageProps) {
     campaign?.budgetInsights?.length ||
     campaign?.timingInsights?.length
 
+  const reusablePatternCount =
+    (creative?.winningHooks?.length ?? 0) +
+    (creative?.winningFormats?.length ?? 0) +
+    (campaign?.budgetInsights?.length ?? 0) +
+    (campaign?.timingInsights?.length ?? 0)
+  const productCoverage = Object.keys(campaign?.audienceScoresByProduct ?? {}).length
+  const exemplarCount = creative?.winningExemplars?.length ?? 0
+  const hypothesisCount = company?.learnings?.causalInsights?.length ?? 0
+
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto stagger">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8 stagger">
+      <IntelligenceCenterNav tenantId={tenantId} active="patterns" />
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
+      <div className="mb-7">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
-            <p className="micro-label mb-2">Learning memory</p>
-            <h1 className="page-title">Learnings</h1>
+            <p className="micro-label mb-2">Intelligence center · Winning patterns</p>
+            <h1 className="page-title">Turn past performance into the next advantage</h1>
             <p className="page-subtitle">
-              AI-synthesized insights from past campaign performance
+              Meridian organizes measured examples and model-extracted patterns into reusable learning memory.
               {updatedAt && (
-                <span className="ml-1 mono">· Updated {new Date(updatedAt).toLocaleDateString()}</span>
+                <span className="ml-1">· Updated {formatRelativeTime(updatedAt)}</span>
               )}
             </p>
           </div>
           <button
             onClick={handleImport}
             disabled={importPhase === 'importing'}
-            className={
-              importPhase === 'importing' ? 'btn btn-ghost'
-              : importPhase === 'completed' ? 'btn chip-good border'
-              : importPhase === 'failed' ? 'btn btn-danger'
-              : 'btn btn-accent'
-            }
+            className={importPhase === 'failed' ? 'btn btn-danger' : 'btn btn-primary'}
           >
             {importPhase === 'importing' ? (
               <Loader2 size={14} className="animate-spin" />
@@ -730,12 +777,12 @@ export default function LearningsPage({ params }: PageProps) {
               <Download size={14} />
             )}
             {importPhase === 'importing'
-              ? 'Importing...'
+              ? 'Refreshing…'
               : importPhase === 'completed'
-              ? 'Done!'
+              ? 'Evidence refreshed'
               : importPhase === 'failed'
               ? 'Retry'
-              : 'Import from Meta'}
+              : 'Refresh evidence'}
           </button>
         </div>
 
@@ -747,8 +794,8 @@ export default function LearningsPage({ params }: PageProps) {
                 className="font-medium capitalize"
                 style={{ color: importProgress.status === 'completed' ? 'var(--good)' : 'var(--accent)' }}
               >
-                {importProgress.status === 'completed' ? '✓ Completed' :
-                 importProgress.status === 'failed' ? '✗ Failed' :
+                {importProgress.status === 'completed' ? 'Evidence refresh complete' :
+                 importProgress.status === 'failed' ? 'Refresh failed' :
                  `${importProgress.status}…`}
               </span>
               <span className="mono" style={{ color: 'var(--ink-3)' }}>
@@ -773,37 +820,67 @@ export default function LearningsPage({ params }: PageProps) {
         )}
       </div>
 
+      <section aria-label="Learning memory summary" className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: 'Reusable patterns', value: reusablePatternCount, hint: 'Model-extracted hooks, formats and operating signals' },
+          { label: 'Products covered', value: productCoverage, hint: 'With legacy audience records awaiting basis normalization' },
+          { label: 'Creative examples', value: exemplarCount, hint: 'High-CTR examples captured' },
+          { label: 'Model hypotheses', value: hypothesisCount, hint: 'Inferences awaiting stronger proof' },
+        ].map((metric) => (
+          <div key={metric.label} className="card p-4 sm:p-5">
+            <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>{metric.label}</p>
+            <p className="mt-1.5 text-[28px] font-bold leading-none tabular-nums" style={{ color: 'var(--ink)' }}>
+              {metric.value}
+            </p>
+            <p className="mt-2 text-[10.5px] leading-snug" style={{ color: 'var(--ink-3)' }}>{metric.hint}</p>
+          </div>
+        ))}
+      </section>
+
       {error && (
         <div
-          className="rounded-xl p-4 mb-6 text-sm"
+          className="mb-6 flex flex-col gap-3 rounded-xl p-4 text-sm sm:flex-row sm:items-center"
           style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
-          {error}
+          <AlertCircle size={16} className="shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={fetchData} className="btn btn-ghost shrink-0">
+            <RefreshCw size={14} /> Retry
+          </button>
         </div>
       )}
 
       {/* ===== SECTION A: PATTERN MEMORY ===== */}
       <div className="mb-10">
-        <h2 className="section-title mb-4">
-          Pattern Memory
-        </h2>
+        <div className="mb-4 flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
+            <BrainCircuit size={17} />
+          </span>
+          <div>
+            <h2 className="section-title">Pattern memory</h2>
+            <p className="explain mt-0.5">Signals Meridian can reuse when planning the next campaign.</p>
+          </div>
+        </div>
 
         {!hasPatternData ? (
           <div className="card py-10 text-center">
-            <p className="text-sm" style={{ color: 'var(--ink-3)' }}>No learnings data yet.</p>
+            <BrainCircuit size={26} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>No pattern evidence yet</p>
             <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
-              Import from Meta to generate AI-synthesized insights.
+              Refresh evidence to analyze historical campaign performance.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Winning hooks */}
+            {/* Model-extracted creative hypotheses. Per-ad exemplars below are
+                the deterministic measured evidence. */}
             {creative?.winningHooks && creative.winningHooks.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--good)' }}>
-                  Winning Hooks
+                  Model-extracted positive hook patterns
                 </h3>
                 <TagList items={creative.winningHooks} color="green" />
+                <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>Hypothesis-grade until supported by the per-ad examples below.</p>
               </div>
             )}
 
@@ -811,7 +888,7 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.losingHooks && creative.losingHooks.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--bad)' }}>
-                  Losing Hooks
+                  Model-extracted weak hook patterns
                 </h3>
                 <TagList items={creative.losingHooks} color="red" />
               </div>
@@ -821,7 +898,7 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.winningFormats && creative.winningFormats.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--warn)' }}>
-                  Winning Formats
+                  Model-extracted positive format patterns
                 </h3>
                 <TagList items={creative.winningFormats} color="amber" />
               </div>
@@ -831,19 +908,22 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.losingFormats && creative.losingFormats.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--ink-3)' }}>
-                  Losing Formats
+                  Model-extracted weak format patterns
                 </h3>
                 <TagList items={creative.losingFormats} color="zinc" />
               </div>
             )}
 
-            {/* Audience scores (tenant-aggregate ROAS) */}
+            {/* Legacy model-authored audience index — deliberately not used as ROAS. */}
             {campaign?.audienceScores && Object.keys(campaign.audienceScores).length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--accent)' }}>
-                  Audience ROAS · all products
+                  Legacy AI audience index
                 </h3>
-                <AudienceScoreRows scores={normalizeAudienceScores(campaign.audienceScores)} />
+                <AudienceIndexRows scores={normalizeLegacyAudienceIndex(campaign.audienceScores)} />
+                <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+                  Model-authored 0–1 hypothesis score. It is not ROAS, observed performance, or launch-decision evidence.
+                </p>
               </div>
             )}
 
@@ -854,7 +934,7 @@ export default function LearningsPage({ params }: PageProps) {
                 {campaign?.budgetInsights && campaign.budgetInsights.length > 0 && (
                   <div className="mb-3">
                     <h3 className="micro-label mb-2">
-                      Budget Insights
+                      Model-extracted budget hypotheses
                     </h3>
                     <InsightList items={campaign.budgetInsights} />
                   </div>
@@ -862,7 +942,7 @@ export default function LearningsPage({ params }: PageProps) {
                 {campaign?.timingInsights && campaign.timingInsights.length > 0 && (
                   <div>
                     <h3 className="micro-label mb-2">
-                      Timing Insights
+                      Model-extracted timing hypotheses
                     </h3>
                     <InsightList items={campaign.timingInsights} bullet="⏱" />
                   </div>
@@ -873,48 +953,22 @@ export default function LearningsPage({ params }: PageProps) {
         )}
       </div>
 
-      {/* ===== SECTION A1b: AUDIENCE PERFORMANCE BY PRODUCT ===== */}
-      {campaign?.audienceScoresByProduct && Object.keys(campaign.audienceScoresByProduct).length > 0 && (
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="section-title">
-              Audience Performance by Product
-            </h2>
-          </div>
-          <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>
-            What the audit verdicts and targeting guards actually consume — per-product scores beat the
-            all-products aggregate. Amber n = thin sample, treated as hypothesis-grade by the agents.
-          </p>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {Object.entries(campaign.audienceScoresByProduct).map(([product, scores]) => {
-              const rows = normalizeAudienceScores(scores)
-              if (rows.length === 0) return null
-              return (
-                <div key={product} className="card p-5">
-                  <h3 className="micro-label mb-3" style={{ color: 'var(--accent)' }}>
-                    {product}
-                  </h3>
-                  <AudienceScoreRows scores={rows} />
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ===== SECTION A2: WINNING EXEMPLARS ===== */}
       {creative?.winningExemplars && creative.winningExemplars.length > 0 && (
         <div className="mb-10">
           <div className="flex items-center gap-2 mb-4">
             <Trophy size={15} style={{ color: 'var(--good)' }} />
             <h2 className="section-title">
-              Winning Exemplars
+              High-CTR creative examples
             </h2>
             <span className="chip chip-neutral mono">
               {creative.winningExemplars.length}
             </span>
           </div>
           <div className="card p-5">
+            <p className="mb-4 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+              Ranked by observed click-through rate. Engagement strength does not by itself prove revenue impact.
+            </p>
             <WinningExemplarsTable exemplars={creative.winningExemplars} />
           </div>
         </div>
@@ -926,10 +980,13 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <LayoutGrid size={15} style={{ color: 'var(--warn)' }} />
             <h2 className="section-title">
-              Hook Saturation
+              Modeled hook saturation
             </h2>
           </div>
           <div className="card p-5">
+            <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+              Estimated exposure concentration by audience and hook style. Use as a refresh signal, not a measured outcome.
+            </p>
             <HookSaturationHeatmap data={creative.audienceHookSaturation} />
           </div>
         </div>
@@ -941,7 +998,7 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <GitBranch size={15} style={{ color: 'var(--accent)' }} />
             <h2 className="section-title">
-              Causal Insights
+              Controlled pattern hypotheses
             </h2>
             <span className="chip chip-neutral mono">
               {company.learnings.causalInsights.length}
@@ -956,7 +1013,7 @@ export default function LearningsPage({ params }: PageProps) {
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             <h2 className="section-title">
-              Case Studies
+              Campaign evidence library
             </h2>
             {caseStudies.length > 0 && (
               <span className="chip chip-neutral mono">
@@ -964,7 +1021,7 @@ export default function LearningsPage({ params }: PageProps) {
               </span>
             )}
           </div>
-          <div className="relative" style={{ width: 256 }}>
+          <div className="relative w-full sm:w-64">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 z-10" style={{ color: 'var(--ink-3)' }} />
             <input
               type="text"
@@ -981,12 +1038,12 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="card py-12 text-center">
             <BookOpen size={28} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
             <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>
-              {search ? 'No case studies match your search' : 'No case studies yet'}
+              {search ? 'No campaign evidence matches your search' : 'No campaign evidence yet'}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
               {search
                 ? 'Try a different search term'
-                : 'Case studies are created automatically as campaigns complete'}
+                : 'Evidence summaries are created automatically as campaigns complete'}
             </p>
           </div>
         ) : (

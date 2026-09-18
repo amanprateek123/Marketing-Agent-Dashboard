@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Play, Loader2, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
+
 interface TriggerPipelineButtonProps {
   tenantId: string
 }
@@ -16,7 +18,7 @@ export function TriggerPipelineButton({ tenantId }: TriggerPipelineButtonProps) 
     setState('loading')
     setMessage('')
     try {
-      const res = await fetch(`http://localhost:8082/api/v1/pipeline/${tenantId}/trigger`, {
+      const res = await fetch(`${API_BASE}/pipeline/${tenantId}/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })

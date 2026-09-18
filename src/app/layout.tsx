@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import { AuthGate } from "@/components/layout/AuthGate";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -22,8 +23,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "BriefOS — Marketing Intelligence",
-  description: "BriefOS: the autonomous marketing pipeline, observed.",
+  title: {
+    default: "Meridian — AI Growth OS",
+    template: "%s · Meridian",
+  },
+  description:
+    "Plan, launch, diagnose, and improve growth campaigns with explainable AI and human-controlled safeguards.",
+  applicationName: "Meridian",
 };
 
 export default function RootLayout({
@@ -36,7 +42,9 @@ export default function RootLayout({
       lang="en"
       className={`${plusJakarta.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col meridian-root">
+        <AuthGate>{children}</AuthGate>
+      </body>
     </html>
   );
 }

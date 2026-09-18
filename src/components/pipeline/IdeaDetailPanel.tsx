@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import {
   X, Star, CheckCircle2, Sparkles, ArrowRight, Loader2, ThumbsUp, XCircle,
-  Image as ImageIcon, Video, Copy, Users, DollarSign, Target, Package, ExternalLink,
+  Image as ImageIcon, Video, Copy, ExternalLink,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import {
@@ -359,7 +359,7 @@ export function IdeaDetailPanel({
                       <div className="flex gap-2">
                         <button onClick={onApprove} disabled={approveState !== 'idle'}
                           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-bold transition-all disabled:opacity-60"
-                          style={{ background: 'var(--good)', color: '#0c0a09' }}>
+                          style={{ background: 'var(--good)', color: '#fff' }}>
                           {approveState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <ThumbsUp size={14} />}
                           {approveState === 'loading' ? 'Approving...' : approveState === 'success' ? 'Approved!' : 'Approve'}
                         </button>
@@ -404,7 +404,7 @@ export function IdeaDetailPanel({
           {!isProduced && onProduce && (
             <button onClick={onProduce} disabled={producing}
               className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-[10px] text-sm font-bold transition-all disabled:opacity-60"
-              style={{ background: 'var(--accent)', color: '#0c0a09' }}>
+              style={{ background: 'var(--accent)', color: '#fff' }}>
               {producing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {producing ? 'Starting...' : 'Produce This Idea'}
             </button>

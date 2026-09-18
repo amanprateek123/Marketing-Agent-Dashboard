@@ -1,0 +1,100 @@
+.readinessCard {
+  position: relative;
+  overflow: hidden;
+  padding: 22px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, var(--accent-aura), transparent 16rem),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.score {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.score::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: inherit;
+  background: var(--surface);
+}
+
+.scoreValue {
+  position: relative;
+  z-index: 1;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.readinessLink {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-height: 48px;
+  padding: 11px;
+  border-radius: 11px;
+  transition: background var(--duration-fast) ease;
+}
+
+.readinessLink:hover { background: var(--surface-warm); }
+
+.sideNav {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.sideNavLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
+}
+
+.sideNavLink:hover { color: var(--accent-strong); background: var(--accent-bg); }
+
+.sectionAnchor { scroll-margin-top: 88px; }
+
+.loadingCard {
+  position: relative;
+  overflow: hidden;
+  min-height: 190px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.loadingCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--accent-bg), transparent);
+  animation: settingsSweep 1.6s infinite;
+}
+
+@keyframes settingsSweep { to { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .readinessLink, .sideNavLink { transition: none; }
+  .loadingCard::after { display: none; animation: none; }
+}

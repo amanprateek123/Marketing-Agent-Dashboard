@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
-  Activity,
   CheckCircle2,
   Circle,
   Loader2,
@@ -13,7 +12,6 @@ import {
   Image as ImageIcon,
   Video,
   Sparkles,
-  Copy,
   AlertCircle,
   ThumbsUp,
   XCircle,
@@ -30,7 +28,7 @@ import { triggerPipeline } from '@/lib/api'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import type { FullRunData, CopyVariant, CreativePackage, Campaign } from '@/types'
 
-const API_BASE = 'http://localhost:8082/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
 
 interface PageProps {
   params: Promise<{ tenantId: string; runId: string }>
@@ -50,13 +48,13 @@ function getDuration(start?: string, end?: string): string {
 // ── Phase stepper ─────────────────────────────────────────────────────────────
 
 const PHASES = [
-  { key: 'scouts', label: 'Scouts' },
-  { key: 'intelligence', label: 'Intelligence' },
+  { key: 'scouts', label: 'Signals' },
+  { key: 'intelligence', label: 'Synthesis' },
   { key: 'research', label: 'Research' },
-  { key: 'ideas', label: 'Ideas' },
-  { key: 'digest', label: 'Digest' },
+  { key: 'ideas', label: 'Strategy' },
+  { key: 'digest', label: 'Brief' },
   { key: 'creative', label: 'Creative' },
-  { key: 'campaign', label: 'Campaign' },
+  { key: 'campaign', label: 'Launch' },
 ]
 const FINAL_PHASE_IDX = PHASES.length // 7 — sentinel for "completed"
 
@@ -113,11 +111,11 @@ function PhaseProgress({ status }: { status: string }) {
                   }
                 >
                   {done ? (
-                    <CheckCircle2 size={12} style={{ color: '#0c0a09' }} />
+                    <CheckCircle2 size={12} style={{ color: '#fff' }} />
                   ) : active ? (
                     <Loader2 size={11} className="animate-spin" style={{ color: 'var(--accent)' }} />
                   ) : isFailed && idx <= currentPhaseIdx ? (
-                    <Circle size={8} style={{ color: '#0c0a09' }} />
+                    <Circle size={8} style={{ color: '#fff' }} />
                   ) : (
                     <span className="text-[8px] font-bold" style={{ color: 'var(--ink-4)' }}>{idx + 1}</span>
                   )}
@@ -204,7 +202,7 @@ function FailureBanner({ tenantId, error }: { tenantId: string; error?: string }
           onClick={handleResume}
           disabled={resuming}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-60 shrink-0"
-          style={{ background: 'var(--warn)', color: '#0c0a09' }}
+          style={{ background: 'var(--warn)', color: '#fff' }}
         >
           {resuming ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} fill="currentColor" />}
           {resuming ? 'Triggering…' : 'Resume'}
@@ -229,6 +227,8 @@ function FailureBanner({ tenantId, error }: { tenantId: string; error?: string }
 
 // ── Score badge ───────────────────────────────────────────────────────────────
 
+// Retained for the alternate compact-score layout used by run exports.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ScoreBadge({ score }: { score?: number }) {
   if (score === undefined || score === null) return null
   const style =
@@ -246,6 +246,8 @@ function ScoreBadge({ score }: { score?: number }) {
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
+// Retained for the alternate compact-score layout used by run exports.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ScoreBar({ score, max = 10 }: { score?: number; max?: number }) {
   if (score === undefined || score === null) return null
   const pct = Math.max(0, Math.min(100, (score / max) * 100))
@@ -311,6 +313,8 @@ function AccordionSection({
 
 // ── Idea row (with optional inline creative + campaign) ────────────────────────
 
+// Retained for backward-compatible rendering of archived run payloads.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CreativeInlinePanel({
   creativePackage,
   copyVariants,
@@ -382,7 +386,7 @@ function CreativeInlinePanel({
                 const isSel = i === (selectedCopyIndex ?? 0)
                 return (
                   <div key={i} className="relative">
-                    {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#0c0a09' }}>Selected</span>}
+                    {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#fff' }}>Selected</span>}
                     {img.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={img.imageUrl} alt={`Variant ${i + 1}`} className="rounded-lg w-full" style={{ border: isSel ? '2px solid var(--good)' : '1px solid var(--hairline)', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
@@ -419,6 +423,8 @@ function CreativeInlinePanel({
   )
 }
 
+// Retained for backward-compatible rendering of archived run payloads.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CampaignInlinePanel({
   campaign,
   onApprove,
@@ -598,12 +604,12 @@ function SectionHeader({
 // ── Section tabs ───────────────────────────────────────────────────────────────
 
 const SECTIONS = [
-  { label: 'Scouts', emoji: '📡' },
-  { label: 'Research', emoji: '🔬' },
-  { label: 'Ad Library', emoji: '🏪' },
+  { label: 'Market signals', emoji: '📡' },
+  { label: 'Deep research', emoji: '🔬' },
+  { label: 'Competitor ads', emoji: '🏪' },
   { label: 'Strategy', emoji: '✨' },
-  { label: 'Creative', emoji: '🎨' },
-  { label: 'Campaign', emoji: '📣' },
+  { label: 'Creative output', emoji: '🎨' },
+  { label: 'Launch plan', emoji: '📣' },
 ]
 
 function SectionTabs({
@@ -906,9 +912,9 @@ function CreativeEntryCard({
                       return (
                         <div key={i} className="flex flex-col gap-1.5">
                           <div className="relative">
-                            {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#0c0a09' }}>Selected</span>}
+                            {isSel && <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold px-1 py-0.5 rounded" style={{ background: 'var(--good)', color: '#fff' }}>Selected</span>}
                             {cardState === 'polling' && (
-                              <div className="absolute inset-0 z-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(12,10,9,0.7)' }}>
+                              <div className="absolute inset-0 z-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(23,20,15,0.55)' }}>
                                 <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
                               </div>
                             )}
@@ -1129,7 +1135,7 @@ export default function RunDetailPage({ params }: PageProps) {
               if (Object.keys(sibPkgs).length > 0) setSiblingCreativePackages(sibPkgs)
             }
           }
-        } catch (e) {
+        } catch {
           // campaign cross-ref failed silently
         }
       }
@@ -1237,7 +1243,7 @@ export default function RunDetailPage({ params }: PageProps) {
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
           <p className="text-sm font-medium" style={{ color: 'var(--ink-2)' }}>
-            Loading pipeline run…
+            Loading AI growth run…
           </p>
         </div>
       </div>
@@ -1254,7 +1260,7 @@ export default function RunDetailPage({ params }: PageProps) {
           <div className="flex items-center gap-3 mb-2">
             <AlertCircle size={18} style={{ color: 'var(--bad)' }} />
             <h3 className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>
-              Failed to Load Run
+              Could not load this AI growth run
             </h3>
           </div>
           <p className="text-sm" style={{ color: 'var(--bad)' }}>
@@ -1330,14 +1336,14 @@ export default function RunDetailPage({ params }: PageProps) {
       )}
 
       {/* Header area */}
-      <div className="max-w-5xl mx-auto px-8 pt-8 animate-fade-up">
+      <div className="max-w-[1280px] mx-auto px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8 animate-fade-up">
         {/* Back link */}
         <Link
           href={`/dashboard/${tenantId}/runs`}
           className="inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors mb-6"
           style={{ color: 'var(--ink-3)' }}
         >
-          <ArrowLeft size={13} /> Back to Runs
+          <ArrowLeft size={13} /> Activity &amp; audit
         </Link>
 
         {/* Run header card */}
@@ -1346,10 +1352,10 @@ export default function RunDetailPage({ params }: PageProps) {
             <div className="flex items-start justify-between gap-5 flex-wrap mb-5">
               <div>
                 <p className="micro-label mb-2">
-                  Pipeline run · <span className="mono normal-case tracking-normal">{runId}</span>
+                  Auditable AI workflow · <span className="mono normal-case tracking-normal">{runId}</span>
                 </p>
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h1 className="page-title">Pipeline Run</h1>
+                  <h1 className="page-title">AI growth run</h1>
                   {run && <StatusBadge status={run.status} />}
                   {isActive && (
                     <span className="chip chip-accent">
@@ -1406,7 +1412,7 @@ export default function RunDetailPage({ params }: PageProps) {
       </div>
 
       {/* ===== CONTENT ===== */}
-      <div className="max-w-5xl mx-auto px-8 py-6">
+      <div className="max-w-[1280px] mx-auto px-4 py-6 sm:px-6 lg:px-8">
         {/* ===== SECTION B: SIGNAL SCOUTS ===== */}
         {activeSection === 0 && <div className="rounded-xl p-6" style={sectionStyle}>
           <SectionHeader number="01" title="Signal Scouts" icon={<span style={{ color: 'var(--accent)' }}>📡</span>} />

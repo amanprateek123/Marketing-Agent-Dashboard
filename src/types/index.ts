@@ -1,3 +1,13 @@
+import type {
+  IntelligenceReviewEvidenceBundle,
+  IntelligenceReviewResult,
+} from './intelligence-review'
+
+export type {
+  IntelligenceReviewEvidenceBundle,
+  IntelligenceReviewResult,
+} from './intelligence-review'
+
 export interface MetaConnection {
   accessToken?: string
   accountId?: string
@@ -21,6 +31,14 @@ export interface Product {
   customEventName?: string       // Only when conversionEvent === 'CustomEvent'
   customConversionId?: string    // Custom conversion from Meta Events Manager (takes priority)
   pixelId?: string               // Per-product pixel override (blank = use company default)
+  // App Promotion/Engagement — native-app counterpart to pixelId. Set together
+  // with conversionEvent (read as an App Event name, e.g. "chat_success").
+  // Mutually exclusive with pixelId/customConversionId in practice.
+  metaAppId?: string
+  metaAppStoreUrl?: string        // Default/fallback store URL — used when an ad set doesn't split by OS
+  metaAppStoreUrlIos?: string     // App Store URL — used when an ad set's userOs targets iOS only
+  metaAppStoreUrlAndroid?: string // Play Store URL — used when an ad set's userOs targets Android only
+  pageId?: string                // Per-product Facebook Page override (blank = use company default) — which Page this product's ads post as
   conversionValue?: number
   // Decimal 0-1 (e.g. 0.97 = 97% margin after COGS/fulfilment/fees). Drives
   // breakeven ROAS = 1 / contributionMargin in the auditor's loss detection.
@@ -154,6 +172,83 @@ export interface AdSetPerformance {
   cpa: number
   roas: number
   capturedAtDay: number
+}
+
+// ── Intelligence shadow decisions (16-engine cascade output) ────────────────
+export type IntelligenceDecisionStatus =
+  | 'shadow_review'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+
+export interface IntelligenceDecisionEvidenceStep {
+  step: string
+  source: string
+}
+
+export interface IntelligenceDecision {
+  _id: string
+  tenantId: string
+  campaignId: string
+  metaCampaignId?: string
+  campaignName?: string
+  /** Meta-imported campaigns can be analyzed but remain diagnostic-only. */
+  campaignSource?: 'agent' | 'human' | 'manual'
+  cycleId: string
+  actionId: string
+  actionType: string
+  targetType: string
+  targetId: string
+  parameters: Record<string, unknown>
+  /** Present on fresh goal-aware decisions; absent on historical rows. */
+  decisionContractVersion?: 'goal_aware_v1' | string
+  objective?: string
+  primaryKPI?: string
+  expectedImpact?: {
+    metric: string
+    deltaPct: number
+    confidence: number
+    basis?: 'modeled' | 'observed_gap' | 'not_estimated'
+    currentValue?: number
+    siblingBaselineValue?: number
+    observedGapPct?: number
+  }
+  /** For revenue goals, true only when product economics and return provenance passed. */
+  financialDataAvailable?: boolean
+  expectedProfitDeltaINR7d: number
+  reasoning: string
+  evidenceChain: IntelligenceDecisionEvidenceStep[]
+  risk: 'low' | 'medium' | 'high'
+  score: number
+  confidence?: number
+  gatedBy: string[]
+  requiresHumanApproval: boolean
+  /** Persisted, bounded Step-14 review. Missing on legacy or not-yet-reviewed rows. */
+  intelligenceReviewVersion?: string
+  intelligenceReview?: IntelligenceReviewResult
+  intelligenceEvidence?: IntelligenceReviewEvidenceBundle
+  intelligenceReviewedAt?: string
+  evidenceSnapshot?: {
+    kind: string
+    reasoning: string
+    metrics: Record<string, number>
+  }
+  reviewWindowExpiresAt: string
+  status: IntelligenceDecisionStatus
+  shadowModeOnly: boolean
+  reviewedBy?: string
+  reviewedAt?: string
+  rejectionReason?: string
+  /** Current backend review metadata; legacy aliases above remain for older snapshots. */
+  humanReviewedAt?: string
+  humanReviewedBy?: string
+  humanReviewNotes?: string
+  /** Present when an approved recommendation was applied to the live Meta object. */
+  executedAt?: string
+  /** Meta execution can fail after the human approval itself is recorded. */
+  executionError?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ShadowAction {
@@ -436,6 +531,30 @@ export interface CreativeImage {
   variantIndex?: number
   imagePrompt?: string
   imageUrl?: string
+  /** True pre-edit source — every edit-image call re-applies all editInstructions here, never to a previous edit's output. */
+  originalImageUrl?: string
+  editInstructions?: string[]
+  aspectRatio?: string
+  resolution?: string
+  /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
+  rejected?: boolean
+  /**
+   * Set when this entry is a placement size the backend derived by canvas-
+   * extending another asset (value = that asset's imageUrl) rather than a
+   * separately generated creative. Present => render it as a size OF its
+   * source, not as its own variant, and don't offer regenerate/edit/reject on
+   * it — those act on the variant, which is keyed by variantIndex alone and
+   * would resolve to the original anyway.
+   */
+  extendedFrom?: string
+  /**
+   * Set when this entry is an alternate size a human uploaded ready-made
+   * alongside the creative (value = that creative's imageUrl) rather than one
+   * the backend derived. Same display rule as `extendedFrom` — a size OF its
+   * source, never the creative itself — but it's a real cut rather than a
+   * canvas-extended one, so it's labelled differently.
+   */
+  uploadedSizeOf?: string
 }
 
 export interface CreativeVideo {
@@ -443,9 +562,36 @@ export interface CreativeVideo {
   videoThumbnailUrl?: string
   variantIndex?: number
   videoPrompt?: string
+  aspectRatio?: string
+  resolution?: string
+  /** Which engine rendered this — undefined means 'heygen' (the original default). */
+  provider?: 'heygen' | 'higgsfield'
+  /** Higgsfield job_type when provider === 'higgsfield', e.g. 'seedance_2_0', 'kling3_0_turbo'. */
+  providerModel?: string
+  /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
+  rejected?: boolean
+}
+
+/** One slide of a carousel-format creative — a "grid/story" sequence of 3-10 cards. */
+export interface CarouselCard {
+  slotIndex: number
+  headline: string
+  description?: string
+  imagePrompt?: string
+  imageUrl?: string
+  imageHash?: string
+  cardLink?: string
 }
 
 export interface CreativePackage {
+  _id?: string
+  tenantId?: string
+  runId?: string
+  briefId?: string
+  /** Which product this was generated for — set for library creatives, empty for older/one-off packages. */
+  productName?: string
+  /** Canonical language the copy/creative was generated in (e.g. "hinglish", "marathi"). */
+  targetLanguage?: string
   status?: string
   copyVariants?: CopyVariant[]
   selectedCopyIndex?: number
@@ -453,10 +599,70 @@ export interface CreativePackage {
   imagePrompt?: string
   images?: CreativeImage[]
   video?: CreativeVideo
+  /** Additive to `video` — multiple pre-made sizes of the same video, each tagged with aspectRatio. */
+  videos?: CreativeVideo[]
   videoPrompt?: string
+  /** Scene-by-scene Higgsfield build (plan -> generate per-scene -> merge into `video`). Empty unless that manual workflow was used. */
+  videoScenes?: Array<{
+    sceneIndex: number
+    prompt: string
+    durationSeconds: number
+    aspectRatio: string
+    resolution: string
+    videoUrl: string
+    status: 'pending' | 'completed' | 'failed'
+    providerModel: string
+    error?: string
+  }>
+  /** Total duration the scene plan was built for. */
+  videoTotalDurationSeconds?: number
+  /** Cartesia-narrated COPY of video.videoUrl — original is never overwritten. Empty until a voiceover has been added. */
+  videoWithVoiceoverUrl?: string
+  /** Devanagari narration script last used to produce videoWithVoiceoverUrl. */
+  voiceoverScript?: string
+  /** Only populated for format='carousel' — images[] stays empty in that case. */
+  carouselCards?: CarouselCard[]
   complianceNotes?: string
   debateRounds?: number
   debateLog?: Array<{ round: number; from: string; summary: string }>
+  createdAt?: string
+}
+
+/** Which Meta surfaces an ad set can serve on. Undefined -> 'vertical', the long-standing default (backend: placement-presets.ts). */
+export type PlacementPreset = 'vertical' | 'vertical_feed' | 'everywhere'
+
+export const PLACEMENT_PRESET_OPTIONS: { value: PlacementPreset; label: string }[] = [
+  { value: 'vertical', label: 'Vertical only (Stories & Reels)' },
+  { value: 'vertical_feed', label: 'Vertical + Feed' },
+  { value: 'everywhere', label: 'Everywhere (Facebook + Instagram)' },
+]
+
+/**
+ * Meta optimization_goal choices exposed at ad-set creation — both for a
+ * brand-new campaign and for adding an ad set to an already-live one.
+ * Single source of truth so the two forms never drift (see
+ * VALID_OPTIMIZATION_GOALS in optimization-goals.ts on the backend, which
+ * this list must stay a subset of).
+ */
+export const OPTIMIZATION_OPTIONS = ['OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS', 'AD_RECALL_LIFT', 'THRUPLAY', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS']
+export const OPTIMIZATION_LABELS: Record<string, string> = {
+  OFFSITE_CONVERSIONS: 'Offsite Conversions',
+  LINK_CLICKS: 'Link Clicks',
+  LANDING_PAGE_VIEWS: 'Landing Page Views',
+  REACH: 'Reach',
+  IMPRESSIONS: 'Impressions',
+  AD_RECALL_LIFT: 'Ad Recall Lift',
+  THRUPLAY: 'ThruPlay Views',
+  TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: '2-Second Continuous Video Plays',
+}
+// Shown instead of OPTIMIZATION_OPTIONS when the campaign objective is App
+// Promotion — the web-oriented goals above don't apply to an app product, and
+// mixing them in makes it too easy to pick a combination the backend has to
+// silently downgrade (see VALID_OPTIMIZATION_GOALS in optimization-goals.ts).
+export const APP_OPTIMIZATION_OPTIONS = ['APP_INSTALLS', 'OFFSITE_CONVERSIONS']
+export const APP_OPTIMIZATION_LABELS: Record<string, string> = {
+  APP_INSTALLS: 'App Installs',
+  OFFSITE_CONVERSIONS: 'App Engagement (in-app event)',
 }
 
 export interface AdSetConfig {
@@ -464,10 +670,21 @@ export interface AdSetConfig {
   budgetPercent: number
   audienceType: 'lookalike' | 'advantage_plus' | 'retarget' | 'interest' | 'custom'
   metaAudienceId?: string
+  excludeAudienceIds?: string[]
   ageMin?: number
   ageMax?: number
+  gender?: string
   geoLocations?: string[]
+  /** Meta region keys — replace the country layer at launch. */
+  geoStates?: string[]
+  /** Meta city keys — replace the country layer at launch. */
+  geoCities?: string[]
+  /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — see getMetaLocales() for the verified table. */
+  locales?: number[]
+  interests?: string[]
   optimizationGoal?: string
+  creativeFormat?: 'video' | 'image' | 'both' | 'mixed' | 'carousel'
+  placementPreset?: PlacementPreset
   ads?: number[]
 }
 
@@ -484,18 +701,114 @@ export interface CampaignAd {
   hookStyle?: string
   format?: string
   status?: string
+  effectiveStatus?: string
+  creativeId?: string
+  creativeName?: string
+  // Creative attributes — parsed from Meta's object_story_spec / asset_feed_spec,
+  // not inferred from the ad name. Empty on dynamic-creative ads (Meta mixes
+  // variants at delivery time — see isDynamicCreative).
+  creativeBody?: string
+  creativeTitle?: string
+  creativeCta?: string
+  creativeLinkUrl?: string
+  creativeVideoId?: string
+  creativeImageHash?: string
+  thumbnailUrl?: string
+  isDynamicCreative?: boolean
   spend?: number
   impressions?: number
+  reach?: number
+  frequency?: number
   clicks?: number
+  conversions?: number
+  revenue?: number
+  roas?: number
   ctr?: number
   cpc?: number
+  cpm?: number
+  cpa?: number
+  aov?: number
+  cvr?: number
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  // Link clicks vs all clicks (which includes non-link engagement)
+  inlineLinkClicks?: number
+  outboundClicks?: number
+  linkCtr?: number
+  // Hook rate (3-sec plays / impressions) and hold rate (thruplay / 3-sec plays)
+  video3s?: number
+  thruplay?: number
+  hookRate?: number
+  holdRate?: number
+  videoP25?: number
+  videoP50?: number
+  videoP75?: number
+  videoP100?: number
+  videoP25Pct?: number
+  videoP50Pct?: number
+  videoP75Pct?: number
+  videoP100Pct?: number
+  qualityRanking?: string
+  engagementRanking?: string
+  conversionRanking?: string
   ctrBaseline?: number
   replacementHistory?: ReplacementHistoryEntry[]
+  dateStart?: string
+  dateStop?: string
+  // Trailing 7-day window — separate from the lifetime fields above, used for
+  // fatigue/recency reads.
+  last7d?: {
+    spend?: number
+    impressions?: number
+    clicks?: number
+    ctr?: number
+    conversions?: number
+    revenue?: number
+    cpa?: number
+  }
   metrics?: {
     spend?: number
     ctr?: number
     conversions?: number
+    roas?: number
+    cpa?: number
+    cpc?: number
+    cpm?: number
+    revenue?: number
   }
+}
+
+/** Full structured targeting — everything beyond the flattened summary strings. */
+export interface TargetingDetail {
+  ageMin?: number | null
+  ageMax?: number | null
+  genders?: string
+  geo?: {
+    countries?: string[]
+    regions?: Array<{ id?: string; name?: string; key?: string }>
+    cities?: Array<{ key?: string; name?: string; radius?: number | null; distanceUnit?: string }>
+    locationTypes?: string[]
+    excludedCountries?: string[]
+    excludedRegions?: Array<{ id?: string; name?: string }>
+    excludedCities?: Array<{ id?: string; name?: string }>
+  }
+  interests?: Array<{ id?: string; name?: string }>
+  behaviors?: Array<{ id?: string; name?: string }>
+  flexibleSpec?: unknown[]
+  exclusions?: unknown
+  customAudiences?: Array<{ id?: string; name?: string }>
+  excludedCustomAudiences?: Array<{ id?: string; name?: string }>
+  locales?: number[]
+  devicePlatforms?: string[]
+  publisherPlatforms?: string[]
+  facebookPositions?: string[]
+  instagramPositions?: string[]
+  audienceNetworkPositions?: string[]
+  messengerPositions?: string[]
+  advantageAudience?: boolean
+  targetingOptimization?: string
+  brandSafety?: string[]
 }
 
 export interface CampaignAdSet {
@@ -509,11 +822,59 @@ export interface CampaignAdSet {
   optimizationGoal?: string
   spend?: number
   impressions?: number
+  reach?: number
   clicks?: number
   conversions?: number
+  revenue?: number
+  roas?: number
   ctr?: number
+  cpc?: number
+  cpm?: number
   cpa?: number
+  aov?: number
+  cvr?: number
   frequency?: number
+  // Funnel
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  // Video
+  videoP25?: number
+  videoP50?: number
+  videoP75?: number
+  videoP100?: number
+  videoP25Pct?: number
+  videoP50Pct?: number
+  videoP75Pct?: number
+  videoP100Pct?: number
+  // Rankings
+  qualityRanking?: string
+  engagementRanking?: string
+  conversionRanking?: string
+  // Delivery
+  learningStage?: string
+  effectiveStatus?: string
+  // Bidding / delivery config
+  bidAmount?: number
+  bidStrategy?: string
+  billingEvent?: string
+  attributionSpec?: unknown
+  promotedObject?: unknown
+  startTime?: string
+  endTime?: string
+  // Targeting — flattened summary strings (fast to render in tables) …
+  age?: string
+  gender?: string
+  placement?: string
+  audienceSize?: number
+  interests?: string[]
+  geo?: string
+  // … plus the full structured version (custom audiences, regions/cities,
+  // exclusions, Advantage+ audience flag).
+  targetingDetail?: TargetingDetail
+  // Time
+  dateStart?: string
+  dateStop?: string
   ads?: CampaignAd[]
   addedByAudit?: boolean
   metrics?: {
@@ -523,6 +884,10 @@ export interface CampaignAdSet {
     conversions?: number
     frequency?: number
     cpa?: number
+    cpc?: number
+    cpm?: number
+    reach?: number
+    revenue?: number
   }
 }
 
@@ -561,6 +926,358 @@ export interface CampaignAction {
 }
 
 export type PendingAction = CampaignAction
+
+/** One segment's performance within a breakdown (age×gender, region, placement, …). */
+export interface BreakdownRow {
+  keys: Record<string, string>
+  spend: number
+  impressions: number
+  reach?: number
+  clicks: number
+  ctr: number
+  conversions: number
+  revenue: number
+  cpa: number
+  roas: number
+}
+
+/** GET /campaigns/:tenantId/:campaignId/breakdowns response — keyed by breakdown type. */
+export type CampaignBreakdowns = Partial<Record<
+  'age_gender' | 'region' | 'country' | 'placement' | 'hourly' | 'dow' | 'asset_body' | 'asset_title' | 'asset_video',
+  { rows: BreakdownRow[]; fetchedAt: string; window: string }
+>>
+
+/** One day's row from GET /campaigns/:tenantId/:campaignId/timeseries. */
+export interface TimeseriesPoint {
+  date: string
+  spend: number
+  impressions: number
+  reach?: number
+  frequency?: number
+  clicks: number
+  ctr: number
+  cpc?: number
+  cpm?: number
+  conversions: number
+  revenue: number
+  addToCart?: number
+  initiateCheckout?: number
+  landingPageView?: number
+  video3s?: number
+  thruplay?: number
+  entityId?: string
+  adsetId?: string
+}
+
+/* ─── Manual Create Campaign ─── */
+
+export interface MetaAudienceOption {
+  id: string
+  name: string
+  type: 'custom' | 'lookalike'
+  lookalikePercent?: number
+  productName?: string
+}
+
+export interface MetaInterestOption {
+  id: string
+  name: string
+  audienceSize: number
+}
+
+/**
+ * A Meta geo-targeting location (state/region or city) from the live
+ * adgeolocation search. `key` is the opaque Meta identifier that goes into
+ * targeting.geo_locations.regions[].key / .cities[].key — never a name, and
+ * never a hand-copied constant (the backend hardcoded region keys before this
+ * search existed, with the same drift risk that bit the locale ID table).
+ */
+export interface MetaGeoOption {
+  key: string
+  name: string
+  type: string
+  /** Parent state on city results — disambiguates same-named cities. */
+  region?: string
+  countryCode?: string
+}
+
+/**
+ * Live custom/lookalike audience from ONE specific ad account (not the
+ * saved product.metaAudiences snapshot) — Custom Audiences are account-
+ * scoped Meta objects, so this list always matches whichever account the
+ * Create Campaign form is currently targeting.
+ */
+export interface MetaCustomAudience {
+  id: string
+  name: string
+  type: 'custom' | 'lookalike'
+  subtype?: string
+  approxSizeLower?: number
+  approxSizeUpper?: number
+  deliveryStatus?: string
+}
+
+/* ─── Meta Ad Accounts (settings — account picker) ─── */
+
+export interface MetaAdAccount {
+  id: string // "act_123456"
+  name: string
+  status: 'active' | 'disabled' | 'unsettled' | 'pending_review' | 'in_grace_period' | 'pending_closure' | 'other'
+  currency: string
+  timezoneName: string
+  currentlySynced: boolean
+}
+
+export interface MetaAdAccountsResponse {
+  accounts: MetaAdAccount[]
+  total: number
+  active: number
+}
+
+export interface MetaBusiness {
+  id: string
+  name: string
+}
+
+/* ─── Meta Pages (settings — Page picker) ─── */
+// Added after a prod incident (2026-07-29): company.meta.pageId was a
+// hand-typed, unvalidated ID and silently pointed ads at the wrong Facebook
+// Page. This lets the settings UI show real Page names instead of a bare ID.
+
+export interface MetaPage {
+  id: string
+  name: string
+  category?: string
+  /** True = token can post ads as this Page right now (from /me/accounts). False = owned by the Business Manager but not yet granted to this token — will fail at launch until access is granted. */
+  accessible: boolean
+  /** True = authorized on THIS tenant's own ad account(s) right now (Meta's promote_pages allowlist) — the exact per-account gate Ads Manager enforces. A Page can be accessible above and still get rejected at launch if it isn't on this list. */
+  promotable: boolean
+  currentlySelected: boolean
+}
+
+export interface MetaPagesResponse {
+  pages: MetaPage[]
+  total: number
+  accessible: number
+  promotable: number
+}
+
+export interface ManualAdSetInput {
+  name: string
+  budgetPercent: number
+  audienceType: 'advantage_plus' | 'lookalike' | 'retarget' | 'custom' | 'interest'
+  metaAudienceId?: string
+  excludeAudienceIds?: string[]
+  ageMin?: number
+  ageMax?: number
+  gender?: 'male' | 'female' | 'all'
+  /** ISO country codes. Dropped at launch whenever geoStates/geoCities are set. */
+  geoLocations?: string[]
+  /**
+   * Meta region keys from searchMetaGeo(). These REPLACE the country layer at
+   * launch — Meta rejects overlapping country + region targeting (subcode
+   * 1487756), so the backend sends whichever is narrowest, never both.
+   */
+  geoStates?: string[]
+  /** Meta city keys, same source and precedence as geoStates (25km radius applied at launch). */
+  geoCities?: string[]
+  /** Meta locale IDs (e.g. 81 = Marathi, 46 = Hindi) — filters delivery to users whose platform language matches. */
+  locales?: number[]
+  /** Device OS targeting — 'iOS'/'Android' to split an App Promotion/Engagement campaign into per-platform ad sets with independent budgets/reporting. Omit for no OS filter (ships to both). */
+  userOs?: ('iOS' | 'Android')[]
+  interests?: Array<{ id: string; name: string }>
+  optimizationGoal?: string
+  creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
+  placementPreset?: PlacementPreset
+  /** Which copy-variant indices this ad set ships as ads. Omit/empty = all variants (default, unchanged behavior). Every variant must be covered by at least one ad set across the campaign. */
+  ads?: number[]
+}
+
+export interface ManualCopyVariant {
+  primaryText: string
+  headline: string
+  cta: string
+  hookStyle?: string
+}
+
+export interface CreateManualCampaignDto {
+  name: string
+  productName?: string
+  campaignType: 'advantage_plus' | 'custom'
+  budget: number
+  objective?: string
+  adSets: ManualAdSetInput[]
+  /** Exactly one of creative / creativePackageId must be set. */
+  creative?: {
+    copyVariants: ManualCopyVariant[]
+    /**
+     * Usually one image per variantIndex. Give the same variantIndex a
+     * second (or third) entry tagged with a different aspectRatio to
+     * supply a human creative team's pre-made sizes — launch() then routes
+     * each size to the placement it was composed for (Stories/Reels vs.
+     * Feed/everything else) instead of auto-cropping one image.
+     */
+    images?: Array<{ variantIndex: number; imageUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }>
+    video?: { variantIndex: number; videoUrl: string; videoThumbnailUrl?: string } | null
+    /** Additive to `video` — multiple pre-made sizes of the same video. Set instead of `video`, not alongside it. */
+    videos?: Array<{ variantIndex: number; videoUrl: string; videoThumbnailUrl?: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }>
+  }
+  /** Reuse an existing, already-produced creative from the creative library. */
+  creativePackageId?: string
+}
+
+/**
+ * Edit a still-pending campaign's structure/targeting/budget — everything
+ * optional, unset fields keep their current value. Only valid while status
+ * is pending_approval with no metaCampaignId yet. Creative content itself
+ * (copy text, image/video) is edited via updateCreativePackage instead.
+ */
+export interface UpdateManualCampaignConfigDto {
+  name?: string
+  /**
+   * Reassign the campaign to a different product. Re-resolves conversion
+   * event/value from it and rewrites campaign.productName — which is what
+   * launch reads for the landing URL, pixel and custom conversion. Also the
+   * repair path for older campaigns that have no product recorded.
+   */
+  productName?: string
+  accountId?: string
+  campaignType?: 'advantage_plus' | 'custom'
+  budget?: number
+  objective?: string
+  adSets?: ManualAdSetInput[]
+}
+
+/* ── Pre-launch review ─────────────────────────────────────────────────────
+   GET /campaigns/:tenantId/:campaignId/review — the resolved truth about what
+   approving will actually do: which product the ads point at, the exact
+   destination URL, the pixel and conversion event they'll optimize toward, the
+   ₹/day each ad set gets, and `blockers` (what will make Approve fail).
+   Values here are RESOLVED, not stored — the destination is the same string
+   launch sends to Meta, not a field copied off the campaign document. */
+
+export interface LaunchReviewIssue {
+  /** Stable machine code — drives the plain-English headline in the UI. */
+  code: string
+  message: string
+  /** Where to go to fix it, when there's an obvious place. */
+  fix?: string
+}
+
+export interface LaunchReviewProduct {
+  name: string
+  /** 'campaign' = recorded explicitly on the campaign. Anything else was inferred. */
+  resolvedVia: 'campaign' | 'brief' | 'sole_active'
+  landingUrl: string
+  price: number | null
+  currency: string
+  conversionValueGross: number
+  conversionValueNet: number
+  refundRatePercent: number
+  contributionMargin: number | null
+  breakevenROAS: number | null
+  conversionTracking:
+    | { type: 'custom_conversion'; id: string }
+    | { type: 'custom_event'; name: string }
+    | { type: 'standard_event'; event: string }
+    | { type: 'app_event'; event: string; applicationId: string }
+  pixelId: string
+  pixelSource: 'product' | 'company_default'
+  /** Set when conversionTracking.type === 'app_event' — same value as conversionTracking.applicationId. */
+  applicationId: string | null
+  appStoreUrl: string | null
+  metaOptimizationGoal: string | null
+  languages: string[]
+}
+
+export interface LaunchReviewAdSet {
+  name: string
+  budgetPercent: number
+  /** ₹/day this ad set actually gets — budget × its share, already computed. */
+  dailyBudget: number
+  audienceType: string
+  customAudience: { id: string; name: string } | null
+  excludedAudiences: Array<{ id: string; name: string } | null>
+  ageMin: number | null
+  ageMax: number | null
+  gender: string
+  geoLocations: string[]
+  /** Meta region keys that will ship (suppressing the country layer). */
+  geoStates: string[]
+  /** Meta city keys that will ship (suppressing the country layer). */
+  geoCities: string[]
+  /** Which geo layer Meta actually receives — the narrowest one that's set. */
+  effectiveGeoLayer: 'countries' | 'regions' | 'cities'
+  locales: number[]
+  /** Device OS targeting — 'iOS'/'Android' when this ad set splits an App Promotion/Engagement campaign by platform. */
+  userOs: ('iOS' | 'Android')[]
+  interestIds: string[]
+  optimizationGoal: string
+  creativeFormat: string
+  copyVariantIndices: number[]
+  /** The exact page traffic lands on. UTM params are appended per ad at launch. */
+  destinationUrl: string
+}
+
+export interface CampaignLaunchReview {
+  ready: boolean
+  blockers: LaunchReviewIssue[]
+  warnings: LaunchReviewIssue[]
+  campaign: {
+    id: string
+    name: string
+    /** The name Meta will actually create — not always the stored name. */
+    metaCampaignName: string
+    status: string
+    source: string
+    objective: string
+    dailyBudget: number
+    projectedWeeklySpend: number
+    spendCap: number
+    stopTime: string | null
+    intendedAccountId: string
+    allowedAccountIds: string[]
+    isLandingPageTest: boolean
+    briefId: string | null
+    creativePackageId: string | null
+    createdAt: string | null
+    reviewNotes: string
+  }
+  product: LaunchReviewProduct | null
+  adSets: LaunchReviewAdSet[]
+  creative: {
+    packageId: string | null
+    status: string | null
+    copyVariants: Array<{
+      index: number
+      hookStyle: string
+      primaryText: string
+      headline: string
+      description: string
+      cta: string
+    }>
+    images: Array<{
+      variantIndex: number
+      aspectRatio: string | null
+      imageUrl: string
+      rejected: boolean
+    }>
+    videos: Array<{ variantIndex: number; aspectRatio: string | null; videoUrl: string }>
+    carouselCards: Array<{
+      index: number
+      headline: string
+      description: string
+      imageUrl: string
+      link: string
+    }>
+  }
+  budgetContext: {
+    weeklyAlreadyCommitted: number
+    weeklyCap: number
+    weeklyRemaining: number | null
+    maxBudgetPerCampaign: number
+  }
+}
 
 export interface AuditSnapshot {
   auditedAt: string
@@ -638,17 +1355,36 @@ export interface AuditSnapshot {
 export interface Campaign {
   _id: string
   status: 'pending_approval' | 'active' | 'paused' | 'completed' | 'failed'
-  source?: 'agent' | 'manual'
+  source?: 'agent' | 'human' | 'manual'
+  /**
+   * Which product this campaign sells — recorded when it was created. The
+   * landing URL, pixel and conversion event all come from this product at
+   * launch. Empty on campaigns created before the field existed; launch then
+   * falls back to the brief, and refuses to launch if that's ambiguous too.
+   */
+  productName?: string
   syncedAt?: string
   metaAccountId?: string
   lastAuditedAt?: string
   budget?: number
   objective?: string
+  // Structure — which budget levers exist on this campaign.
+  // 'abo' = adset budgets (shift_budget_between_adsets works); 'cbo' = campaign
+  // owns the budget; 'asc' = Advantage+ Shopping (campaign budget + creative only).
+  budgetModel?: 'abo' | 'cbo' | 'asc' | ''
+  bidStrategy?: string
+  buyingType?: string
+  smartPromotionType?: string
+  specialAdCategories?: string[]
+  spendCap?: number
+  stopTime?: string
   metaCampaignId?: string
   briefId?: string
   creativePackageId?: string
   runId?: string
   launchedAt?: string
+  pausedAt?: string
+  pauseReason?: string
   approvedAt?: string
   reviewNotes?: string
   reviewAdjustments?: {
@@ -671,6 +1407,12 @@ export interface Campaign {
   metaAdSets?: CampaignAdSet[]
   pendingActions?: PendingAction[]
   spend?: number
+  /** Persisted action value and its derivation — never reconstruct this from ROAS in the UI. */
+  revenue?: number
+  revenueBasis?: 'meta_action_value' | 'configured_conversion_value' | 'no_attributed_revenue' | 'unknown'
+  revenueAttributionSource?: 'custom_conversion' | 'custom_event' | 'standard_event' | 'app_event' | 'account_fallback' | 'unresolved' | 'unknown'
+  revenueAttributionActionTypes?: string[]
+  dataAsOf?: string
   impressions?: number
   clicks?: number
   conversions?: number
@@ -682,6 +1424,25 @@ export interface Campaign {
   creativeFormat?: CreativeFormat
   weeklyBudgetConsumed?: number
   creativePackage?: CreativePackage
+  pageSwapStatus?: PageSwapStatus | null
+}
+
+/** Progress of an in-place Page swap on a live campaign — same campaign/ad sets/ad IDs, only each ad's creative Page identity changes. Runs in the background; poll the campaign for live progress. */
+export interface PageSwapStatus {
+  status: 'running' | 'complete' | 'failed'
+  targetPageId: string
+  total: number
+  swapped: number
+  failed: number
+  startedAt: string
+  completedAt?: string
+  results: Array<{
+    adSetId: string
+    adId: string
+    status: 'swapped' | 'failed'
+    newCreativeId?: string
+    error?: string
+  }>
 }
 
 export interface FullRunData {
@@ -745,3 +1506,12 @@ export interface CaseStudy {
   }
   lesson?: string
 }
+
+// ── Tenant overview (dashboard home) ───────────────────────────────────────
+export * from './overview'
+
+// ── Custom brief: the external creative pipeline ───────────────────────────
+export * from './pipeline'
+
+// ── Conversational campaign planning ─────────────────────────────────────────
+export * from './campaign-copilot'
