@@ -23,6 +23,8 @@
  *   POST /brain/:tenantId/agents/:agentKey/runs
  *   POST /brain/:tenantId/runs/:runId/cancel
  *   POST /brain/:tenantId/gates/:gateId/decision
+ *   GET   /brain/:tenantId/agents/:agentKey/triggers
+ *   PATCH /brain/:tenantId/agents/:agentKey/triggers/:triggerId
  *   GET  /brain/:tenantId/conversation/:sessionId
  *   POST /brain/:tenantId/conversation/:sessionId/messages
  *
@@ -40,8 +42,10 @@ import {
   readPipeline,
   readRun,
   readRuns,
+  readAgentTriggers,
   readState,
   writeConversationMessage,
+  writeAgentTriggerEnabled,
   writeGateDecision,
   writeRunCancel,
   writeRunStart,
@@ -58,6 +62,7 @@ import type {
   BrainRunDetail,
   BrainRunSummary,
   BrainState,
+  BrainTrigger,
 } from '@/types/brain'
 
 /**
@@ -243,5 +248,39 @@ export function sendBrainMessage(
   return apiFetch<{ runId: string; sessionId: string }>(
     `${base(tenantId)}/conversation/${encodeURIComponent(sessionId)}/messages`,
     { method: 'POST', body: JSON.stringify({ message, ...(mode ? { mode } : {}) }) },
+  )
+}
+
+// ── Schedules ──────────────────────────────────────────────────────────────
+
+/**
+ * What starts this agent, and whether it is on.
+ *
+ * Worth surfacing because a paused schedule is invisible until something does not happen — four
+ * stage agents read as broken for six days when they had simply been replaced by a sweeper.
+ */
+export function getAgentTriggers(
+  tenantId: string,
+  agentKey: BrainAgentKey,
+): Promise<BrainTrigger[]> {
+  if (BRAIN_MOCK) return settle(() => readAgentTriggers(agentKey))
+  return apiFetch<BrainTrigger[]>(`${base(tenantId)}/agents/${agentKey}/triggers`)
+}
+
+/**
+ * Pause or resume one trigger. The only schedule mutation this console can make — the backend's
+ * transport is allowlisted to two Foundry verbs, so a reschedule is not merely hidden here, it is
+ * unreachable.
+ */
+export function setAgentTriggerEnabled(
+  tenantId: string,
+  agentKey: BrainAgentKey,
+  trigger: string,
+  enabled: boolean,
+): Promise<BrainTrigger | null> {
+  if (BRAIN_MOCK) return settle(() => writeAgentTriggerEnabled(agentKey, trigger, enabled), 300)
+  return apiFetch<BrainTrigger | null>(
+    `${base(tenantId)}/agents/${agentKey}/triggers/${encodeURIComponent(trigger)}`,
+    { method: 'PATCH', body: JSON.stringify({ enabled }) },
   )
 }

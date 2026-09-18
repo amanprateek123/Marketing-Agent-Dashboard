@@ -18,6 +18,7 @@
 
 import type {
   BrainAgent,
+  BrainTrigger,
   BrainAgentKey,
   BrainConversation,
   BrainConversationTurn,
@@ -1227,4 +1228,42 @@ export function writeConversationMessage(
   })
   conversations.set(sessionId, seed)
   return { runId, sessionId }
+}
+
+// ── Schedules ──────────────────────────────────────────────────────────────
+
+/**
+ * Stand-in schedules, stateful like the rest of this file so a toggle in the demo behaves the way
+ * the real one does. The shapes mirror what Foundry actually returns — including that `id` and
+ * `cron` are often absent from a list response, which is why the real toggle can address a trigger
+ * by name fragment.
+ */
+const triggerSeed: Record<string, BrainTrigger[]> = {
+  brain: [
+    { id: null, name: 'Daily at 00:00 UTC — the morning allocation', source: 'schedule', cron: '0 0 * * *', enabled: true, status: 'active' },
+    { id: null, name: 'Once a day, a full portfolio review — 10:00 IST', source: 'schedule', cron: '30 4 * * *', enabled: true, status: 'active' },
+    { id: null, name: 'Daily at 06:00 UTC — the consolidate pass', source: 'schedule', cron: '0 6 * * *', enabled: true, status: 'active' },
+  ],
+  'creative-producer': [
+    { id: null, name: 'Scheduled run — every ten minutes', source: 'schedule', cron: '*/10 * * * *', enabled: false, status: 'paused' },
+    { id: null, name: "Incoming webhook — fired by the Brain's pipeline_advance", source: 'webhook', cron: null, enabled: true, status: 'active' },
+  ],
+}
+
+export function readAgentTriggers(agentKey: string): BrainTrigger[] {
+  return triggerSeed[agentKey] ?? []
+}
+
+export function writeAgentTriggerEnabled(
+  agentKey: string,
+  trigger: string,
+  enabled: boolean,
+): BrainTrigger | null {
+  const list = triggerSeed[agentKey]
+  if (!list) return null
+  const hit = list.find((t) => t.id === trigger || t.name.includes(trigger))
+  if (!hit) return null
+  hit.enabled = enabled
+  hit.status = enabled ? 'active' : 'paused'
+  return hit
 }

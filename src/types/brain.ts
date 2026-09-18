@@ -51,6 +51,26 @@ export interface BrainAgentInput {
   defaultValue?: string
 }
 
+/**
+ * One schedule or webhook that can start an agent.
+ *
+ * `enabled` is the only field this console may change. The cron, the name and the kind are
+ * read-only here and live in Studio: turning a known schedule back on is recovering from a visible
+ * mistake, while changing WHEN something runs is a decision about how the company operates.
+ *
+ * `id` and `cron` can be null — Foundry's list response does not always carry them, so the toggle
+ * addresses a trigger by id when there is one and by a name fragment otherwise.
+ */
+export interface BrainTrigger {
+  id: string | null
+  name: string
+  /** 'schedule' | 'webhook' | 'app_event' */
+  source: string
+  cron: string | null
+  enabled: boolean
+  status: string
+}
+
 export interface BrainAgent {
   key: BrainAgentKey
   /** Foundry's own `agt_...` id. Shown as mono metadata, never used for routing. */

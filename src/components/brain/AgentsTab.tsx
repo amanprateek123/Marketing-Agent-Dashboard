@@ -27,6 +27,7 @@ import type {
   BrainRunSummary,
 } from '@/types/brain'
 import { AgentGlyph, RunStatusChip, SectionCard, TRIGGER_LABEL } from './shared'
+import { TriggerList } from './TriggerList'
 import { RunOutputView } from './RunOutput'
 
 const STAGE_LABEL: Record<BrainAgent['stage'], string> = {
@@ -100,7 +101,7 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
 
           <SectionCard
             title="Brain-triggered"
-            description="The core pipeline. You cannot start these — the Brain decides when they run."
+            description="The core pipeline. You cannot start these — the Brain hands each one its work by webhook, and a sweeper re-fires anything the webhook missed."
             padded={false}
           >
             <ul className="flex flex-col">
@@ -118,6 +119,12 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
                     <p className="explain mt-0.5 flex items-center gap-1">
                       <Lock size={10} aria-hidden="true" /> {STAGE_LABEL[agent.stage]} · Brain-triggered
                     </p>
+                    {/* These four are precisely where a paused schedule misleads: they are
+                        webhook-driven by design, so "every schedule paused" is the HEALTHY state
+                        and looked like breakage for six days. Showing it stops that recurring. */}
+                    <div className="mt-2">
+                      <TriggerList tenantId={tenantId} agentKey={agent.key} />
+                    </div>
                   </div>
                 </li>
               ))}
@@ -310,6 +317,13 @@ function AgentRunPanel({
           {agent.nextRunAt && (
             <span className="explain">Next automatic run {formatRelativeTime(agent.nextRunAt)}</span>
           )}
+        </div>
+
+        <div className="mb-5">
+          <p className="micro-label mb-2" style={{ color: 'var(--ink-2)' }}>
+            What starts it
+          </p>
+          <TriggerList tenantId={tenantId} agentKey={agent.key} />
         </div>
 
         <div className="flex flex-col gap-4">
