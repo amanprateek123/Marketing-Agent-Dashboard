@@ -66,6 +66,16 @@ export interface BrainAgent {
   lastRun: BrainRunSummary | null
   /** Empty for every agent the operator cannot start. */
   inputs: BrainAgentInput[]
+  /**
+   * Whether the Foundry run token actually grants this agent.
+   *
+   * Separate from `status` (what the agent is) and `invocation` (who may start it). An agent can
+   * be live, on-demand, and still unrunnable because the run token was never widened to include
+   * it — and until this field existed, the only way to find that out was to start a run and read
+   * the refusal out of a 502. Optional so the fixtures and any older payload still typecheck;
+   * treat a missing value as "assume runnable", since that was the old behaviour.
+   */
+  runnable?: boolean
 }
 
 // ── Runs ───────────────────────────────────────────────────────────────────

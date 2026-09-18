@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { BrainCircuit, CornerDownLeft, Loader2, RotateCcw, User } from 'lucide-react'
-import { getBrainConversation, sendBrainMessage } from '@/lib/brain-api'
+import { getBrainAgents, getBrainConversation, sendBrainMessage } from '@/lib/brain-api'
 import { getBrainSessionId, resetBrainSessionId } from '@/lib/brain-session'
 import type { BrainConversation, BrainConversationTurn } from '@/types/brain'
 import { BrainError, SectionCard } from './shared'
@@ -29,7 +29,20 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [awaitingRun, setAwaitingRun] = useState<string | null>(null)
+  // null while unknown. The Brain being un-runnable is worth saying BEFORE someone writes a
+  // paragraph and watches it fail: the message is recorded either way, but a person who typed it
+  // has no way to tell a refusal from a bug.
+  const [brainRunnable, setBrainRunnable] = useState<boolean | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    void getBrainAgents(tenantId)
+      .then((agents) => {
+        const brain = agents.find((a) => a.key === 'brain')
+        setBrainRunnable(brain ? brain.runnable !== false : null)
+      })
+      .catch(() => setBrainRunnable(null))
+  }, [tenantId])
 
   useEffect(() => {
     setSessionId(getBrainSessionId(tenantId))
@@ -120,6 +133,21 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
       padded={false}
     >
       <div className="flex flex-col">
+        {brainRunnable === false && (
+          <p
+            className="mx-5 mt-4 rounded-xl px-4 py-3 text-sm"
+            style={{
+              background: 'var(--warn-bg)',
+              border: '1px solid var(--warn-border)',
+              color: 'var(--ink-2)',
+            }}
+          >
+            <strong>The Brain is not granted to this Foundry run token yet.</strong> You can still
+            write here and the turn is recorded, but no run will start to answer it until the token
+            allows <code>agt_01a08a637be471038bba2efa34cb8c92</code>. Re-sending afterwards lands on
+            the same turn rather than asking twice.
+          </p>
+        )}
         {conversation && conversation.omittedOlder > 0 && (
           <p className="explain px-5 pt-4">
             {conversation.omittedOlder} older turn{conversation.omittedOlder === 1 ? '' : 's'} not
