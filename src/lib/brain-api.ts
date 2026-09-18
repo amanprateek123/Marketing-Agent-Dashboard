@@ -61,10 +61,22 @@ import type {
 } from '@/types/brain'
 
 /**
- * Mock is the default because the bridge is not built. Flipping this to
- * "false" is the entire cutover — nothing else in the console knows.
+ * Fixtures are OPT-IN, and that is a deliberate reversal.
+ *
+ * This defaulted to mock — `(… ?? 'true') !== 'false'` — from when the bridge did not exist and a
+ * fake console was the only console. The bridge exists now, and that default had become a landmine:
+ * `NEXT_PUBLIC_*` is baked into the client bundle at BUILD time, the working `false` lived only in a
+ * gitignored `.env.local`, and whoever deploys this will not know the flag exists. A clean deploy
+ * would therefore ship a page serving `brain-fixtures.ts` — stateful, animated, plausible invented
+ * gates and decisions — with nothing but one chip to say so.
+ *
+ * Failing closed is the point of the console. A page about what the Brain decided, quietly showing
+ * decisions it never made, is worse than a page that errors: an unset variable now produces real
+ * calls that fail loudly against a misconfigured bridge, which is visible and fixable.
+ *
+ * Set `NEXT_PUBLIC_BRAIN_MOCK=true` at build time to get the demo back.
  */
-export const BRAIN_MOCK = (process.env.NEXT_PUBLIC_BRAIN_MOCK ?? 'true') !== 'false'
+export const BRAIN_MOCK = process.env.NEXT_PUBLIC_BRAIN_MOCK === 'true'
 
 /** Enough latency that loading and empty states are actually exercised in dev. */
 function settle<T>(value: () => T, ms = 320): Promise<T> {
