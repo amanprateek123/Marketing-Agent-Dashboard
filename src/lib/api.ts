@@ -61,7 +61,13 @@ export async function apiFetch<T = unknown>(
     ...init,
   })
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
-  return res.json()
+  // A 200 with an empty body is how Nest sends `null` from a handler, and it is a real answer on
+  // at least one route: GET /brain/:tenantId/pipeline returns null whenever no campaign is being
+  // built, which is most of the time. `res.json()` throws "Unexpected end of JSON input" on that,
+  // so the Pipeline tab broke on a perfectly healthy day. Read the text once and decide.
+  const body = await res.text()
+  if (!body) return null as T
+  return JSON.parse(body) as T
 }
 
 // ── System Intelligence (feedback-loop telemetry) ──────────────────────────
