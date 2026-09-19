@@ -26,6 +26,7 @@ import { BrainTabs } from './BrainTabs'
 import { PulseTab } from './PulseTab'
 import { DecisionsTab } from './DecisionsTab'
 import { PipelineTab } from './PipelineTab'
+import { CampaignRunTab } from './CampaignRunTab'
 import { ApprovalsTab } from './ApprovalsTab'
 import { AgentsTab } from './AgentsTab'
 import { ConversationTab } from './ConversationTab'
@@ -189,6 +190,11 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
         {tab === 'pulse' && <PulseTab state={state} onGoToTab={changeTab} />}
         {tab === 'decisions' && <DecisionsTab decisions={decisions} />}
         {tab === 'pipeline' && <PipelineTab pipeline={pipeline} onGoToTab={changeTab} />}
+        {/* Owns its own fetching: the run list and one run's ads are two more reads, and the
+            console's opening Promise.all should not grow for a tab most visits never open. */}
+        {tab === 'campaign-run' && (
+          <CampaignRunTab tenantId={tenantId} onGoToTab={changeTab} />
+        )}
         {tab === 'approvals' && (
           <ApprovalsTab tenantId={tenantId} gates={gates} onDecided={() => void load('refresh')} />
         )}

@@ -20,6 +20,9 @@ import type {
   BrainAgent,
   BrainTrigger,
   BrainAgentKey,
+  BrainCampaignCreative,
+  BrainCampaignRun,
+  BrainCampaignRunSummary,
   BrainConversation,
   BrainConversationTurn,
   BrainDecision,
@@ -32,6 +35,7 @@ import type {
   BrainRunOutput,
   BrainRunStatus,
   BrainRunSummary,
+  BrainStageKey,
   BrainState,
 } from '@/types/brain'
 
@@ -1266,4 +1270,208 @@ export function writeAgentTriggerEnabled(
   hit.enabled = enabled
   hit.status = enabled ? 'active' : 'paused'
   return hit
+}
+
+/* ── Campaign runs ──────────────────────────────────────────────────────────────
+ *
+ * Two runs on purpose: one mid-flight and waiting on a person, one finished and live. A fixture
+ * set where everything is healthy hides exactly the states the page exists to show.
+ *
+ * Creative `imageUrl` is null throughout, which is the honest fixture: in mock mode there is no
+ * bridge to sign an S3 link, so the page must draw its labelled placeholder. If these carried
+ * stock photos, the placeholder path would never be exercised until production.
+ */
+
+const CAMPAIGN_RUNS: BrainCampaignRunSummary[] = [
+  {
+    runId: '94',
+    product: 'Golu Devta Arzi',
+    campaignType: 'New launch',
+    stageLabel: 'Setting up the campaign',
+    statusLabel: 'In progress',
+    tone: 'progress',
+    startedOn: '2026-09-19',
+    updatedAt: new Date(Date.now() - 42 * 60_000).toISOString(),
+    creativesChosen: 6,
+    creativesPlanned: 6,
+    isLive: false,
+  },
+  {
+    runId: '86',
+    product: 'Nadi Report Premium',
+    campaignType: 'New launch',
+    stageLabel: 'Finished',
+    statusLabel: 'Finished',
+    tone: 'good',
+    startedOn: '2026-09-14',
+    updatedAt: '2026-09-15T09:13:38.885Z',
+    creativesChosen: 6,
+    creativesPlanned: 6,
+    isLive: true,
+  },
+]
+
+const CAMPAIGN_CREATIVES: Record<string, BrainCampaignCreative[]> = {
+  '94': [
+    {
+      id: 'arzi_temple_bell_close',
+      imageUrl: null,
+      headline: 'Send Your Wish to Golu Devta',
+      caption:
+        'Devotees who cannot travel to Almora send their letters by post. We write your plea, tie it at the Chitai temple on your behalf, and send you the photo.',
+      description: 'Tied at Chitai, Almora',
+      callToAction: 'Shop Now',
+      language: 'Hindi',
+      statusLabel: 'Chosen',
+      tone: 'good',
+      score: 71,
+      note: 'Strongest of the batch — the bell close-up carries the ritual without needing the copy to explain it.',
+      style: 'Pain Point · Problem · Raw',
+    },
+    {
+      id: 'arzi_letter_handwritten',
+      imageUrl: null,
+      headline: 'Your Wish, Written and Offered',
+      caption:
+        'Our team collects every wish through the month, then makes one dedicated trip to the Chitai temple to offer them together.',
+      description: 'Proof photo sent to you',
+      callToAction: 'Shop Now',
+      language: 'Hindi',
+      statusLabel: 'Chosen',
+      tone: 'good',
+      score: 64,
+      note: null,
+      style: 'Curiosity · Question · Polished',
+    },
+  ],
+  '86': [
+    {
+      id: 'hero_open_exact_problem',
+      imageUrl: null,
+      headline: 'Get Your Nadi Life Map',
+      caption:
+        'Recurring blocks across career, love, health or wealth? See how your life map reads them together rather than one at a time.',
+      description: 'Personalised Nadi reading',
+      callToAction: 'Shop Now',
+      language: 'Hindi',
+      statusLabel: 'Running',
+      tone: 'good',
+      score: 65,
+      note: null,
+      style: 'Curiosity · Question · Raw',
+    },
+  ],
+}
+
+const CAMPAIGN_RUN_DETAIL: Record<string, BrainCampaignRun> = {
+  '94': {
+    ...CAMPAIGN_RUNS[0],
+    headline: 'Golu Devta Arzi — setting up the campaign',
+    steps: [
+      {
+        key: 'producer',
+        label: 'Making the ads',
+        what: 'Writing and designing a batch of ads for this product.',
+        state: 'done',
+        gateId: null,
+      },
+      {
+        key: 'curator',
+        label: 'Picking the best',
+        what: 'Scoring every ad and keeping only the ones good enough to run.',
+        state: 'done',
+        gateId: null,
+      },
+      {
+        key: 'builder',
+        label: 'Setting up the campaign',
+        what: 'Creating the campaign, audiences and ads in Meta — all paused.',
+        state: 'waiting_for_human',
+        gateId: '47',
+      },
+      {
+        key: 'launcher',
+        label: 'Going live',
+        what: 'Waiting for your approval, then switching everything on.',
+        state: 'idle',
+        gateId: null,
+      },
+    ],
+    brief: [
+      { label: 'Ads to run', value: '6', hint: 'How many finished ads this campaign should end up with.' },
+      { label: 'Audiences', value: '1', hint: 'How many separate audiences the budget is split across.' },
+      { label: 'Shortlisting', value: '9 made, 6 kept', hint: 'More are produced than are needed, so the weakest can be dropped.' },
+      { label: 'Language', value: 'Hindi, some English', hint: null },
+      { label: 'Styles', value: 'Raw and Polished', hint: 'The visual treatments being tried against each other.' },
+      { label: 'Daily budget', value: '₹3,000 a day', hint: 'The rate this campaign spends per day once it is live.' },
+      { label: 'Judge after', value: '₹2,198 spent', hint: 'An ad is not called a winner or a loser before it has had a fair run.' },
+    ],
+    audiences: [
+      {
+        name: 'People with matching interests',
+        budget: '₹3,000 a day',
+        adsPlanned: 6,
+        excludes: 'Skips 1 group, including recent buyers',
+        why: 'Golu Devta Arzi has no purchase history yet, so this starts from devotional-interest targeting rather than a lookalike built on buyers that do not exist.',
+      },
+    ],
+    whatHappened:
+      'Owner directive: launch golu_devta_arzi at ₹3,000/day for seven days as a bounded new-product test.',
+    needsYou: 'This is waiting on your approval before it can go further.',
+  },
+  '86': {
+    ...CAMPAIGN_RUNS[1],
+    headline: 'Nadi Report Premium — finished',
+    steps: (['producer', 'curator', 'builder', 'launcher'] as BrainStageKey[]).map((key) => ({
+      key,
+      label:
+        key === 'producer'
+          ? 'Making the ads'
+          : key === 'curator'
+            ? 'Picking the best'
+            : key === 'builder'
+              ? 'Setting up the campaign'
+              : 'Going live',
+      what:
+        key === 'producer'
+          ? 'Writing and designing a batch of ads for this product.'
+          : key === 'curator'
+            ? 'Scoring every ad and keeping only the ones good enough to run.'
+            : key === 'builder'
+              ? 'Creating the campaign, audiences and ads in Meta — all paused.'
+              : 'Waiting for your approval, then switching everything on.',
+      state: 'done' as const,
+      gateId: null,
+    })),
+    brief: [
+      { label: 'Ads to run', value: '6', hint: 'How many finished ads this campaign should end up with.' },
+      { label: 'Audiences', value: '1', hint: 'How many separate audiences the budget is split across.' },
+      { label: 'Daily budget', value: '₹2,500 a day', hint: 'The rate this campaign spends per day once it is live.' },
+    ],
+    audiences: [
+      {
+        name: 'People similar to past buyers',
+        budget: '₹2,500 a day',
+        adsPlanned: 6,
+        excludes: 'Skips 2 groups, including recent buyers',
+        why: 'Uses the verified 1% Nadi-report customer lookalike, excluding 180-day purchasers to reduce known-customer overlap.',
+      },
+    ],
+    whatHappened: '6 approved of 6, 18 optional sizes dropped.',
+    needsYou: null,
+  },
+}
+
+export function readCampaignRuns(): BrainCampaignRunSummary[] {
+  return CAMPAIGN_RUNS
+}
+
+export function readCampaignRun(runId: string): BrainCampaignRun {
+  const run = CAMPAIGN_RUN_DETAIL[runId]
+  if (!run) throw new Error(`There is no campaign run ${runId}.`)
+  return run
+}
+
+export function readCampaignRunCreatives(runId: string): BrainCampaignCreative[] {
+  return CAMPAIGN_CREATIVES[runId] ?? []
 }

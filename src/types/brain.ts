@@ -493,6 +493,7 @@ export type BrainTabKey =
   | 'pulse'
   | 'decisions'
   | 'pipeline'
+  | 'campaign-run'
   | 'approvals'
   | 'agents'
   | 'conversation'
@@ -501,6 +502,7 @@ export const BRAIN_TAB_KEYS: BrainTabKey[] = [
   'pulse',
   'decisions',
   'pipeline',
+  'campaign-run',
   'approvals',
   'agents',
   'conversation',
@@ -508,4 +510,87 @@ export const BRAIN_TAB_KEYS: BrainTabKey[] = [
 
 export function isBrainTabKey(value: string | undefined): value is BrainTabKey {
   return !!value && (BRAIN_TAB_KEYS as string[]).includes(value)
+}
+
+/* ── The campaign run, in plain language ────────────────────────────────────────
+ *
+ * The mirror of the same block in the API's `src/foundry-bridge/brain.types.ts`.
+ *
+ * These shapes exist so this page can show a campaign being built WITHOUT showing how it is
+ * built. There is no Foundry run id here, no agent id, no stage-dispatch row and no raw JSON,
+ * because none of that helps the person deciding whether to spend the money — and a page that
+ * renders `{"ads_wanted":6}` has not explained anything to anyone. Every string below arrives
+ * ready to print: the bridge did the translating.
+ *
+ * The usual rule still holds. A missing score is null, not zero. An unjudged creative has no
+ * verdict. Nothing here is padded out to look complete.
+ */
+
+/** Colour/urgency for a chip, decided by the bridge so the page never re-derives it. */
+export type BrainRunTone = 'progress' | 'waiting' | 'good' | 'bad' | 'idle'
+
+/** One row in the run list. */
+export interface BrainCampaignRunSummary {
+  runId: string
+  product: string
+  campaignType: string
+  stageLabel: string
+  statusLabel: string
+  tone: BrainRunTone
+  startedOn: string
+  updatedAt: string | null
+  creativesChosen: number | null
+  creativesPlanned: number | null
+  isLive: boolean
+}
+
+/** One labelled fact from the brief. The page prints label and value, and nothing else. */
+export interface BrainBriefField {
+  label: string
+  value: string
+  hint: string | null
+}
+
+/** An audience the campaign will run against, described the way a person would say it. */
+export interface BrainCampaignAudience {
+  name: string
+  budget: string | null
+  adsPlanned: number | null
+  excludes: string | null
+  why: string | null
+}
+
+/** One finished creative: the picture, and the words that ship with it. */
+export interface BrainCampaignCreative {
+  id: string
+  /** A short-lived signed link, or null when we hold no key for its bucket. Never a raw S3 URL. */
+  imageUrl: string | null
+  headline: string | null
+  caption: string | null
+  description: string | null
+  callToAction: string | null
+  language: string | null
+  statusLabel: string
+  tone: BrainRunTone
+  score: number | null
+  note: string | null
+  style: string | null
+}
+
+/** One of the four steps, named for what it does rather than which agent does it. */
+export interface BrainCampaignStep {
+  key: BrainStageKey
+  label: string
+  what: string
+  state: BrainStageState
+  gateId: string | null
+}
+
+export interface BrainCampaignRun extends BrainCampaignRunSummary {
+  headline: string
+  steps: BrainCampaignStep[]
+  brief: BrainBriefField[]
+  audiences: BrainCampaignAudience[]
+  whatHappened: string | null
+  needsYou: string | null
 }

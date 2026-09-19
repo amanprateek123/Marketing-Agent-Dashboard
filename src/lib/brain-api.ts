@@ -17,6 +17,9 @@
  *   GET  /brain/:tenantId/decisions
  *   GET  /brain/:tenantId/gates
  *   GET  /brain/:tenantId/pipeline
+ *   GET  /brain/:tenantId/pipeline/runs?limit=<n>
+ *   GET  /brain/:tenantId/pipeline/runs/:runId
+ *   GET  /brain/:tenantId/pipeline/runs/:runId/creatives
  *   GET  /brain/:tenantId/runs
  *   GET  /brain/:tenantId/runs/:runId
  *   GET  /brain/:tenantId/runs/:runId/events?after=<cursor>
@@ -35,6 +38,9 @@
 import { apiFetch } from './api'
 import {
   readAgents,
+  readCampaignRun,
+  readCampaignRunCreatives,
+  readCampaignRuns,
   readConversation,
   readDecisions,
   readEvents,
@@ -53,6 +59,9 @@ import {
 import type {
   BrainAgent,
   BrainAgentKey,
+  BrainCampaignCreative,
+  BrainCampaignRun,
+  BrainCampaignRunSummary,
   BrainConversation,
   BrainDecision,
   BrainEventPage,
@@ -129,6 +138,44 @@ export function getBrainGates(tenantId: string): Promise<BrainGate[]> {
 export function getBrainPipeline(tenantId: string): Promise<BrainPipelineRun | null> {
   if (BRAIN_MOCK) return settle(readPipeline)
   return apiFetch<BrainPipelineRun | null>(`${base(tenantId)}/pipeline`)
+}
+
+/**
+ * Every campaign run, newest first — the non-technical view.
+ *
+ * Separate from `getBrainPipeline` on purpose. That one answers "is anything in flight right
+ * now"; these answer "what have we built, and what is actually going out". They are different
+ * questions and a reader opens the page for the second one.
+ */
+export function getCampaignRuns(
+  tenantId: string,
+  limit = 25,
+): Promise<BrainCampaignRunSummary[]> {
+  if (BRAIN_MOCK) return settle(readCampaignRuns)
+  return apiFetch<BrainCampaignRunSummary[]>(
+    `${base(tenantId)}/pipeline/runs?limit=${limit}`,
+  )
+}
+
+export function getCampaignRun(
+  tenantId: string,
+  runId: string,
+): Promise<BrainCampaignRun> {
+  if (BRAIN_MOCK) return settle(() => readCampaignRun(runId))
+  return apiFetch<BrainCampaignRun>(
+    `${base(tenantId)}/pipeline/runs/${encodeURIComponent(runId)}`,
+  )
+}
+
+/** The ads this run settled on. Only finalised ones — half-made rows are not an answer. */
+export function getCampaignRunCreatives(
+  tenantId: string,
+  runId: string,
+): Promise<BrainCampaignCreative[]> {
+  if (BRAIN_MOCK) return settle(() => readCampaignRunCreatives(runId))
+  return apiFetch<BrainCampaignCreative[]>(
+    `${base(tenantId)}/pipeline/runs/${encodeURIComponent(runId)}/creatives`,
+  )
 }
 
 export function getBrainRuns(tenantId: string): Promise<BrainRunSummary[]> {
