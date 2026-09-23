@@ -6,10 +6,11 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Video as VideoIcon, ChevronDown, RefreshCw, LayoutGrid, Zap, Upload, RotateCcw,
   ArrowRight, CheckCircle2, Clock3, FolderOpen,
 } from 'lucide-react'
-import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages } from '@/lib/api'
+import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages, addCustomBriefOffering } from '@/lib/api'
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
 import { ImageDirectionModal } from '@/components/creative/ImageDirectionModal'
-import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef } from '@/types'
+import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef,
+  AddCustomBriefOfferingResult } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
 import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
@@ -166,6 +167,14 @@ export default function CreativesPage({ params }: PageProps) {
   // used to receive no product at all and fall back to its manifest default, so every brief here
   // became a Nadi Report. Pre-selecting the first option would just move that guess into the form.
   const [cbOffering, setCbOffering] = useState('')
+  // "Add a new product": a landing page URL is scraped into a research pack and registered, so the
+  // product becomes pickable without anyone touching the pipeline's manifest by hand.
+  const [cbAddOpen, setCbAddOpen] = useState(false)
+  const [cbNewUrl, setCbNewUrl] = useState('')
+  const [cbNewName, setCbNewName] = useState('')
+  const [cbAdding, setCbAdding] = useState(false)
+  const [cbAddError, setCbAddError] = useState('')
+  const [cbAddResult, setCbAddResult] = useState<AddCustomBriefOfferingResult | null>(null)
   const [cbCount, setCbCount] = useState('')
   const [cbPrompt, setCbPrompt] = useState('')
   const [cbRunId, setCbRunId] = useState<number | null>(null)
@@ -401,6 +410,39 @@ export default function CreativesPage({ params }: PageProps) {
       })
     return () => { cancelled = true }
   }, [engine, cbOptions, tenantId])
+
+  async function handleAddProduct() {
+    const url = cbNewUrl.trim()
+    if (!url) { setCbAddError('Paste the product’s landing page URL'); return }
+    setCbAddError('')
+    setCbAddResult(null)
+    setCbAdding(true)
+    try {
+      const res = await addCustomBriefOffering(tenantId, {
+        landing_url: url,
+        display_name: cbNewName.trim() || undefined,
+      })
+      setCbAddResult(res)
+      // Re-fetch the options so the new product is in the dropdown, then select it. Without the
+      // re-fetch the product exists in the pipeline but not in this page's copy of the list, so the
+      // operator would have to reload to use what they just added.
+      try {
+        const opts = await getCustomBriefOptions(tenantId)
+        setCbOptions(opts)
+      } catch {
+        // The product WAS added; only the refresh failed. Say so rather than implying otherwise.
+        setCbAddError('Added, but the product list could not be refreshed — reload the page to pick it.')
+      }
+      setCbOffering(res.offering.slug)
+      setCbNewUrl('')
+      setCbNewName('')
+      setCbAddOpen(false)
+    } catch (e) {
+      setCbAddError(e instanceof Error ? e.message : 'Could not add the product')
+    } finally {
+      setCbAdding(false)
+    }
+  }
 
   async function handleCustomBriefGenerate() {
     if (!cbPrompt.trim()) { setError('Describe what you want in the brief box'); return }
@@ -757,8 +799,16 @@ export default function CreativesPage({ params }: PageProps) {
                   No pre-selected option on purpose — a default is what caused the bug. */}
               {cbMethod === 'create' && (
                 <div className="mb-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>
-                    Product <span style={{ color: 'var(--ink-4)' }}>· required</span>
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2 flex items-center justify-between gap-2" style={{ color: 'var(--accent-strong)' }}>
+                    <span>Product <span style={{ color: 'var(--ink-4)' }}>· required</span></span>
+                    <button
+                      type="button"
+                      onClick={() => { setCbAddOpen(o => !o); setCbAddError(''); setCbAddResult(null) }}
+                      className="text-[11px] font-semibold normal-case tracking-normal underline"
+                      style={{ color: 'var(--ink-3)' }}
+                    >
+                      {cbAddOpen ? 'Cancel' : '+ Add a new product'}
+                    </button>
                   </p>
                   <select
                     value={cbOffering}
@@ -774,9 +824,84 @@ export default function CreativesPage({ params }: PageProps) {
                   </select>
                   <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
                     {cbOptions && (cbOptions.offerings ?? []).length === 0
-                      ? 'No products are configured in the pipeline — creatives cannot be started until one is.'
+                      ? 'No products are configured in the pipeline — add one below to get started.'
                       : 'Decides the research the copy is written from, the folder it is filed in, and the name it carries here.'}
                   </span>
+
+                  {/* Add a product by giving its landing page. The pipeline scrapes that page into
+                      the research pack its authoring session reads, then registers the product so
+                      it becomes selectable here, in Slack, and to the agents. Previously this meant
+                      running a CLI and hand-editing a manifest. */}
+                  {cbAddOpen && (
+                    <div className="mt-3 p-3 rounded-lg border" style={{ borderColor: 'var(--hairline)', background: 'var(--surface-2, var(--surface))' }}>
+                      <label className="block mb-2">
+                        <span className="text-xs font-semibold block mb-1" style={{ color: 'var(--ink-2)' }}>
+                          Landing page URL
+                        </span>
+                        <input
+                          value={cbNewUrl}
+                          onChange={e => setCbNewUrl(e.target.value)}
+                          className="input"
+                          placeholder="https://www.91astrology.com/graha-kavach-report"
+                          disabled={cbAdding}
+                        />
+                      </label>
+                      <label className="block mb-2">
+                        <span className="text-xs font-semibold block mb-1" style={{ color: 'var(--ink-2)' }}>
+                          Product name <span style={{ color: 'var(--ink-4)' }}>· optional</span>
+                        </span>
+                        <input
+                          value={cbNewName}
+                          onChange={e => setCbNewName(e.target.value)}
+                          className="input"
+                          placeholder="Graha Kavach Report — taken from the URL if left blank"
+                          disabled={cbAdding}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddProduct}
+                        disabled={cbAdding || !cbNewUrl.trim()}
+                        className="btn btn-secondary text-[13px]"
+                      >
+                        {cbAdding
+                          ? <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Reading the page…</>
+                          : 'Add product'}
+                      </button>
+                      <span className="block text-[11px] mt-2 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                        {cbAdding
+                          ? 'Opening the page in a browser to read its price, FAQs and promises. This takes up to a minute.'
+                          : 'We read the page and build the research the copy is written from. Takes up to a minute.'}
+                      </span>
+                      {cbAddError && (
+                        <span className="block text-[11px] mt-2 leading-snug" style={{ color: 'var(--danger, #b42318)' }}>
+                          {cbAddError}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* A pack is written even when the scrape could not find everything, so the gaps
+                      are shown rather than swallowed — a pack that looks complete while being thin
+                      is how a product gets advertised on substance nobody checked. */}
+                  {cbAddResult && (
+                    <div className="mt-2 p-3 rounded-lg border" style={{ borderColor: 'var(--hairline)' }}>
+                      <span className="block text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>
+                        Added <b>{cbAddResult.offering.display_name}</b> and selected it.
+                      </span>
+                      {cbAddResult.gaps.length > 0 ? (
+                        <span className="block text-[11px] mt-1 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                          The page did not state {cbAddResult.gaps.length === 1 ? 'one thing' : `${cbAddResult.gaps.length} things`} we look for
+                          ({cbAddResult.gaps.slice(0, 4).join(', ')}{cbAddResult.gaps.length > 4 ? '…' : ''}).
+                          Worth checking the research before spending against it.
+                        </span>
+                      ) : (
+                        <span className="block text-[11px] mt-1 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                          The page stated everything we look for.
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

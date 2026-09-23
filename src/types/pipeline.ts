@@ -36,6 +36,37 @@ export interface CustomBriefOffering {
   landing_url?: string | null
 }
 
+/** Onboarding a new product: only the landing page is required. */
+export interface AddCustomBriefOfferingBody {
+  landing_url: string
+  display_name?: string
+  slug?: string
+  /** Skip the headless render — faster, but misses collapsed FAQ answers and the live price. */
+  no_render?: boolean
+}
+
+/**
+ * What the pipeline reports after scraping a landing page into a research pack.
+ *
+ * `gaps` is the field that matters: the pack is written even when the scrape could not find
+ * everything, and a pack that looks complete while being thin is how a product gets advertised on
+ * substance nobody verified. Surfaced in the UI rather than swallowed.
+ */
+export interface AddCustomBriefOfferingResult {
+  offering: {
+    slug: string
+    display_name: string
+    landing_url: string
+    status: string
+    aliases?: string[]
+    product_folder?: string
+  }
+  pack_path?: string | null
+  gaps: string[]
+  markdown_chars?: number | null
+  note?: string
+}
+
 export interface CustomBriefOptions {
   methods: CustomBriefChoice[]
   tracks: CustomBriefChoice[]

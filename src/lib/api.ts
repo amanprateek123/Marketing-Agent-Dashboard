@@ -35,6 +35,8 @@ import type {
   CustomBriefStarted,
   CustomBriefImageRef,
   StartCustomBriefBody,
+  AddCustomBriefOfferingBody,
+  AddCustomBriefOfferingResult,
   PlacementPreset,
   CampaignCopilotSessionResponse,
 } from '@/types'
@@ -1314,6 +1316,26 @@ export const getCustomBriefHealth = (tenantId: string) =>
 
 export const startCustomBriefRun = (tenantId: string, body: StartCustomBriefBody) =>
   apiFetch<CustomBriefStarted>(`/pipeline-bridge/${tenantId}/runs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Onboard a new 91Astrology product from its landing page.
+ *
+ * The pipeline scrapes that page into the research pack its authoring session reads, then registers
+ * the product — which is what makes it appear in the Product dropdown here, in Slack, and in the
+ * MCP's allowed list. Until this existed, adding a product meant running a CLI and hand-editing a
+ * manifest, and forgetting the second step left the pack on disk unreachable.
+ *
+ * SLOW: there is a headless browser render in the middle, so this can take the better part of a
+ * minute. Callers should show progress rather than assume it will return promptly.
+ */
+export const addCustomBriefOffering = (
+  tenantId: string,
+  body: AddCustomBriefOfferingBody,
+) =>
+  apiFetch<AddCustomBriefOfferingResult>(`/pipeline-bridge/${tenantId}/offerings`, {
     method: 'POST',
     body: JSON.stringify(body),
   })
