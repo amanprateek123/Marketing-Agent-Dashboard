@@ -162,6 +162,10 @@ export default function CreativesPage({ params }: PageProps) {
   const [cbOptionsError, setCbOptionsError] = useState('')
   const [cbMethod, setCbMethod] = useState<CustomBriefMethod>('create')
   const [cbTrack, setCbTrack] = useState<CustomBriefTrack>('polished')
+  // WHICH product the creative is for. Deliberately starts empty with no default: the pipeline
+  // used to receive no product at all and fall back to its manifest default, so every brief here
+  // became a Nadi Report. Pre-selecting the first option would just move that guess into the form.
+  const [cbOffering, setCbOffering] = useState('')
   const [cbCount, setCbCount] = useState('')
   const [cbPrompt, setCbPrompt] = useState('')
   const [cbRunId, setCbRunId] = useState<number | null>(null)
@@ -400,6 +404,13 @@ export default function CreativesPage({ params }: PageProps) {
 
   async function handleCustomBriefGenerate() {
     if (!cbPrompt.trim()) { setError('Describe what you want in the brief box'); return }
+    // The product decides which research pack the copy is written from, the folder the creative is
+    // filed in and the name it carries here. The pipeline requires it for an astro create and
+    // answers with a 400 listing the allowed values; catch it here rather than round-tripping.
+    if (cbMethod === 'create' && !cbOffering) {
+      setError('Choose which product this creative is for')
+      return
+    }
     // The pipeline rejects an image with no direction (there is no follow-up turn to ask in), so
     // catch it here rather than round-tripping for a 400.
     if (cbFiles.length > 0 && !cbImageDirection) {
@@ -427,6 +438,9 @@ export default function CreativesPage({ params }: PageProps) {
         count: cbCount.trim() || undefined,
         track: cbTrack,
         domain: 'astro',
+        // The product. Sent for 'create' only; a research run discovers the subject rather than
+        // being told it, and the pipeline infers it there only when unambiguous.
+        offering: cbMethod === 'create' ? cbOffering : undefined,
         // Several languages SPLIT the run round-robin rather than multiplying it.
         languages: cbSelectedLanguages.length ? cbSelectedLanguages : undefined,
         formats: cbFormats.length ? cbFormats : undefined,
@@ -731,6 +745,40 @@ export default function CreativesPage({ params }: PageProps) {
                   )
                 })}
               </div>
+
+              {/* Product — mandatory for a create, and never defaulted.
+
+                  Until this existed the form sent no product at all: the backend DTO did not
+                  declare the field (ValidationPipe whitelist stripped it) and the pipeline's own
+                  request model did not either, so it fell back to its manifest default. Every
+                  brief here was written from the Nadi research pack, filed in the Nadi folder and
+                  labelled "Nadi Report" regardless of what was asked for.
+
+                  No pre-selected option on purpose — a default is what caused the bug. */}
+              {cbMethod === 'create' && (
+                <div className="mb-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>
+                    Product <span style={{ color: 'var(--ink-4)' }}>· required</span>
+                  </p>
+                  <select
+                    value={cbOffering}
+                    onChange={e => setCbOffering(e.target.value)}
+                    className="input"
+                    aria-label="Which product is this creative for?"
+                    aria-required="true"
+                  >
+                    <option value="">Choose a product…</option>
+                    {(cbOptions?.offerings ?? []).map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                    {cbOptions && (cbOptions.offerings ?? []).length === 0
+                      ? 'No products are configured in the pipeline — creatives cannot be started until one is.'
+                      : 'Decides the research the copy is written from, the folder it is filed in, and the name it carries here.'}
+                  </span>
+                </div>
+              )}
 
               {/* Brief + count. */}
               <div className="grid md:grid-cols-[1fr_160px] gap-4">
@@ -1232,7 +1280,7 @@ export default function CreativesPage({ params }: PageProps) {
                 </p>
                 <button
                   onClick={handleCustomBriefGenerate}
-                  disabled={submitting || !cbPrompt.trim() || (cbFiles.length > 0 && !cbImageDirection)}
+                  disabled={submitting || !cbPrompt.trim() || (cbMethod === 'create' && !cbOffering) || (cbFiles.length > 0 && !cbImageDirection)}
                   className="btn btn-primary"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}

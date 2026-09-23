@@ -29,11 +29,28 @@ export interface CustomBriefMappedChoice extends CustomBriefChoice {
   instruction: string | null
 }
 
+/** One sellable 91Astrology product. `landing_url` is where its copy should drive traffic. */
+export interface CustomBriefOffering {
+  value: string
+  label: string
+  landing_url?: string | null
+}
+
 export interface CustomBriefOptions {
   methods: CustomBriefChoice[]
   tracks: CustomBriefChoice[]
   formats: CustomBriefMappedChoice[]
   angles: CustomBriefMappedChoice[]
+  /**
+   * The 91Astrology products a creative can be made for — `active`/`pilot` entries from the
+   * pipeline's offerings manifest, newest list served on every load because it is hand-edited.
+   *
+   * The form MUST make the operator choose one. Until it did, no product was sent, the pipeline
+   * stamped none, and it fell back to its manifest default — so every dashboard astro creative was
+   * written from the Nadi research pack, filed in the Nadi folder and labelled "Nadi Report"
+   * whatever the brief said.
+   */
+  offerings: CustomBriefOffering[]
   languages: string[]
   delivery_profiles: { value: string; label: string; aspect: number }[]
   models: { model: string; quality: string }[]
@@ -66,6 +83,13 @@ export interface StartCustomBriefBody {
   count?: string
   track?: CustomBriefTrack
   domain?: 'astro' | 'automotive'
+  /**
+   * WHICH product the creative is for — a `value` from `CustomBriefOptions.offerings`.
+   *
+   * Required by the pipeline for an astro `create`; it answers with a 400 naming the allowed
+   * values if it is missing. Enforced in the form too, so the operator cannot submit without it.
+   */
+  offering?: string
   /** Single-language spelling, kept for callers that only ever send one. */
   language?: string
   /** Several languages SPLIT the run round-robin rather than multiplying it:
