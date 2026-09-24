@@ -419,6 +419,15 @@ export interface BrainGateDecisionBody {
   action: BrainGateActionKey
   note?: string
   selectedIds?: string[]
+  /**
+   * "Approve, but at this daily amount" — the console's equivalent of Slack's `approve at <n>`.
+   *
+   * Recorded on the approval row as `amount_override_inr`. It is a statement of what the approver
+   * actually authorised, NOT a re-funding of the run: nothing downstream reads it back, so the
+   * build still follows the pipeline run's own contract. The UI says that out loud rather than
+   * letting the number imply more than it does.
+   */
+  amountOverrideInr?: number
 }
 
 // ── Pulse ──────────────────────────────────────────────────────────────────

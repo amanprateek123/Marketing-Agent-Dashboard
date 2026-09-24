@@ -98,6 +98,9 @@ function GateCard({
 
   const [selected, setSelected] = useState<string[]>(() => defaultSelection(gate))
   const [note, setNote] = useState('')
+  // Blank means "at the amount proposed". Kept as a string so a half-typed value does not
+  // momentarily read as a different number.
+  const [amount, setAmount] = useState('')
   const [pending, setPending] = useState<BrainGateActionKey | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,6 +123,13 @@ function GateCard({
       return
     }
 
+    const typed = amount.trim()
+    const overrideInr = typed === '' ? undefined : Number(typed)
+    if (overrideInr !== undefined && (!Number.isFinite(overrideInr) || overrideInr < 0)) {
+      setError('That daily amount is not a number.')
+      return
+    }
+
     setPending(action)
     setError(null)
     try {
@@ -127,6 +137,8 @@ function GateCard({
         action,
         note: note.trim() || undefined,
         selectedIds: selectable ? selected : undefined,
+        // Only on approve: an amount attached to a rejection would record a number nobody authorised.
+        amountOverrideInr: action === 'approve' ? overrideInr : undefined,
       })
       onDecided()
     } catch (err) {
@@ -187,6 +199,36 @@ function GateCard({
         className="flex flex-col gap-3 px-5 py-4"
         style={{ background: 'var(--surface-warm)', borderTop: '1px solid var(--hairline)' }}
       >
+        {/* Slack has always accepted `approve at <amount>`; the console had no equivalent, so an
+            operator who wanted a different number either accepted the proposed one or changed it
+            somewhere the record would never show. Spend gates only — there is no amount to
+            override on a creative or idea gate. */}
+        {(gate.kind === 'plan_approval' || gate.kind === 'campaign_launch') && (
+          <label className="block">
+            <span className="micro-label">Approve at a different daily amount</span>
+            <span className="mt-1.5 flex items-center gap-2">
+              <span className="text-[15px] font-semibold" style={{ color: 'var(--ink-3)' }}>₹</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step={500}
+                inputMode="numeric"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="leave blank to approve at the amount proposed"
+                disabled={pending != null}
+              />
+              <span className="explain shrink-0">per day</span>
+            </span>
+            <span className="explain mt-1 block">
+              Recorded against this decision as the amount you authorised. It does not itself
+              re-fund the run — the campaign is built from the pipeline run&rsquo;s own contract —
+              so if the two differ, say so in the note.
+            </span>
+          </label>
+        )}
+
         <label className="block">
           <span className="micro-label">Note back to the agent</span>
           <textarea
