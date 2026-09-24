@@ -20,6 +20,7 @@ import { decideBrainGate } from '@/lib/brain-api'
 import type {
   BrainGate,
   BrainGateActionKey,
+  BrainGateDecisionResult,
   BrainGateCampaign,
   BrainGateCreative,
   BrainGatePlan,
@@ -46,21 +47,45 @@ interface ApprovalsTabProps {
   onDecided: () => void
 }
 
+/** What one decision did, kept after its card is gone so the operator can read it. */
+interface DecisionOutcome {
+  gateId: string
+  title: string
+  spendGate: BrainGate['spendGate']
+  amountInr: number | undefined
+  result: BrainGateDecisionResult
+}
+
 export function ApprovalsTab({ tenantId, gates, onDecided }: ApprovalsTabProps) {
+  // A decided gate's card disappears on the refetch, so what the decision DID — which contract the
+  // brain rescaled, or why it rescaled none — is held here, above the cards, until dismissed.
+  const [outcomes, setOutcomes] = useState<DecisionOutcome[]>([])
+  const recordOutcome = (outcome: DecisionOutcome) =>
+    setOutcomes((current) => [outcome, ...current.filter((o) => o.gateId !== outcome.gateId)])
+  const outcomeList = outcomes.length > 0 && (
+    <DecisionOutcomes
+      outcomes={outcomes}
+      onDismiss={(gateId) => setOutcomes((current) => current.filter((o) => o.gateId !== gateId))}
+    />
+  )
+
   if (gates.length === 0) {
     return (
-      <SectionCard title="Approvals" description="The human-in-the-loop gates, on the platform.">
-        <div className="py-12 text-center">
-          <CircleCheck size={24} aria-hidden="true" style={{ color: 'var(--good)' }} className="mx-auto" />
-          <p className="mt-3 text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
-            Nothing is waiting on you
-          </p>
-          <p className="explain mx-auto mt-1 max-w-[52ch]">
-            When the Curator finishes a batch, or the Builder has a campaign paused and ready, the
-            gate appears here as well as in Slack. Answering it in either place clears it in both.
-          </p>
-        </div>
-      </SectionCard>
+      <div className="flex flex-col gap-6">
+        {outcomeList}
+        <SectionCard title="Approvals" description="The human-in-the-loop gates, on the platform.">
+          <div className="py-12 text-center">
+            <CircleCheck size={24} aria-hidden="true" style={{ color: 'var(--good)' }} className="mx-auto" />
+            <p className="mt-3 text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+              Nothing is waiting on you
+            </p>
+            <p className="explain mx-auto mt-1 max-w-[52ch]">
+              When the Curator finishes a batch, or the Builder has a campaign paused and ready, the
+              gate appears here as well as in Slack. Answering it in either place clears it in both.
+            </p>
+          </div>
+        </SectionCard>
+      </div>
     )
   }
 
@@ -77,8 +102,16 @@ export function ApprovalsTab({ tenantId, gates, onDecided }: ApprovalsTabProps) 
         </p>
       </div>
 
+      {outcomeList}
+
       {gates.map((gate) => (
-        <GateCard key={gate.gateId} tenantId={tenantId} gate={gate} onDecided={onDecided} />
+        <GateCard
+          key={gate.gateId}
+          tenantId={tenantId}
+          gate={gate}
+          onDecided={onDecided}
+          onOutcome={recordOutcome}
+        />
       ))}
     </div>
   )
@@ -88,10 +121,12 @@ function GateCard({
   tenantId,
   gate,
   onDecided,
+  onOutcome,
 }: {
   tenantId: string
   gate: BrainGate
   onDecided: () => void
+  onOutcome: (outcome: DecisionOutcome) => void
 }) {
   const meta = KIND_META[gate.kind]
   const { Icon } = meta
@@ -133,13 +168,23 @@ function GateCard({
     setPending(action)
     setError(null)
     try {
-      await decideBrainGate(tenantId, gate.gateId, {
+      const amountInr = action === 'approve' ? overrideInr : undefined
+      const result = await decideBrainGate(tenantId, gate.gateId, {
         action,
         note: note.trim() || undefined,
         selectedIds: selectable ? selected : undefined,
         // Only on approve: an amount attached to a rejection would record a number nobody authorised.
-        amountOverrideInr: action === 'approve' ? overrideInr : undefined,
+        amountOverrideInr: amountInr,
       })
+      if (amountInr !== undefined) {
+        onOutcome({
+          gateId: gate.gateId,
+          title: gate.title,
+          spendGate: gate.spendGate ?? (gate.kind === 'plan_approval' ? 'plan' : null),
+          amountInr,
+          result,
+        })
+      }
       onDecided()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That decision could not be recorded.')
@@ -221,11 +266,7 @@ function GateCard({
               />
               <span className="explain shrink-0">per day</span>
             </span>
-            <span className="explain mt-1 block">
-              Recorded against this decision as the amount you authorised. It does not itself
-              re-fund the run — the campaign is built from the pipeline run&rsquo;s own contract —
-              so if the two differ, say so in the note.
-            </span>
+            <span className="explain mt-1 block">{amountHelp(gate)}</span>
           </label>
         )}
 
@@ -293,6 +334,146 @@ function GateCard({
       </footer>
     </section>
   )
+}
+
+/**
+ * What "approve at <amount>" will actually do on THIS gate, in one sentence.
+ *
+ * It differs by gate type, and the brain is precise about it: a build gate's amount rescales the
+ * run's contract; a plan gate's only when the gate names exactly one run (otherwise it could be the
+ * day's total or one launch's budget, and the brain refuses to guess); a launch gate's is applied by
+ * the Launcher to the live Meta ad-set budget at activation. Saying anything vaguer here would let
+ * an operator believe a number moved money when it did not — or the reverse.
+ */
+function amountHelp(gate: BrainGate): string {
+  const spend = gate.spendGate ?? (gate.kind === 'plan_approval' ? 'plan' : null)
+  switch (spend) {
+    case 'plan':
+      return gate.pipelineRunId
+        ? `This day plan names run ${gate.pipelineRunId}, so approving at an amount rescales that ` +
+            "run's audience budgets to add up to it, and the campaign is built at that amount."
+        : 'This day plan does not name a single run, so an amount here is recorded but changes no ' +
+            "run's budget — it could mean the day's total or one launch's budget, and the Brain " +
+            "will not guess. To change a run's budget, approve that run's build gate with the amount."
+    case 'build':
+      return (
+        "The run's audience budgets are rescaled to add up to this amount, and the campaign is " +
+        'built at it. If an audience ends up over the per-ad-set cap, that is shown once you approve.'
+      )
+    case 'launch':
+      return 'The Launcher sets the live Meta ad-set budget to this amount when it switches the campaign on.'
+    case 'scale':
+      return 'Recorded as the amount you authorised. What the Brain did with it is shown once you approve.'
+    default:
+      return (
+        "What this amount changes depends on the gate: a build gate rescales the run's audience " +
+        'budgets, a launch gate sets the live ad-set budget at activation. What the Brain did is ' +
+        'shown once you approve.'
+      )
+  }
+}
+
+/**
+ * The answer to "what did my amount do?", straight from `approval_record` — rescaled contracts,
+ * the reason nothing was rescaled, or an honest "not reported" from an older bridge.
+ */
+function DecisionOutcomes({
+  outcomes,
+  onDismiss,
+}: {
+  outcomes: DecisionOutcome[]
+  onDismiss: (gateId: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {outcomes.map((outcome) => {
+        const lines = describeOutcome(outcome)
+        const warn = lines.some((line) => line.tone === 'warn')
+        return (
+          <div
+            key={outcome.gateId}
+            role="status"
+            className="flex items-start gap-3 rounded-xl px-4 py-3"
+            style={{
+              background: warn ? 'var(--warn-bg)' : 'var(--surface-warm)',
+              border: `1px solid ${warn ? 'var(--warn-border)' : 'var(--hairline)'}`,
+            }}
+          >
+            {warn ? (
+              <TriangleAlert size={16} aria-hidden="true" style={{ color: 'var(--warn)', marginTop: 2 }} />
+            ) : (
+              <CircleCheck size={16} aria-hidden="true" style={{ color: 'var(--good)', marginTop: 2 }} />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+                Approved at {formatCurrency(outcome.amountInr ?? 0)} a day — {outcome.title}
+              </p>
+              {lines.map((line, index) => (
+                <p key={index} className="explain mt-1" style={{ color: 'var(--ink-2)' }}>
+                  {line.text}
+                </p>
+              ))}
+            </div>
+            <button type="button" className="btn btn-ghost shrink-0" onClick={() => onDismiss(outcome.gateId)}>
+              Dismiss
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function describeOutcome(outcome: DecisionOutcome): Array<{ text: string; tone: 'ok' | 'warn' }> {
+  const { result, spendGate, amountInr } = outcome
+  const lines: Array<{ text: string; tone: 'ok' | 'warn' }> = []
+  for (const r of result.budgetRescale ?? []) {
+    if (r.rescaled) {
+      lines.push({
+        tone: 'ok',
+        text:
+          `Run ${r.pipelineRunId}: audience budgets rescaled` +
+          (r.contractTotalBeforeInr !== null ? ` from ${formatCurrency(r.contractTotalBeforeInr)}` : '') +
+          (r.contractTotalInr !== null ? ` to ${formatCurrency(r.contractTotalInr)} a day` : '') +
+          '. The Builder builds from this.',
+      })
+    } else {
+      lines.push({
+        tone: 'warn',
+        text:
+          `Run ${r.pipelineRunId} is now authorised at ${formatCurrency(r.authorisedDailyBudgetInr ?? amountInr ?? 0)} ` +
+          `a day, but its audience budgets were not rescaled${r.why ? `: ${r.why}` : ''}.`,
+      })
+    }
+    if (r.exceedsAdsetCap) {
+      lines.push({
+        tone: 'warn',
+        text:
+          `Over the ${r.exceedsAdsetCap.capInr !== null ? formatCurrency(r.exceedsAdsetCap.capInr) + ' ' : ''}` +
+          `per-ad-set cap: ${r.exceedsAdsetCap.entries.join(', ') || 'one or more audiences'}. ` +
+          (r.exceedsAdsetCap.note ?? 'Meta will refuse it as it stands.'),
+      })
+    }
+  }
+  if (result.budgetRescaleSkipped) {
+    lines.push({ tone: 'warn', text: `No run's budget was changed: ${result.budgetRescaleSkipped}` })
+  }
+  if (lines.length === 0) {
+    if (spendGate === 'launch') {
+      lines.push({
+        tone: 'ok',
+        text: 'Recorded. The Launcher applies this amount to the live Meta ad-set budget when it activates.',
+      })
+    } else if (result.budgetRescale === undefined || result.budgetRescale === null) {
+      lines.push({
+        tone: 'warn',
+        text: 'Recorded, but the bridge did not report what the Brain did with the amount.',
+      })
+    } else {
+      lines.push({ tone: 'ok', text: "Recorded. The Brain changed no run's budget for this gate." })
+    }
+  }
+  return lines
 }
 
 function defaultSelection(gate: BrainGate): string[] {

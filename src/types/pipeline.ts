@@ -212,9 +212,24 @@ export interface CustomBriefEvent {
   at: string
 }
 
+/** One run in the tree that is PARKED on a clarifying question, and the question it asked. */
+export interface CustomBriefWaiting {
+  run_id: number
+  item_index: number | null
+  status: string
+  pending_question: string | null
+}
+
 export interface CustomBriefEvents {
   run_id: number
   /** Pass back as `after` on the next poll. */
   cursor: number
   events: CustomBriefEvent[]
+  /**
+   * Every run in this tree parked on a question, recomputed on every poll. `[]` = nothing is
+   * waiting. `null` (with `waiting_error`) = the pipeline could not CHECK — never read that as
+   * "nothing is waiting". Absent = a pipeline that predates the field.
+   */
+  waiting?: CustomBriefWaiting[] | null
+  waiting_error?: string
 }

@@ -29,6 +29,7 @@ import type {
   BrainEventPage,
   BrainGate,
   BrainGateDecisionBody,
+  BrainGateDecisionResult,
   BrainPipelineRun,
   BrainRunDetail,
   BrainRunEvent,
@@ -1099,7 +1100,10 @@ export function writeRunCancel(runId: string): void {
  * gate has to turn the Launcher stage green, or the Pipeline tab would
  * contradict the Approvals tab.
  */
-export function writeGateDecision(gateId: string, body: BrainGateDecisionBody): { ok: true } {
+export function writeGateDecision(
+  gateId: string,
+  body: BrainGateDecisionBody,
+): BrainGateDecisionResult {
   const s = db()
   const gate = s.gates.find((g) => g.gateId === gateId)
   if (!gate) throw new Error('That decision has already been handled.')
@@ -1169,7 +1173,15 @@ export function writeGateDecision(gateId: string, body: BrainGateDecisionBody): 
     ...s.decisions,
   ]
 
-  return { ok: true }
+  // The mock does not model contracts, so it says so rather than inventing a rescale.
+  return {
+    ok: true,
+    budgetRescale: body.amountOverrideInr === undefined ? null : [],
+    budgetRescaleSkipped:
+      body.amountOverrideInr === undefined
+        ? null
+        : 'Sample data — the bridge is not connected, so no contract was rescaled.',
+  }
 }
 
 function countSelectable(gate: BrainGate): number {
@@ -1213,7 +1225,7 @@ export function readConversation(sessionId: string, limit = 20): BrainConversati
 export function writeConversationMessage(
   sessionId: string,
   message: string,
-): { runId: string; sessionId: string } {
+): { runId: string; correlationId: string; sessionId: string } {
   const seed = conversations.get(sessionId) ?? { turns: [] }
   const turnIndex = (seed.turns.length ? seed.turns[seed.turns.length - 1].turnIndex : 0) + 1
   const runId = `run_mock_${Math.random().toString(36).slice(2, 10)}`
@@ -1231,7 +1243,7 @@ export function writeConversationMessage(
     runId,
   })
   conversations.set(sessionId, seed)
-  return { runId, sessionId }
+  return { runId, correlationId: runId, sessionId }
 }
 
 // ── Schedules ──────────────────────────────────────────────────────────────

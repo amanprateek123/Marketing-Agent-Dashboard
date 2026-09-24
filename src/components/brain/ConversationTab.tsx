@@ -28,7 +28,12 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [awaitingRun, setAwaitingRun] = useState<string | null>(null)
+  // The send we are waiting on. `correlationId` is what Brain v2 (2.11.0+) stamps as the answering
+  // turn's run id; `runId` is Foundry's own and is kept as the fallback for an older bridge/brain.
+  const [awaiting, setAwaiting] = useState<{ runId: string; correlationId: string | null } | null>(
+    null,
+  )
+  const awaitingRun = awaiting?.runId ?? null
   // null while unknown. The Brain being un-runnable is worth saying BEFORE someone writes a
   // paragraph and watches it fail: the message is recorded either way, but a person who typed it
   // has no way to tell a refusal from a bug.
@@ -71,21 +76,30 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
    * Poll only while an answer is outstanding, and stop when it lands.
    *
    * Twelve seconds because a Brain run is minutes long — polling faster would spend requests to
-   * learn the same thing. The poll ends when a brain turn carrying this run id appears, which is
+   * learn the same thing. The poll ends when a brain turn answering THIS send appears, which is
    * the actual completion signal; a timer that simply gave up would leave the thread looking
    * answered when it is not.
+   *
+   * The answer is matched on the correlation id the bridge minted for this send, which the Brain
+   * writes as that turn's run id. Foundry's run id is the fallback, for a bridge or Brain that
+   * predates correlation ids.
    */
   useEffect(() => {
-    if (!sessionId || !awaitingRun) return
+    if (!sessionId || !awaiting) return
     const timer = setInterval(() => {
       void load(sessionId).then((next) => {
-        if (next?.turns.some((turn) => turn.role === 'brain' && turn.runId === awaitingRun)) {
-          setAwaitingRun(null)
-        }
+        const answered = next?.turns.some(
+          (turn) =>
+            turn.role === 'brain' &&
+            turn.runId !== null &&
+            ((awaiting.correlationId !== null && turn.runId === awaiting.correlationId) ||
+              turn.runId === awaiting.runId),
+        )
+        if (answered) setAwaiting(null)
       })
     }, 12_000)
     return () => clearInterval(timer)
-  }, [sessionId, awaitingRun, load])
+  }, [sessionId, awaiting, load])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -97,9 +111,9 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
     setSending(true)
     setError(null)
     try {
-      const { runId } = await sendBrainMessage(tenantId, sessionId, text)
+      const { runId, correlationId } = await sendBrainMessage(tenantId, sessionId, text)
       setDraft('')
-      setAwaitingRun(runId)
+      setAwaiting({ runId, correlationId: correlationId ?? null })
       await load(sessionId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The message was not sent.')
@@ -111,7 +125,7 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
   const startNewThread = useCallback(() => {
     const fresh = resetBrainSessionId(tenantId)
     setConversation(null)
-    setAwaitingRun(null)
+    setAwaiting(null)
     setSessionId(fresh)
   }, [tenantId])
 

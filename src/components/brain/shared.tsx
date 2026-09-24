@@ -17,13 +17,14 @@ import {
   TriangleAlert,
   XCircle,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import type {
   BrainAgentKey,
   BrainEvidence,
   BrainRunStatus,
   BrainRunTrigger,
   BrainStageState,
+  BrainBudgetAuthority,
 } from '@/types/brain'
 
 // ── Status vocabulary ──────────────────────────────────────────────────────
@@ -280,6 +281,71 @@ export function BrainError({ message, onRetry }: { message: string; onRetry: () 
       <button type="button" className="btn btn-ghost" onClick={onRetry}>
         Try again
       </button>
+    </div>
+  )
+}
+
+/**
+ * Which budget governs a run, as the brain states it — and, when the contract disagrees with it,
+ * a warning that says so and why.
+ *
+ * consistent:false is not a cosmetic mismatch: the Builder refuses to build a run whose contract
+ * and authorised budget disagree (or whose audience is over Meta's per-ad-set cap), so a run
+ * showing this will sit still until someone fixes the amount. Showing either number alone as "the
+ * budget" is how run 94 was built at ₹5,000 a day with ₹6,000 approved.
+ *
+ * `compact` renders only the warning; a consistent budget draws nothing.
+ */
+export function BudgetAuthorityNotice({
+  authority,
+  compact = false,
+}: {
+  authority: BrainBudgetAuthority | null | undefined
+  compact?: boolean
+}) {
+  if (!authority) return null
+  const authorised =
+    authority.authorisedDailyBudgetInr !== null
+      ? `${formatCurrency(authority.authorisedDailyBudgetInr)} a day`
+      : 'nothing yet'
+  const contract =
+    authority.contractTotalInr !== null
+      ? `${formatCurrency(authority.contractTotalInr)} a day`
+      : 'no daily budgets'
+
+  if (authority.consistent) {
+    if (compact) return null
+    return (
+      <p className="explain">
+        Budget: <strong>{authorised}</strong>
+        {authority.sourceLabel ? ` — set by ${authority.sourceLabel.toLowerCase()}` : ''}. The
+        audiences add up to it.
+      </p>
+    )
+  }
+
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-3 rounded-xl px-4 py-3"
+      style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
+    >
+      <TriangleAlert size={16} aria-hidden="true" style={{ color: 'var(--warn)', marginTop: 2 }} />
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
+          The budget does not add up, so this will not be built until it does.
+        </p>
+        <p className="explain mt-1" style={{ color: 'var(--ink-2)' }}>
+          Authorised: {authorised}
+          {authority.sourceLabel ? ` (${authority.sourceLabel.toLowerCase()})` : ''} · the audiences
+          add up to {contract}.
+        </p>
+        {authority.why && (
+          <p className="explain mt-1" style={{ color: 'var(--ink-2)' }}>
+            Why: {authority.why}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

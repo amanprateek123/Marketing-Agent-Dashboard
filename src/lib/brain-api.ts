@@ -67,6 +67,7 @@ import type {
   BrainEventPage,
   BrainGate,
   BrainGateDecisionBody,
+  BrainGateDecisionResult,
   BrainPipelineRun,
   BrainRunDetail,
   BrainRunSummary,
@@ -244,14 +245,17 @@ export function cancelBrainRun(tenantId: string, runId: string): Promise<{ ok: t
  * Answers a human-in-the-loop gate — the same gates that live in Slack today.
  * One endpoint for approve / reject / revise so the two surfaces can never
  * drift apart on what a decision means.
+ *
+ * The answer says what an approved AMOUNT did: which run contracts the brain rescaled
+ * (`budgetRescale`), or why it rescaled none (`budgetRescaleSkipped`).
  */
 export function decideBrainGate(
   tenantId: string,
   gateId: string,
   body: BrainGateDecisionBody,
-): Promise<{ ok: true }> {
+): Promise<BrainGateDecisionResult> {
   if (BRAIN_MOCK) return settle(() => writeGateDecision(gateId, body), 520)
-  return apiFetch<{ ok: true }>(`${base(tenantId)}/gates/${gateId}/decision`, {
+  return apiFetch<BrainGateDecisionResult>(`${base(tenantId)}/gates/${gateId}/decision`, {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -284,15 +288,19 @@ export function getBrainConversation(
  * and the wiki before it says anything, which takes minutes. The turn is recorded immediately, the
  * run id comes back, and the answer arrives in the thread when the Brain commits it — so the caller
  * polls the conversation rather than holding a request open across a real piece of work.
+ *
+ * `correlationId` is minted by the bridge and passed to the run; Brain v2 2.11.0+ writes it as the
+ * `runId` of the answering turn, so the caller matches the answer on it. It is optional here because
+ * an older bridge does not return one — fall back to `runId` then.
  */
 export function sendBrainMessage(
   tenantId: string,
   sessionId: string,
   message: string,
   mode?: string,
-): Promise<{ runId: string; sessionId: string }> {
+): Promise<{ runId: string; correlationId?: string; sessionId: string }> {
   if (BRAIN_MOCK) return settle(() => writeConversationMessage(sessionId, message), 600)
-  return apiFetch<{ runId: string; sessionId: string }>(
+  return apiFetch<{ runId: string; correlationId?: string; sessionId: string }>(
     `${base(tenantId)}/conversation/${encodeURIComponent(sessionId)}/messages`,
     { method: 'POST', body: JSON.stringify({ message, ...(mode ? { mode } : {}) }) },
   )

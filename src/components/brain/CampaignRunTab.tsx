@@ -45,7 +45,7 @@ import type {
   BrainTabKey,
 } from '@/types/brain'
 import { cn, formatRelativeTime } from '@/lib/utils'
-import { BrainError, BrainSkeleton, SectionCard } from './shared'
+import { BrainError, BrainSkeleton, BudgetAuthorityNotice, SectionCard } from './shared'
 import { CreativePreviewModal } from '@/components/ui/CreativePreviewModal'
 
 /** Tone → chip class. One table, so the whole tab says the same colour for the same thing. */
@@ -342,6 +342,14 @@ function CampaignRunDetail({
                 Go to approvals
               </button>
             )}
+          </div>
+        )}
+
+        {/* The brain's own verdict on the budget. When the contract and the authorised amount
+            disagree, the Builder will not build — so it is said here, with the brain's reason. */}
+        {run.budgetAuthority && (
+          <div className="mt-3">
+            <BudgetAuthorityNotice authority={run.budgetAuthority} />
           </div>
         )}
       </SectionCard>

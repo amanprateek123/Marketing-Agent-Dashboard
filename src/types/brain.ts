@@ -326,6 +326,25 @@ export interface BrainPipelineRun {
   status: BrainRunStatus
   headline: string
   stages: BrainPipelineStage[]
+  /** Which budget governs this run, from the brain. Absent/null from an older bridge or brain. */
+  budgetAuthority?: BrainBudgetAuthority | null
+}
+
+/**
+ * Which budget governs a pipeline run, as the brain states it (`pipeline_run_read` →
+ * `budget_authority`). The console shows this rather than adding up the audience plan: the sum is
+ * only one of the numbers, and the brain is the one place that compares them.
+ */
+export interface BrainBudgetAuthority {
+  authorisedDailyBudgetInr: number | null
+  /** `approval:<id>` or `daily_plan:<date>`, or null when nothing authorises it. */
+  source: string | null
+  /** The same in words: "The amount approved on gate 48". */
+  sourceLabel: string | null
+  contractTotalInr: number | null
+  /** False: the contract and the authority disagree, and the Builder will not build it. */
+  consistent: boolean
+  why: string | null
 }
 
 // ── Human-in-the-loop gates (the Slack gates, on the platform) ─────────────
@@ -413,7 +432,16 @@ export interface BrainGate {
   actions: BrainGateAction[]
   /** Which selections the agent expects back, for gates that pick from a set. */
   selection: 'none' | 'single' | 'multiple'
+  /**
+   * The brain's own gate type for a spend gate. `kind` folds build, launch and scale into
+   * `campaign_launch`, but what "approve at <amount>" does differs per type.
+   */
+  spendGate?: BrainSpendGate | null
+  /** The pipeline run this gate names, when it names one. A plan gate usually does not. */
+  pipelineRunId?: string | null
 }
+
+export type BrainSpendGate = 'plan' | 'build' | 'launch' | 'scale'
 
 export interface BrainGateDecisionBody {
   action: BrainGateActionKey
@@ -422,12 +450,40 @@ export interface BrainGateDecisionBody {
   /**
    * "Approve, but at this daily amount" — the console's equivalent of Slack's `approve at <n>`.
    *
-   * Recorded on the approval row as `amount_override_inr`. It is a statement of what the approver
-   * actually authorised, NOT a re-funding of the run: nothing downstream reads it back, so the
-   * build still follows the pipeline run's own contract. The UI says that out loud rather than
-   * letting the number imply more than it does.
+   * Recorded on the approval row as `amount_override_inr`, and on an approved decision the brain
+   * ACTS on it, per gate type:
+   *   - build gate: the open run's audience budgets are rescaled to sum to this amount, and the
+   *     Builder builds from that contract;
+   *   - plan gate: the same, but ONLY when the gate names exactly one pipeline run — otherwise
+   *     nothing is rescaled and the reason comes back as `budgetRescaleSkipped`;
+   *   - launch gate: the Launcher applies it to the live Meta ad-set budget when it activates.
+   * What actually happened comes back on `BrainGateDecisionResult`.
    */
   amountOverrideInr?: number
+}
+
+/** One contract the brain rescaled because an approval carried an amount. */
+export interface BrainBudgetRescale {
+  pipelineRunId: string
+  source: string | null
+  authorisedDailyBudgetInr: number | null
+  contractTotalBeforeInr: number | null
+  contractTotalInr: number | null
+  rescaled: boolean
+  why: string | null
+  /** Set when a rescaled audience is over Meta's per-ad-set daily cap — Meta will refuse it. */
+  exceedsAdsetCap: { capInr: number | null; entries: string[]; note: string | null } | null
+}
+
+/**
+ * What a decision did beyond being recorded. `budgetRescale` null = the brain said nothing about
+ * budgets (no amount, or an older bridge); an empty list = it considered the amount and touched no
+ * contract, which is when `budgetRescaleSkipped` says why.
+ */
+export interface BrainGateDecisionResult {
+  ok: true
+  budgetRescale?: BrainBudgetRescale[] | null
+  budgetRescaleSkipped?: string | null
 }
 
 // ── Pulse ──────────────────────────────────────────────────────────────────
@@ -602,4 +658,6 @@ export interface BrainCampaignRun extends BrainCampaignRunSummary {
   audiences: BrainCampaignAudience[]
   whatHappened: string | null
   needsYou: string | null
+  /** Which budget governs this run and whether its contract agrees. Absent from an older bridge. */
+  budgetAuthority?: BrainBudgetAuthority | null
 }

@@ -4,7 +4,7 @@ import React from 'react'
 import { ArrowRight, Gavel, ImageIcon, Info, Megaphone, Package } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/utils'
 import type { BrainArtifact, BrainPipelineRun, BrainTabKey } from '@/types/brain'
-import { AgentGlyph, RunStatusChip, SectionCard, STAGE_STATE_META } from './shared'
+import { AgentGlyph, BudgetAuthorityNotice, RunStatusChip, SectionCard, STAGE_STATE_META } from './shared'
 
 interface PipelineTabProps {
   pipeline: BrainPipelineRun | null
@@ -47,6 +47,12 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
         action={<RunStatusChip status={pipeline.status} />}
       >
         <p className="insight-quote mb-5">{pipeline.headline}</p>
+
+        {pipeline.budgetAuthority && (
+          <div className="mb-5">
+            <BudgetAuthorityNotice authority={pipeline.budgetAuthority} />
+          </div>
+        )}
 
         <div
           className="flex items-start gap-3 rounded-xl px-4 py-3"

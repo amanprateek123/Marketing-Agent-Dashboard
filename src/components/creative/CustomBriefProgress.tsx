@@ -1,9 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, PauseCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, PauseCircle } from 'lucide-react'
 import { getCustomBriefEvents, getCustomBriefRun } from '@/lib/api'
-import type { CustomBriefEvent, CustomBriefRun, CustomBriefRunNode } from '@/types'
+import type {
+  CustomBriefEvent,
+  CustomBriefRun,
+  CustomBriefRunNode,
+  CustomBriefWaiting,
+} from '@/types'
 
 /**
  * Live progress for one Custom-brief run.
@@ -132,6 +137,10 @@ export function CustomBriefProgress({
   const [run, setRun] = useState<CustomBriefRun | null>(null)
   const [events, setEvents] = useState<CustomBriefEvent[]>([])
   const [error, setError] = useState('')
+  // Recomputed by the pipeline on every poll, so it is replaced, never appended. `undefined` means
+  // the pipeline did not report it; `null` means it tried and could not check.
+  const [waiting, setWaiting] = useState<CustomBriefWaiting[] | null | undefined>(undefined)
+  const [waitingError, setWaitingError] = useState<string | null>(null)
   const cursor = useRef(0)
   const finished = useRef(false)
   const logEnd = useRef<HTMLDivElement | null>(null)
@@ -143,6 +152,8 @@ export function CustomBriefProgress({
         getCustomBriefEvents(tenantId, runId, cursor.current),
       ])
       setRun(next)
+      setWaiting(batch.waiting)
+      setWaitingError(batch.waiting === null ? (batch.waiting_error ?? 'no reason given') : null)
       if (batch.events.length) {
         cursor.current = batch.cursor
         setEvents(prev => [...prev, ...batch.events])
@@ -232,6 +243,36 @@ export function CustomBriefProgress({
       {error && (
         <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
           {error} — still retrying.
+        </p>
+      )}
+
+      {/* A run parked on a clarifying question looks exactly like a slow one unless it is said.
+          Each question is shown as asked; answering it is what moves the run on. */}
+      {waiting && waiting.length > 0 && (
+        <div
+          role="status"
+          className="mb-3 px-3 py-2 rounded-lg flex flex-col gap-1"
+          style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
+        >
+          {waiting.map(w => (
+            <p key={w.run_id} className="text-[12.5px] flex items-start gap-2" style={{ color: 'var(--ink)' }}>
+              <HelpCircle size={14} style={{ color: 'var(--warn)', marginTop: 2, flexShrink: 0 }} />
+              <span>
+                {w.item_index !== null ? <strong>#{w.item_index} </strong> : null}
+                Waiting for your answer: {w.pending_question?.trim() || '(the question was not recorded)'}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+      {/* null is "could not check", never "nothing is waiting" — so it is said, not hidden. */}
+      {waiting === null && !terminal && (
+        <p
+          className="text-[12px] mb-3 px-3 py-2 rounded-lg"
+          style={{ background: 'var(--surface-warm)', color: 'var(--ink-3)' }}
+        >
+          Couldn&rsquo;t check whether this run is waiting on a question ({waitingError}). It may be
+          parked rather than slow.
         </p>
       )}
 
