@@ -330,8 +330,6 @@ export interface BrainPipelineRun {
   stages: BrainPipelineStage[]
   /** Which budget governs this run, from the brain. Absent/null from an older bridge or brain. */
   budgetAuthority?: BrainBudgetAuthority | null
-  /** Every bet this run carries. Absent from an older bridge. */
-  bets?: BrainBet[]
 }
 
 /**
@@ -677,6 +675,8 @@ export interface BrainCampaignRun extends BrainCampaignRunSummary {
   needsYou: string | null
   /** Which budget governs this run and whether its contract agrees. Absent from an older bridge. */
   budgetAuthority?: BrainBudgetAuthority | null
+  /** Every bet this run carries. Absent from an older bridge. */
+  bets?: BrainBet[]
 }
 
 /* ── Experiments (the brain's hypotheses), in plain language ─────────────────────

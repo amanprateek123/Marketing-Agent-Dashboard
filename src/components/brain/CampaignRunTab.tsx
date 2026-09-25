@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils'
 import { errorDetail, formatRelative, formatWhen, humanise, plainStatus } from '@/lib/plain-language'
 import { BrainError, BrainSkeleton, BudgetAuthorityNotice, SectionCard, plainIfCode } from './shared'
 import { CreativePreviewModal } from '@/components/ui/CreativePreviewModal'
+import { BetLine, BetList } from './Bets'
 
 /** Tone → chip class. One table, so the whole tab says the same colour for the same thing. */
 const TONE_CHIP: Record<BrainRunTone, string> = {
@@ -362,6 +363,20 @@ function CampaignRunDetail({
         )}
       </SectionCard>
 
+      {/* What this campaign is testing — every bet the run carries. */}
+      {run.bets !== undefined && (
+        <SectionCard
+          title="What this campaign is testing"
+          description="The ideas the Brain is checking with these ads. Each ad and audience below says which one it tests."
+        >
+          <BetList
+            bets={run.bets}
+            showProduct={false}
+            empty="This campaign is not testing any new ideas — it runs on what already works."
+          />
+        </SectionCard>
+      )}
+
       {/* Where it has got to. */}
       <SectionCard
         title="Where it has got to"
@@ -425,6 +440,11 @@ function CampaignRunDetail({
                   <p className="mt-2 break-words text-[13px]" style={{ color: 'var(--ink-2)' }}>
                     {audience.why}
                   </p>
+                )}
+                {audience.bet && (
+                  <div className="mt-2 min-w-0">
+                    <BetLine bet={audience.bet} prefix="Audience test" />
+                  </div>
                 )}
               </li>
             ))}
@@ -605,6 +625,7 @@ function CreativeGrid({
                 </div>
 
                 {creative.note && <p className="explain break-words">{creative.note}</p>}
+                <BetLine bet={creative.bet} />
               </button>
             </li>
           ))}

@@ -109,8 +109,8 @@ export function BetList({
 export function BetLine({ bet, prefix = 'Testing' }: { bet: BrainBet | null | undefined; prefix?: string }) {
   if (!bet) return null
   return (
-    <div
-      className="flex min-w-0 items-start gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+    <span
+      className="flex min-w-0 items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs"
       style={{ background: 'var(--surface-warm)', color: 'var(--ink-2)' }}
       title={bet.statusMeaning || undefined}
     >
@@ -119,6 +119,6 @@ export function BetLine({ bet, prefix = 'Testing' }: { bet: BrainBet | null | un
         <span className="font-semibold">{prefix}:</span> {bet.claim}{' '}
         <span className={`chip ${BET_TONE_CHIP[bet.tone] ?? 'chip-neutral'} align-middle`}>{bet.statusLabel}</span>
       </span>
-    </div>
+    </span>
   )
 }
