@@ -16,7 +16,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatWhen } from '@/lib/plain-language'
 import type { PipelineRun } from '@/types'
 import styles from './runs.module.css'
 
@@ -35,17 +36,17 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'failed', label: 'Needs attention' },
 ]
 
-const PHASES = ['Discover', 'Analyze', 'Design', 'Create', 'Prepare', 'Complete']
+const PHASES = ['Research', 'Think it through', 'Ideas', 'Make ads', 'Set up', 'Done']
 
 function getDuration(start?: string, end?: string): string {
   if (!start) return '—'
   const milliseconds = Math.max(0, new Date(end || Date.now()).getTime() - new Date(start).getTime())
   const minutes = Math.floor(milliseconds / 60_000)
   const seconds = Math.floor((milliseconds % 60_000) / 1_000)
-  if (minutes === 0) return `${seconds}s`
-  if (minutes < 60) return `${minutes}m ${seconds}s`
+  if (minutes === 0) return seconds < 30 ? 'Under a minute' : 'About a minute'
+  if (minutes < 60) return `${minutes} min`
   const hours = Math.floor(minutes / 60)
-  return `${hours}h ${minutes % 60}m`
+  return minutes % 60 ? `${hours} hr ${minutes % 60} min` : `${hours} hr`
 }
 
 function isRunningStatus(status: string) {
@@ -57,22 +58,22 @@ function getPhase(status: string): { label: string; index: number } {
   switch ((status || '').toLowerCase()) {
     case 'scouts_running':
     case 'research_running':
-      return { label: 'Discovering growth signals', index: 0 }
+      return { label: 'Looking for what people want', index: 0 }
     case 'intelligence_running':
-      return { label: 'Analyzing opportunities', index: 1 }
+      return { label: 'Working out the best openings', index: 1 }
     case 'idea_pool_running':
     case 'digest_running':
-      return { label: 'Designing campaign ideas', index: 2 }
+      return { label: 'Coming up with ad ideas', index: 2 }
     case 'creative_running':
-      return { label: 'Creating campaign assets', index: 3 }
+      return { label: 'Making your ads', index: 3 }
     case 'campaign_launching':
       return { label: 'Preparing the campaign', index: 4 }
     case 'completed':
-      return { label: 'Automation completed', index: 5 }
+      return { label: 'Your ads are ready', index: 5 }
     case 'failed':
-      return { label: 'Run needs attention', index: 5 }
+      return { label: 'This stopped — needs a look', index: 5 }
     default:
-      return { label: 'Queued for automation', index: -1 }
+      return { label: 'Waiting to start', index: -1 }
   }
 }
 
@@ -91,7 +92,7 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
       href={`/dashboard/${tenantId}/runs/${run.runId}`}
       className={cn(styles.runCard, 'group animate-reveal-up')}
       style={{ animationDelay: `${Math.min(index, 5) * 40}ms` }}
-      aria-label={`Open automation run ${run.runId}, ${phase.label}`}
+      aria-label={`Open this round of work, ${phase.label}`}
     >
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-4">
@@ -106,11 +107,10 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[15px] font-bold" style={{ color: 'var(--ink)' }}>{phase.label}</h2>
-              <StatusBadge status={run.status} />
+              <StatusBadge status={run.status} domain="pipelineStatus" />
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: 'var(--ink-3)' }}>
-              <span className="mono">Run {run.runId.slice(0, 10)}</span>
-              {run.startedAt && <span>Started {formatDateTime(run.startedAt)}</span>}
+              {run.startedAt ? <span>Started {formatWhen(run.startedAt)}</span> : <span>Not started yet</span>}
             </div>
           </div>
 
@@ -119,7 +119,7 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
           </span>
         </div>
 
-        <div className="mt-5" aria-label={`${PHASES[Math.max(phase.index, 0)]} phase`}>
+        <div className="mt-5" aria-label={`Step: ${PHASES[Math.max(phase.index, 0)]}`}>
           <div className={styles.phaseRail} aria-hidden="true">
             {PHASES.map((label, phaseIndex) => (
               <span
@@ -141,14 +141,14 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
         {failed && (
           <div className="mt-4 flex items-start gap-2 rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>
             <AlertCircle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-            Open this run to review the failed phase and available recovery steps.
+            Open this to see which step went wrong and what you can do next.
           </div>
         )}
       </div>
 
       <div className={styles.auditGrid}>
         <div className={styles.auditCell}>
-          <p className="micro-label">Elapsed time</p>
+          <p className="micro-label">Time taken</p>
           <p className="mt-1 text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{duration}</p>
         </div>
         <div className={styles.auditCell}>
@@ -156,14 +156,14 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
           <p className="mt-1 text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{run.briefsGenerated ?? '—'}</p>
         </div>
         <div className={styles.auditCell}>
-          <p className="micro-label">Campaign record</p>
+          <p className="micro-label">Campaign</p>
           <p className="mt-1 truncate text-sm font-bold" style={{ color: run.campaignId || run.metaCampaignId ? 'var(--good)' : 'var(--ink-3)' }}>
-            {run.campaignId || run.metaCampaignId ? 'Created' : 'Not created'}
+            {run.campaignId || run.metaCampaignId ? 'Set up' : 'Not set up yet'}
           </p>
         </div>
         <div className={styles.auditCell}>
-          <p className="micro-label">AI configuration</p>
-          <p className="mt-1 text-sm font-bold" style={{ color: 'var(--ink)' }}>{run.promptsVersion ? `Prompt v${run.promptsVersion}` : 'Recorded'}</p>
+          <p className="micro-label">Finished</p>
+          <p className="mt-1 truncate text-sm font-bold" style={{ color: 'var(--ink)' }}>{completed || failed ? formatWhen(run.completedAt) : 'Still going'}</p>
         </div>
       </div>
     </Link>
@@ -173,7 +173,7 @@ function RunCard({ run, tenantId, index }: { run: PipelineRun; tenantId: string;
 function RunsLoading() {
   return (
     <div className="space-y-3" role="status" aria-live="polite">
-      <span className="sr-only">Loading automation history</span>
+      <span className="sr-only">Loading your ad history</span>
       {[0, 1, 2].map((item) => <div key={item} className={styles.skeleton} aria-hidden="true" />)}
     </div>
   )
@@ -195,7 +195,7 @@ export default function RunsPage({ params }: PageProps) {
       setRuns(await response.json())
       setError(null)
     } catch {
-      setError('We could not load the automation record. Check the connection and try again.')
+      setError("We couldn't load your ad history. Try again.")
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -219,10 +219,10 @@ export default function RunsPage({ params }: PageProps) {
   const tabCounts: Record<TabKey, number> = { all: total, running, completed, failed }
 
   const stats = [
-    { label: 'All recorded runs', value: total, detail: 'Durable automation history', icon: History, color: 'var(--ink)' },
-    { label: 'Working now', value: running, detail: running ? 'AI workflow in progress' : 'No active automation', icon: Activity, color: 'var(--accent)' },
-    { label: 'Completion rate', value: successRate == null ? '—' : `${successRate}%`, detail: terminal ? `${terminal} finished runs` : 'Awaiting first outcome', icon: CheckCircle2, color: 'var(--good)' },
-    { label: 'Needs attention', value: failed, detail: failed ? 'Open to review recovery' : 'No failed runs', icon: AlertCircle, color: failed ? 'var(--bad)' : 'var(--good)' },
+    { label: 'All rounds', value: total, detail: 'Every time Meridian made ads for you', icon: History, color: 'var(--ink)' },
+    { label: 'Working now', value: running, detail: running ? 'Making ads right now' : 'Nothing in progress', icon: Activity, color: 'var(--accent)' },
+    { label: 'Finished without problems', value: successRate == null ? '—' : `${successRate}%`, detail: terminal ? `Out of ${terminal} finished` : 'Nothing finished yet', icon: CheckCircle2, color: 'var(--good)' },
+    { label: 'Needs attention', value: failed, detail: failed ? 'Open one to see what went wrong' : 'Nothing stopped', icon: AlertCircle, color: failed ? 'var(--bad)' : 'var(--good)' },
   ]
 
   return (
@@ -231,31 +231,31 @@ export default function RunsPage({ params }: PageProps) {
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold" style={{ borderColor: 'var(--accent-border)', background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
-              <Sparkles size={13} aria-hidden="true" /> Control · Automation
+              <Sparkles size={13} aria-hidden="true" /> History
             </div>
-            <h1 className="page-title">Automation &amp; audit</h1>
+            <h1 className="page-title">Ad history</h1>
             <p className="page-subtitle max-w-2xl">
-              See what Meridian ran, where each workflow is now, and the evidence trail behind every completed campaign operation.
+              Every time Meridian researched and made ads for you: where each one is now, and what it produced.
             </p>
           </div>
           <button onClick={() => fetchRuns(true)} disabled={refreshing} className="btn btn-ghost self-start sm:self-auto">
             <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} aria-hidden="true" />
-            {refreshing ? 'Refreshing…' : 'Refresh history'}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
 
         <div className="mt-7 flex items-start gap-3 rounded-xl border p-4" style={{ borderColor: 'var(--good-border)', background: 'var(--good-bg)' }}>
           <ShieldCheck size={18} className="mt-0.5 shrink-0" style={{ color: 'var(--good)' }} aria-hidden="true" />
           <div>
-            <p className="text-sm font-bold" style={{ color: 'var(--good)' }}>Traceable by design</p>
+            <p className="text-sm font-bold" style={{ color: 'var(--good)' }}>Nothing is hidden</p>
             <p className="mt-1 text-xs leading-5" style={{ color: 'var(--ink-2)' }}>
-              Every run keeps its identifier, timing, outcome, campaign handoff, and AI configuration so operators can inspect—not guess—what happened.
+              Each one keeps when it happened, how it ended and the campaign it set up, so you can see exactly what was done.
             </p>
           </div>
         </div>
       </section>
 
-      <section className={cn(styles.stats, 'mt-5')} aria-label="Automation summary">
+      <section className={cn(styles.stats, 'mt-5')} aria-label="Summary">
         {stats.map(({ label, value, detail, icon: Icon, color }) => (
           <div className={styles.stat} key={label}>
             <div className="flex items-center justify-between gap-3">
@@ -271,10 +271,10 @@ export default function RunsPage({ params }: PageProps) {
       <section className="mt-8" aria-labelledby="run-history-title">
         <div className="flex flex-col justify-between gap-4 border-b pb-4 md:flex-row md:items-end" style={{ borderColor: 'var(--hairline)' }}>
           <div>
-            <h2 id="run-history-title" className="section-title">Run history</h2>
-            <p className="mt-1 text-xs" style={{ color: 'var(--ink-3)' }}>Open any run for its phase-by-phase record and outputs.</p>
+            <h2 id="run-history-title" className="section-title">History</h2>
+            <p className="mt-1 text-xs" style={{ color: 'var(--ink-3)' }}>Open any one to see each step and the ads it made.</p>
           </div>
-          <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border bg-white p-1" style={{ borderColor: 'var(--hairline)' }} role="group" aria-label="Filter automation runs">
+          <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border bg-white p-1" style={{ borderColor: 'var(--hairline)' }} role="group" aria-label="Filter history">
             {TABS.map((tab) => {
               const active = activeTab === tab.key
               return (
@@ -311,12 +311,12 @@ export default function RunsPage({ params }: PageProps) {
                 <Activity size={22} aria-hidden="true" />
               </span>
               <h3 className="mt-4 text-base font-bold" style={{ color: 'var(--ink)' }}>
-                {activeTab === 'all' ? 'Your automation record starts here' : `No ${activeTab === 'running' ? 'in-progress' : activeTab} runs`}
+                {activeTab === 'all' ? 'Your ad history starts here' : activeTab === 'running' ? 'Nothing in progress' : activeTab === 'completed' ? 'Nothing finished yet' : 'Nothing needs attention'}
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6" style={{ color: 'var(--ink-3)' }}>
                 {activeTab === 'all'
-                  ? 'Ask Campaign Copilot to prepare a growth campaign. Its automated workflow will appear here with a complete audit trail.'
-                  : 'There is nothing in this view right now. Choose another filter to inspect the full history.'}
+                  ? 'Ask Campaign Copilot to prepare a campaign. Each step it takes will show up here.'
+                  : 'There is nothing here right now. Choose another filter to see everything.'}
               </p>
               {activeTab === 'all' ? (
                 <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent mt-5">

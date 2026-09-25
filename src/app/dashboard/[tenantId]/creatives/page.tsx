@@ -15,6 +15,23 @@ import type { Company, CreativeImage, CreativePackage } from '@/types'
 import type { CreativeFormatOption, HookStyleGroups, HiggsfieldModelSummary, RejectedAssetItem } from '@/lib/api'
 import { CreativeUploadForm } from '@/components/creative/CreativeUploadForm'
 import { creativePackageStatus } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, humanise, plainStatus, toneChip } from '@/lib/plain-language'
+
+/** creativePackageStatus() decides WHICH state a package is in (and the page filters on its label);
+ *  this only turns that state into the shared plain wording for display. */
+const PACKAGE_STATE_CODE: Record<string, string> = {
+  'Producing…': 'pending',
+  Ready: 'completed',
+  Failed: 'failed',
+  'All rejected': 'all_rejected',
+  'No assets': 'no_assets',
+}
+function packageChip(pkg: CreativePackage): { label: string; chip: string; meaning: string } {
+  const code = PACKAGE_STATE_CODE[creativePackageStatus(pkg).label] ?? pkg.status ?? ''
+  const plain = plainStatus('creativePackage', code)
+  return { label: plain.label, chip: toneChip(plain.tone), meaning: plain.meaning }
+}
 
 // Which hookStyle group applies to a given format id — matches format-specs.ts's group assignments.
 function hookStyleGroupForFormat(format: string): keyof HookStyleGroups {
@@ -139,6 +156,8 @@ export default function CreativesPage({ params }: PageProps) {
   const [higgsfieldJobType, setHiggsfieldJobType] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // The raw reason behind `error`, shown only in <Details> and only while that same sentence is up.
+  const [errorRaw, setErrorRaw] = useState<{ for: string; raw: string } | null>(null)
   const [pendingBriefId, setPendingBriefId] = useState<string | null>(null)
 
   // Active / Rejected tabs — Rejected is a separate, additive view (rejected
@@ -253,7 +272,7 @@ export default function CreativesPage({ params }: PageProps) {
       // Keep whatever is already on screen — a transient failure should not blank the library.
       // But SAY so: silently swallowing this made "the load failed" and "there is nothing here"
       // look identical, which is how a working library appeared to lose its creatives.
-      setPackagesError(e instanceof Error ? e.message : 'Could not refresh the library')
+      setPackagesError(errorDetail(e) || 'No reason given')
     }
   }, [tenantId, filterProduct, filterLanguage])
 
@@ -389,7 +408,11 @@ export default function CreativesPage({ params }: PageProps) {
       setSelectedHookStyles([])
       await loadPackages()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start generation')
+      {
+        const plain = "We couldn't start making your ads. Try again."
+        setError(plain)
+        setErrorRaw({ for: plain, raw: errorDetail(e) })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -405,7 +428,7 @@ export default function CreativesPage({ params }: PageProps) {
       .then(opts => { if (!cancelled) { setCbOptions(opts); setCbOptionsError('') } })
       .catch(e => {
         if (!cancelled) {
-          setCbOptionsError(e instanceof Error ? e.message : 'Pipeline unavailable')
+          setCbOptionsError(errorDetail(e) || 'Unavailable')
         }
       })
     return () => { cancelled = true }
@@ -413,7 +436,7 @@ export default function CreativesPage({ params }: PageProps) {
 
   async function handleAddProduct() {
     const url = cbNewUrl.trim()
-    if (!url) { setCbAddError('Paste the product’s landing page URL'); return }
+    if (!url) { setCbAddError('Paste the link to the product’s page'); return }
     setCbAddError('')
     setCbAddResult(null)
     setCbAdding(true)
@@ -438,7 +461,7 @@ export default function CreativesPage({ params }: PageProps) {
       setCbNewName('')
       setCbAddOpen(false)
     } catch (e) {
-      setCbAddError(e instanceof Error ? e.message : 'Could not add the product')
+      setCbAddError(`We couldn't add this product. Check the link and try again. (${errorDetail(e) || 'no reason given'})`)
     } finally {
       setCbAdding(false)
     }
@@ -456,7 +479,7 @@ export default function CreativesPage({ params }: PageProps) {
     // The pipeline rejects an image with no direction (there is no follow-up turn to ask in), so
     // catch it here rather than round-tripping for a 400.
     if (cbFiles.length > 0 && !cbImageDirection) {
-      setError('Choose what the pipeline should do with your image')
+      setError('Choose what we should do with your image')
       return
     }
     setError('')
@@ -496,7 +519,11 @@ export default function CreativesPage({ params }: PageProps) {
       setCbFiles([])
       setCbImageDirection('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start the pipeline run')
+      {
+        const plain = "We couldn't start making your ads. Try again."
+        setError(plain)
+        setErrorRaw({ for: plain, raw: errorDetail(e) })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -583,14 +610,14 @@ export default function CreativesPage({ params }: PageProps) {
     <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
       <div className="flex items-start justify-between gap-5 mb-6 flex-wrap">
         <div className="max-w-2xl">
-          <p className="micro-label mb-2">Creative Studio</p>
+          <p className="micro-label mb-2">Creatives</p>
           <h1 className="page-title">Create once. Reuse everywhere.</h1>
           <p className="page-subtitle">
-            Generate, upload and organize campaign-ready creative in one reusable system.
+            Make, upload and organise your ads in one place, ready to use again.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button type="button" onClick={() => loadPackages()} className="btn btn-ghost" aria-label="Refresh creative library">
+          <button type="button" onClick={() => loadPackages()} className="btn btn-ghost" aria-label="Refresh your creatives">
             <RefreshCw size={14} /> Refresh
           </button>
           <Link href={`/dashboard/${tenantId}/gallery`} className="btn btn-ghost">
@@ -608,18 +635,18 @@ export default function CreativesPage({ params }: PageProps) {
       <div className="card p-5 mb-5" style={{ background: 'linear-gradient(120deg, var(--accent-bg), var(--surface) 55%)' }}>
         <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
           <div>
-            <p className="micro-label mb-1">Reusable creative workflow</p>
-            <h2 className="section-title">From an idea to a campaign-ready asset</h2>
+            <p className="micro-label mb-1">How it works</p>
+            <h2 className="section-title">From an idea to an ad you can run</h2>
           </div>
           <Link href={`/dashboard/${tenantId}/gallery`} className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: 'var(--accent-strong)' }}>
-            Organize the library <ArrowRight size={14} />
+            Organise the library <ArrowRight size={14} />
           </Link>
         </div>
         <div className="grid md:grid-cols-3 gap-3">
           {[
-            { step: '01', title: 'Create', copy: 'Generate with AI or upload approved work.', icon: Sparkles },
-            { step: '02', title: 'Organize', copy: 'Group assets by product, topic and campaign.', icon: LayoutGrid },
-            { step: '03', title: 'Reuse', copy: 'Attach reusable creative to future launches.', icon: CheckCircle2 },
+            { step: '1', title: 'Make', copy: 'Make ads with AI, or upload work you already have.', icon: Sparkles },
+            { step: '2', title: 'Organise', copy: 'Group them by product and topic.', icon: LayoutGrid },
+            { step: '3', title: 'Reuse', copy: 'Add them to your next campaigns.', icon: CheckCircle2 },
           ].map(({ step, title, copy, icon: Icon }) => (
             <div key={step} className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'rgba(255,255,255,0.82)', border: '1px solid var(--hairline)' }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}>
@@ -637,10 +664,10 @@ export default function CreativesPage({ params }: PageProps) {
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Ready packages', value: readyPackages, icon: CheckCircle2, color: 'var(--good)', background: 'var(--good-bg)' },
-          { label: 'Reusable assets', value: reusableAssets, icon: ImageIcon, color: 'var(--accent)', background: 'var(--accent-bg)' },
+          { label: 'Ready to use', value: readyPackages, icon: CheckCircle2, color: 'var(--good)', background: 'var(--good-bg)' },
+          { label: 'Images and videos', value: reusableAssets, icon: ImageIcon, color: 'var(--accent)', background: 'var(--accent-bg)' },
           { label: 'Products covered', value: coveredProducts, icon: LayoutGrid, color: 'var(--info)', background: 'var(--info-bg)' },
-          { label: 'In production', value: producingPackages, icon: Clock3, color: producingPackages > 0 ? 'var(--warn)' : 'var(--ink-3)', background: producingPackages > 0 ? 'var(--warn-bg)' : 'var(--muted)' },
+          { label: 'Being made', value: producingPackages, icon: Clock3, color: producingPackages > 0 ? 'var(--warn)' : 'var(--ink-3)', background: producingPackages > 0 ? 'var(--warn-bg)' : 'var(--muted)' },
         ].map(({ label, value, icon: Icon, color, background }) => (
           <div key={label} className="card p-4 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ color, background }}><Icon size={16} /></div>
@@ -655,9 +682,9 @@ export default function CreativesPage({ params }: PageProps) {
       {showUploadForm && (
         <div className="card p-5 sm:p-6 mb-6">
           <p className="micro-label mb-1">Add existing work</p>
-          <h2 className="section-title">Upload campaign-ready creative</h2>
+          <h2 className="section-title">Upload finished ads</h2>
           <p className="text-[13px] mt-1 mb-5 max-w-3xl" style={{ color: 'var(--ink-3)' }}>
-            Add files or links in one batch. Meridian stores each usable asset in the library and organizes it in Gallery without allowing one failed item to block the rest.
+            Add several files or links at once. Each one that works goes into your library and Gallery — if one fails, the rest still go in.
           </p>
           <CreativeUploadForm
             tenantId={tenantId}
@@ -675,32 +702,33 @@ export default function CreativesPage({ params }: PageProps) {
         >
           <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-strong)' }} />
           <p className="text-[13px]" style={{ color: 'var(--ink-2)' }}>
-            Producing your creative — this usually takes 1-3 minutes. This page updates automatically.
+            Making your ads — this usually takes 1–3 minutes. This page updates by itself.
           </p>
         </div>
       )}
 
       {error && !showForm && (
         <div className="rounded-xl px-4 py-3 mb-5 flex items-center justify-between gap-3 text-[13px]" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }} role="alert">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError('')} className="text-[12px] font-semibold underline">Dismiss</button>
+          <span className="min-w-0 break-words">{error}</span>
+          <button type="button" onClick={() => setError('')} className="text-[12px] font-semibold underline shrink-0">Dismiss</button>
         </div>
       )}
 
       {showForm && (
         <div className="card p-5 sm:p-6 mb-6">
-          <p className="micro-label mb-1">AI production brief</p>
-          <h2 className="section-title">Generate campaign-ready creative</h2>
-          <p className="text-[13px] mt-1 mb-5" style={{ color: 'var(--ink-3)' }}>Set the essentials, then let the creative system produce reusable assets.</p>
-          {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
+          <p className="micro-label mb-1">The brief</p>
+          <h2 className="section-title">Make new ads with AI</h2>
+          <p className="text-[13px] mt-1 mb-5" style={{ color: 'var(--ink-3)' }}>Fill in the basics and we&apos;ll make the ads for you.</p>
+          {error && <p className="text-[12.5px] mb-3 px-3 py-2 rounded-lg break-words" style={{ background: 'var(--bad-bg, transparent)', color: 'var(--bad)' }}>{error}</p>}
+          {error && errorRaw?.for === error && errorRaw.raw && <Details className="mb-3" items={[{ label: 'Error', value: errorRaw.raw }]} />}
 
           {/* ── Engine — which system makes this creative ──
               Additive: 'standard' is the default and leaves every existing
               path untouched. 'pipeline' hands the same form over to the
               external creative pipeline instead. */}
           <div className="mb-5">
-            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Production path</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>Who makes it</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setEngine('standard')}
@@ -711,7 +739,7 @@ export default function CreativesPage({ params }: PageProps) {
                 }}
               >
                 <span className="block text-[13px] font-semibold" style={{ color: engine === 'standard' ? 'var(--accent-strong)' : 'var(--ink)' }}>Meridian generator</span>
-                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Guided production for images, video and carousels.</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Step-by-step: you pick the format and angles, for images, video and carousels.</span>
               </button>
               <button
                 type="button"
@@ -722,8 +750,8 @@ export default function CreativesPage({ params }: PageProps) {
                   background: engine === 'pipeline' ? 'var(--accent-bg)' : 'var(--surface)',
                 }}
               >
-                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Autonomous creative team</span>
-                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Describe the outcome in one sentence; the pipeline handles image production.</span>
+                <span className="block text-[13px] font-semibold" style={{ color: engine === 'pipeline' ? 'var(--accent-strong)' : 'var(--ink)' }}>Creative team from a brief</span>
+                <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-3)' }}>Describe what you want in one sentence; the team makes the images for you.</span>
               </button>
             </div>
           </div>
@@ -731,19 +759,23 @@ export default function CreativesPage({ params }: PageProps) {
           {engine === 'pipeline' && (
             <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--hairline)' }}>
               {cbOptionsError && (
-                <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                  The autonomous creative pipeline is unavailable ({cbOptionsError}). You can retry shortly or use the Meridian generator.
-                </p>
+                <>
+                  <p className="text-[12px] mb-2 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                    The creative team isn&rsquo;t available right now. Try again shortly, or use the Meridian generator.
+                  </p>
+                  <Details className="mb-3" items={[{ label: 'Error', value: cbOptionsError }]} />
+                </>
               )}
 
               {/* Method — create and research are two different jobs. */}
               <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--accent-strong)' }}>What do you want?</p>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {(cbOptions?.methods ?? [
-                  { value: 'create', label: 'Create', hint: 'Author briefs and generate creatives.' },
-                  { value: 'research', label: 'Research', hint: 'Build the research + idea board creatives draw from.' },
+                  { value: 'create', label: 'Make ads', hint: 'Write briefs and make finished ads.' },
+                  { value: 'research', label: 'Research first', hint: 'Build the research and idea board that ads are made from.' },
                 ]).map(m => {
                   const active = cbMethod === m.value
+                  const plainMethod = plainStatus('briefMethod', m.value)
                   return (
                     <button
                       key={m.value}
@@ -755,8 +787,8 @@ export default function CreativesPage({ params }: PageProps) {
                         background: active ? 'var(--accent-bg)' : 'var(--surface)',
                       }}
                     >
-                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{m.label}</span>
-                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{m.hint}</span>
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{plainMethod.meaning ? plainMethod.label : m.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{plainMethod.meaning || m.hint}</span>
                     </button>
                   )
                 })}
@@ -770,6 +802,8 @@ export default function CreativesPage({ params }: PageProps) {
                   { value: 'raw', label: 'Raw', hint: 'An organic-looking post or meme.' },
                 ]).map(t => {
                   const active = cbTrack === t.value
+                  // The pipeline's own label is its internal word ("Raw"); show the shared plain one.
+                  const plainTrack = plainStatus('creativeTrack', t.value)
                   return (
                     <button
                       key={t.value}
@@ -781,8 +815,8 @@ export default function CreativesPage({ params }: PageProps) {
                         background: active ? 'var(--accent-bg)' : 'var(--surface)',
                       }}
                     >
-                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{t.label}</span>
-                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{t.hint}</span>
+                      <span className="block text-[13px] font-semibold" style={{ color: active ? 'var(--accent-strong)' : 'var(--ink)' }}>{plainTrack.label}</span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-4)' }}>{plainTrack.meaning || t.hint}</span>
                     </button>
                   )
                 })}
@@ -824,7 +858,7 @@ export default function CreativesPage({ params }: PageProps) {
                   </select>
                   <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
                     {cbOptions && (cbOptions.offerings ?? []).length === 0
-                      ? 'No products are configured in the pipeline — add one below to get started.'
+                      ? 'No products are set up yet — add one below to get started.'
                       : 'Decides the research the copy is written from, the folder it is filed in, and the name it carries here.'}
                   </span>
 
@@ -836,7 +870,7 @@ export default function CreativesPage({ params }: PageProps) {
                     <div className="mt-3 p-3 rounded-lg border" style={{ borderColor: 'var(--hairline)', background: 'var(--surface-2, var(--surface))' }}>
                       <label className="block mb-2">
                         <span className="text-xs font-semibold block mb-1" style={{ color: 'var(--ink-2)' }}>
-                          Landing page URL
+                          Link to the product&rsquo;s page
                         </span>
                         <input
                           value={cbNewUrl}
@@ -854,7 +888,7 @@ export default function CreativesPage({ params }: PageProps) {
                           value={cbNewName}
                           onChange={e => setCbNewName(e.target.value)}
                           className="input"
-                          placeholder="Graha Kavach Report — taken from the URL if left blank"
+                          placeholder="Graha Kavach Report — taken from the page if left blank"
                           disabled={cbAdding}
                         />
                       </label>
@@ -874,7 +908,7 @@ export default function CreativesPage({ params }: PageProps) {
                           : 'We read the page and build the research the copy is written from. Takes up to a minute.'}
                       </span>
                       {cbAddError && (
-                        <span className="block text-[11px] mt-2 leading-snug" style={{ color: 'var(--danger, #b42318)' }}>
+                        <span className="block text-[11px] mt-2 leading-snug break-words" style={{ color: 'var(--danger, #b42318)' }}>
                           {cbAddError}
                         </span>
                       )}
@@ -906,7 +940,7 @@ export default function CreativesPage({ params }: PageProps) {
               )}
 
               {/* Brief + count. */}
-              <div className="grid md:grid-cols-[1fr_160px] gap-4">
+              <div className="grid md:grid-cols-[minmax(0,1fr)_160px] gap-4">
                 <label className="block">
                   <span className="text-xs font-semibold block mb-1.5" style={{ color: 'var(--ink-2)' }}>
                     {cbMethod === 'research' ? 'What should we research?' : 'Describe the creative'}
@@ -934,14 +968,14 @@ export default function CreativesPage({ params }: PageProps) {
                   />
                   <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
                     Leave blank for {cbOptions?.count.default ?? 5}.
-                    {cbMethod === 'research' && ' Research runs once — this is how many ideas it adds to the board.'}
+                    {cbMethod === 'research' && ' Research happens once — this is how many ideas it adds to the board.'}
                   </span>
                 </label>
               </div>
 
               <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
-                Everything below is optional — leave it all unpicked and the pipeline decides for
-                you from the prompt alone.
+                Everything below is optional — leave it all unpicked and we decide for you from
+                your description alone.
               </p>
 
               {/* Languages. Several SPLIT the run round-robin rather than multiplying it. */}
@@ -976,7 +1010,7 @@ export default function CreativesPage({ params }: PageProps) {
                 {cbSelectedLanguages.length > 1
                   ? <>Your {cbCount.trim() || cbOptions?.count.default || 5} {cbCountNoun}s will be
                       <b> split across</b> {cbSelectedLanguages.length} languages — not multiplied by them.</>
-                  : 'Pick several and the run is split across them, round-robin.'}
+                  : 'Pick several and your ads are shared out across them in turn.'}
               </p>
 
               {/* Special formats — multi-select, folded into the brief as instructions. */}
@@ -1043,12 +1077,12 @@ export default function CreativesPage({ params }: PageProps) {
                 style={{ color: 'var(--ink-2)' }}
               />
               {cbFiles.length > 0 && (
-                <p className="text-[12px] mt-2" style={{ color: 'var(--ink-2)' }}>
+                <p className="text-[12px] mt-2 break-words" style={{ color: 'var(--ink-2)' }}>
                   {cbFiles.length === 1 ? cbFiles[0].name : `${cbFiles.length} images attached`}
                   {cbImageDirection ? (
                     <>
                       {' · '}
-                      <b>{cbOptions?.image_directions?.find(d => d.value === cbImageDirection)?.label ?? cbImageDirection}</b>
+                      <b>{cbOptions?.image_directions?.find(d => d.value === cbImageDirection)?.label ?? humanise(cbImageDirection)}</b>
                       {' · '}
                       <button
                         type="button"
@@ -1209,11 +1243,11 @@ export default function CreativesPage({ params }: PageProps) {
             <p className="text-[12px] mb-3" style={{ color: 'var(--ink-3)' }}>
               {creativeType === 'video'
                 ? <>Pick <b>one</b> angle for the video below — a creative only ever produces a single video, so this just decides its style. Leave unpicked to let the AI choose.</>
-                : <>Pick 1 or more angles below — <b>each one becomes a separate ad version</b>. Pick several to A/B test, or leave all unpicked to let the AI choose a good spread for you.</>}
+                : <>Pick 1 or more angles below — <b>each one becomes a separate ad version</b>. Pick several to compare them, or leave all unpicked to let the AI choose a good spread for you.</>}
             </p>
             <div className="grid sm:grid-cols-2 gap-2 mb-3">
               {(hookStyles?.[hookStyleGroupForFormat(format)] ?? []).map(h => {
-                const info = HOOK_STYLE_INFO[h.value] ?? { label: h.value.replace(/_/g, ' '), blurb: '' }
+                const info = HOOK_STYLE_INFO[h.value] ?? { label: humanise(h.value), blurb: '' }
                 const order = selectedHookStyles.indexOf(h.value)
                 const active = order >= 0
                 return (
@@ -1375,19 +1409,19 @@ export default function CreativesPage({ params }: PageProps) {
                 <div className="grid md:grid-cols-2 gap-4">
                   <label className="block">
                     <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Topic (optional)</span>
-                    <input value={topic} onChange={e => setTopic(e.target.value)} className="input" placeholder="Defaults to a generic product creative" />
+                    <input value={topic} onChange={e => setTopic(e.target.value)} className="input" placeholder="Leave blank for a general ad about the product" />
                   </label>
                   <label className="block">
                     <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Angle (optional)</span>
-                    <input value={angle} onChange={e => setAngle(e.target.value)} className="input" placeholder="Defaults to a direct-response angle" />
+                    <input value={angle} onChange={e => setAngle(e.target.value)} className="input" placeholder="Leave blank for an angle that asks people to act" />
                   </label>
                   <label className="block">
-                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Hook (optional)</span>
-                    <input value={hook} onChange={e => setHook(e.target.value)} className="input" placeholder="Defaults to the product's top differentiator" />
+                    <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Opening line (optional)</span>
+                    <input value={hook} onChange={e => setHook(e.target.value)} className="input" placeholder="Leave blank to lead with what makes the product stand out" />
                   </label>
                   <label className="block">
                     <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Audience (optional)</span>
-                    <input value={audience} onChange={e => setAudience(e.target.value)} className="input" placeholder="Defaults to the product's first audience segment" />
+                    <input value={audience} onChange={e => setAudience(e.target.value)} className="input" placeholder="Leave blank for the product's main audience" />
                   </label>
                 </div>
               </div>
@@ -1400,7 +1434,7 @@ export default function CreativesPage({ params }: PageProps) {
               <>
                 <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
                   {cbPrompt.trim()
-                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${cbTrack} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{cbSelectedLanguages.length ? <> across <b>{cbSelectedLanguages.join(', ')}</b></> : ''}.</>
+                    ? <>Ready: <b>{cbCount.trim() || cbOptions?.count.default || 5}</b> {cbMethod === 'research' ? cbCountNoun : `${plainStatus('creativeTrack', cbTrack).label.toLowerCase().replace(/ version$/, '')} ${cbCountNoun}`}{(cbCount.trim() || '5') === '1' ? '' : 's'} from your brief{cbSelectedLanguages.length ? <> across <b>{cbSelectedLanguages.join(', ')}</b></> : ''}.</>
                     : 'Describe what you want above to get started.'}
                 </p>
                 <button
@@ -1409,7 +1443,7 @@ export default function CreativesPage({ params }: PageProps) {
                   className="btn btn-primary"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {cbUploading ? 'Uploading…' : submitting ? 'Starting…' : cbMethod === 'research' ? 'Run research' : 'Generate'}
+                  {cbUploading ? 'Uploading…' : submitting ? 'Starting…' : cbMethod === 'research' ? 'Start the research' : 'Make the ads'}
                 </button>
               </>
             ) : (
@@ -1423,7 +1457,7 @@ export default function CreativesPage({ params }: PageProps) {
             </p>
             <button onClick={handleGenerate} disabled={submitting || !product} className="btn btn-primary">
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {submitting ? 'Starting…' : 'Generate'}
+              {submitting ? 'Starting…' : 'Make the ads'}
             </button>
             </>
             )}
@@ -1460,9 +1494,9 @@ export default function CreativesPage({ params }: PageProps) {
 
       <div className="flex items-end justify-between gap-4 mt-8 mb-4 flex-wrap">
         <div>
-          <p className="micro-label mb-1">Asset library</p>
+          <p className="micro-label mb-1">Your library</p>
           <h2 className="section-title">Ready to review and reuse</h2>
-          <p className="text-[13px] mt-1" style={{ color: 'var(--ink-3)' }}>Every package keeps its copy, formats and production state together.</p>
+          <p className="text-[13px] mt-1" style={{ color: 'var(--ink-3)' }}>Each set keeps its text, sizes and progress together.</p>
         </div>
         <Link href={`/dashboard/${tenantId}/gallery`} className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: 'var(--accent-strong)' }}>
           Browse by topic <ArrowRight size={14} />
@@ -1477,17 +1511,18 @@ export default function CreativesPage({ params }: PageProps) {
           style={{ borderColor: 'var(--warn-border, var(--hairline))' }}
         >
           <p className="text-[12.5px]" style={{ color: 'var(--warn, var(--ink-2))' }}>
-            Couldn&rsquo;t refresh the library ({packagesError}). You&rsquo;re seeing the last
-            version that loaded — nothing has been deleted.
+            Couldn&rsquo;t refresh the library. You&rsquo;re seeing the last version that
+            loaded — nothing has been deleted.
           </p>
           <button type="button" onClick={() => { void loadPackages() }} className="btn btn-ghost">
-            <RefreshCw size={13} /> Retry
+            <RefreshCw size={13} /> Try again
           </button>
         </div>
       )}
+      {packagesError && <Details className="mb-4" items={[{ label: 'Error', value: packagesError }]} />}
 
       {/* Tab bar — underline style, matching runs/page.tsx's convention */}
-      <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--hairline)' }}>
+      <div className="flex items-center gap-1 border-b mb-6 overflow-x-auto" style={{ borderColor: 'var(--hairline)' }}>
         {([{ key: 'active' as const, label: 'Library' }, { key: 'rejected' as const, label: 'Rejected' }]).map(tab => {
           const isActive = activeTab === tab.key
           return (
@@ -1499,7 +1534,7 @@ export default function CreativesPage({ params }: PageProps) {
             >
               {tab.label}
               {tab.key === 'rejected' && rejectedAssets.length > 0 && (
-                <span className="ml-1.5 text-[10px] font-semibold mono tabular-nums" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
+                <span className="ml-1.5 text-[10px] font-semibold tabular-nums" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-4)' }}>
                   {rejectedAssets.length}
                 </span>
               )}
@@ -1515,14 +1550,14 @@ export default function CreativesPage({ params }: PageProps) {
         <>
           {/* Library filters */}
           <div className="flex items-center gap-3 mb-4 flex-wrap">
-            <label className="min-w-[200px]">
+            <label className="min-w-0 w-full sm:w-auto sm:min-w-[200px]">
               <span className="sr-only">Filter by product</span>
               <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="input">
                 <option value="">All products</option>
                 {products.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
               </select>
             </label>
-            <label className="min-w-[180px]">
+            <label className="min-w-0 w-full sm:w-auto sm:min-w-[180px]">
               <span className="sr-only">Filter by language</span>
               <select value={filterLanguage} onChange={e => setFilterLanguage(e.target.value)} className="input">
                 <option value="">All languages</option>
@@ -1538,7 +1573,7 @@ export default function CreativesPage({ params }: PageProps) {
                 style={{ color: 'var(--ink-4)' }}
                 title="Every asset on these creatives was rejected. Restore one from the Rejected tab to bring it back here."
               >
-                {hiddenRejectedCount} discarded package{hiddenRejectedCount === 1 ? '' : 's'} hidden
+                {hiddenRejectedCount} rejected {hiddenRejectedCount === 1 ? 'set' : 'sets'} hidden
               </button>
             )}
           </div>
@@ -1580,7 +1615,7 @@ export default function CreativesPage({ params }: PageProps) {
                     key={pkg._id}
                     href={`/dashboard/${tenantId}/creatives/${pkg._id}`}
                     className="card overflow-hidden block group"
-                    aria-label={`Open ${selected?.headline ?? pkg.productName ?? 'creative package'}`}
+                    aria-label={`Open ${selected?.headline ?? pkg.productName ?? 'this creative'}`}
                   >
                     <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
                       {/* object-contain, not -cover: the Slack pipeline's base deliverable is
@@ -1601,21 +1636,21 @@ export default function CreativesPage({ params }: PageProps) {
                         {(() => {
                           // Derived from usable assets, not `status` alone —
                           // see creativePackageStatus for why they differ.
-                          const s = creativePackageStatus(pkg)
-                          return <span className={`chip ${s.chip}`}>{s.label}</span>
+                          const s = packageChip(pkg)
+                          return <span className={`chip ${s.chip}`} title={s.meaning || undefined}>{s.label}</span>
                         })()}
                       </div>
                     </div>
                     <div className="p-4">
-                      <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--ink)' }}>
+                      <p className="text-[13px] font-semibold truncate" style={{ color: 'var(--ink)' }} title={selected?.headline || pkg.productName || undefined}>
                         {selected?.headline || pkg.productName || 'Untitled'}
                       </p>
                       <p className="text-[11.5px] mt-0.5 truncate" style={{ color: 'var(--ink-3)' }}>
-                        {pkg.productName || '—'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}
+                        {pkg.productName || '—'}{pkg.targetLanguage ? ` · ${humanise(pkg.targetLanguage)}` : ''}
                       </p>
                       <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline-light)' }}>
                         <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-                          {assetCount} reusable asset{assetCount === 1 ? '' : 's'}
+                          {assetCount} usable {assetCount === 1 ? 'image or video' : 'images and videos'}
                         </span>
                         <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--accent)' }} />
                       </div>
@@ -1636,7 +1671,7 @@ export default function CreativesPage({ params }: PageProps) {
             <div className="card px-6 py-14 text-center">
               <p style={{ color: 'var(--ink-3)' }}>Nothing rejected.</p>
               <p className="text-[13px] mt-1.5" style={{ color: 'var(--ink-4)' }}>
-                Reject an image or video from its package page, or from the Gallery, and it will show up here — fully reversible.
+                Reject an image or video from its creative&rsquo;s page, or from the Gallery, and it will show up here. You can always bring it back.
               </p>
             </div>
           ) : (
@@ -1657,13 +1692,13 @@ export default function CreativesPage({ params }: PageProps) {
                       </span>
                     </div>
                     <div className="p-3">
-                      <p className="text-[11.5px] mt-0.5 mb-2" style={{ color: 'var(--ink-3)' }}>{asset.productName || '—'}</p>
+                      <p className="text-[11.5px] mt-0.5 mb-2 truncate" style={{ color: 'var(--ink-3)' }} title={asset.productName || undefined}>{asset.productName || '—'}</p>
                       <Link
                         href={`/dashboard/${tenantId}/creatives/${asset.packageId}`}
                         className="text-[11.5px] font-medium block mb-2"
                         style={{ color: 'var(--accent-strong)' }}
                       >
-                        View source package →
+                        See where it came from →
                       </Link>
                       <button
                         onClick={() => handleRestoreRejected(asset)}

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, PauseCircle } from 'lucide-react'
 import { getCustomBriefEvents, getCustomBriefRun } from '@/lib/api'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, plainStatus } from '@/lib/plain-language'
 import type {
   CustomBriefEvent,
   CustomBriefRun,
@@ -58,18 +60,22 @@ function previewUrl(node: CustomBriefRunNode): string | undefined {
  * the API is the source of truth (api_options.STATUS_PHASES) so a new status needs no deploy here.
  */
 const FALLBACK_PHASES: Record<string, string> = {
-  queued: 'Queued',
+  queued: 'Waiting to start',
   authoring: 'Writing the brief',
-  generating: 'Generating the image',
-  resizing: 'Resizing',
-  done: 'Complete',
+  generating: 'Making the picture',
+  resizing: 'Resizing for each placement',
+  done: 'Done',
   error: 'Failed',
 }
 
 function phaseLabel(status: string | null | undefined, phases: Record<string, string>): string {
   const key = (status ?? '').trim().toLowerCase()
-  if (!key) return 'Pending'
-  return phases[key] ?? FALLBACK_PHASES[key] ?? key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+  if (!key) return 'Waiting to start'
+  // The pipeline's own map can still hold its machine words ("brief_ready"); only accept a label
+  // that reads like prose, else use the shared vocabulary (which humanises anything unknown).
+  const fromApi = phases[key]
+  if (fromApi && !/_/.test(fromApi)) return fromApi
+  return FALLBACK_PHASES[key] ?? plainStatus('customBrief', key).label
 }
 
 interface LogLine {
@@ -112,7 +118,7 @@ function toLogLines(events: CustomBriefEvent[], phases: Record<string, string>):
 function statusChip(status: string, phases: Record<string, string>): { cls: string; label: string } {
   if (status === 'done') return { cls: 'chip-good', label: 'Done' }
   if (FAILED.has(status)) return { cls: 'chip-bad', label: status === 'cancelled' ? 'Cancelled' : 'Failed' }
-  if (BLOCKED.has(status)) return { cls: 'chip-warn', label: 'Needs attention' }
+  if (BLOCKED.has(status)) return { cls: 'chip-warn', label: plainStatus('customBrief', status).label }
   // In-flight: show the phase, not the machine value — "Generating the image", not "generating".
   return { cls: 'chip-accent', label: phaseLabel(status, phases) }
 }
@@ -141,6 +147,8 @@ export function CustomBriefProgress({
   // the pipeline did not report it; `null` means it tried and could not check.
   const [waiting, setWaiting] = useState<CustomBriefWaiting[] | null | undefined>(undefined)
   const [waitingError, setWaitingError] = useState<string | null>(null)
+  // Polling gives up after MAX_TICKS; the spinner must stop then and say so, not spin forever.
+  const [gaveUp, setGaveUp] = useState(false)
   const cursor = useRef(0)
   const finished = useRef(false)
   const logEnd = useRef<HTMLDivElement | null>(null)
@@ -166,7 +174,7 @@ export function CustomBriefProgress({
     } catch (e) {
       // Transient failures are expected while the pipeline is busy; keep the
       // last known state on screen rather than blanking the panel.
-      setError(e instanceof Error ? e.message : 'Lost contact with the pipeline')
+      setError(errorDetail(e) || 'No reply')
       return false
     }
   }, [tenantId, runId, onFinished])
@@ -182,6 +190,8 @@ export function CustomBriefProgress({
       ticks += 1
       if (!cancelled && !done && ticks < MAX_TICKS) {
         timer = setTimeout(tick, POLL_MS)
+      } else if (!cancelled && !done) {
+        setGaveUp(true)
       }
     }
     void tick()
@@ -210,16 +220,18 @@ export function CustomBriefProgress({
             ) : (
               <CheckCircle2 size={16} style={{ color: 'var(--good)' }} />
             )
+          ) : gaveUp ? (
+            <PauseCircle size={16} style={{ color: 'var(--ink-3)' }} />
           ) : (
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-strong)' }} />
           )}
           <p className="micro-label" style={{ margin: 0 }}>
-            Slack pipeline · run #{runId}
+            {terminal ? 'Your ads from this brief' : 'Making your ads'}
           </p>
         </div>
         {progress && (
-          <p className="text-[12px] mono" style={{ color: 'var(--ink-3)' }}>
-            {progress.done}/{progress.total} done
+          <p className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
+            {progress.done} of {progress.total} ready
             {progress.failed > 0 ? ` · ${progress.failed} failed` : ''}
             {progress.blocked > 0 ? ` · ${progress.blocked} need attention` : ''}
           </p>
@@ -242,7 +254,12 @@ export function CustomBriefProgress({
 
       {error && (
         <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-          {error} — still retrying.
+          We lost touch for a moment — still trying.
+        </p>
+      )}
+      {gaveUp && !terminal && (
+        <p className="text-[12px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--surface-warm)', color: 'var(--ink-3)' }}>
+          This is taking longer than usual, so we stopped checking. Refresh the page to see where it has got to.
         </p>
       )}
 
@@ -255,11 +272,11 @@ export function CustomBriefProgress({
           style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
         >
           {waiting.map(w => (
-            <p key={w.run_id} className="text-[12.5px] flex items-start gap-2" style={{ color: 'var(--ink)' }}>
+            <p key={w.run_id} className="text-[12.5px] flex items-start gap-2 min-w-0 break-words" style={{ color: 'var(--ink)' }}>
               <HelpCircle size={14} style={{ color: 'var(--warn)', marginTop: 2, flexShrink: 0 }} />
               <span>
-                {w.item_index !== null ? <strong>#{w.item_index} </strong> : null}
-                Waiting for your answer: {w.pending_question?.trim() || '(the question was not recorded)'}
+                {w.item_index !== null ? <strong>Ad {w.item_index}: </strong> : null}
+                Waiting for your answer: {w.pending_question?.trim() || 'there is a question, but we could not read it.'}
               </span>
             </p>
           ))}
@@ -271,8 +288,8 @@ export function CustomBriefProgress({
           className="text-[12px] mb-3 px-3 py-2 rounded-lg"
           style={{ background: 'var(--surface-warm)', color: 'var(--ink-3)' }}
         >
-          Couldn&rsquo;t check whether this run is waiting on a question ({waitingError}). It may be
-          parked rather than slow.
+          We couldn&rsquo;t check whether this is waiting on a question from you, so it may be paused
+          rather than slow.
         </p>
       )}
 
@@ -286,7 +303,7 @@ export function CustomBriefProgress({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={previewUrl(run)}
-            alt="Creative"
+            alt="Your ad"
             className="w-full h-full object-contain"
           />
         </div>
@@ -296,13 +313,13 @@ export function CustomBriefProgress({
           the children are the only honest view of what is happening. */}
       {children.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-          {children.map(child => {
+          {children.map((child, i) => {
             const chip = statusChip(child.status, statusPhases ?? {})
+            const n = child.item_index ?? i + 1
             return (
               <div
                 key={child.run_id}
-                className="card-inset px-3 py-2.5"
-                title={child.error ?? undefined}
+                className="card-inset px-3 py-2.5 min-w-0"
               >
                 {previewUrl(child) && (
                   <div
@@ -312,18 +329,18 @@ export function CustomBriefProgress({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={previewUrl(child)}
-                      alt={`Creative ${child.item_index ?? child.run_id}`}
+                      alt={`Ad ${n}`}
                       className="w-full h-full object-contain"
                     />
                   </div>
                 )}
                 <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>
-                  #{child.item_index ?? child.run_id}
+                  Ad {n}
                 </p>
                 <span className={`chip ${chip.cls}`}>{chip.label}</span>
                 {BLOCKED.has(child.status) && (
                   <p className="flex items-center gap-1 text-[10.5px] mt-1.5" style={{ color: 'var(--warn)' }}>
-                    <PauseCircle size={10} /> waiting on input
+                    <PauseCircle size={10} /> waiting for you
                   </p>
                 )}
               </div>
@@ -340,31 +357,46 @@ export function CustomBriefProgress({
       >
         {events.length === 0 ? (
           <p className="text-[12px]" style={{ color: 'var(--ink-4)' }}>
-            Queued — waiting for the pipeline to pick this up…
+            {gaveUp ? 'Nothing has happened yet.' : 'Waiting to start — this usually takes a minute…'}
           </p>
         ) : (
           toLogLines(events, statusPhases ?? {}).map(line => (
             <p
               key={line.key}
-              className="text-[12px] leading-relaxed"
+              className="text-[12px] leading-relaxed break-words"
               style={{ color: line.kind === 'error' ? 'var(--bad)' : 'var(--ink-3)' }}
             >
               {line.itemIndex ? (
-                <span className="mono" style={{ color: 'var(--ink-4)' }}>#{line.itemIndex} </span>
+                <span style={{ color: 'var(--ink-4)' }}>Ad {line.itemIndex}: </span>
               ) : null}
-              {line.text}
+              {line.kind === 'error' ? 'Something went wrong with this ad.' : line.text}
             </p>
           ))
         )}
         <div ref={logEnd} />
       </div>
 
+      <Details
+        className="mt-3"
+        reference={runId}
+        items={[
+          ...(error ? [{ label: 'Last connection error', value: error }] : []),
+          ...(waitingError ? [{ label: 'Question check', value: waitingError }] : []),
+          ...children
+            .filter(c => c.error)
+            .map((c, i) => ({ label: `Ad ${c.item_index ?? i + 1} error`, value: c.error as string })),
+          ...toLogLines(events, statusPhases ?? {})
+            .filter(l => l.kind === 'error')
+            .map((l, i) => ({ label: `Error ${i + 1}`, value: l.text })),
+        ]}
+      />
+
       {terminal && (
         <div className="flex items-center justify-between gap-3 mt-3">
           <p className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
             {progress && progress.done > 0
-              ? 'Finished creatives have been added to your library below.'
-              : 'This run produced no creatives — check the log above.'}
+              ? 'Your finished ads have been added to your library below.'
+              : 'No ads came out of this brief. The notes above say what happened.'}
           </p>
           {onDismiss && (
             <button type="button" onClick={onDismiss} className="btn btn-ghost">

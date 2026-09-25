@@ -536,6 +536,18 @@ const VOCAB = {
     assistant: ['Assistant', "The assistant's reply.", 'neutral'],
     system: ['System', 'An automatic note.', 'neutral'],
   },
+
+  /** Custom-brief creative style ("track") — how finished the ad looks. */
+  creativeTrack: {
+    polished: ['Polished version', 'A designed ad, ready to run — the default.', 'neutral'],
+    raw: ['Quick version', 'An organic-looking post or meme, made fast.', 'neutral'],
+  },
+
+  /** Custom-brief job type — what the creative team is asked to do. */
+  briefMethod: {
+    create: ['Make ads', 'Write briefs and make finished ads.', 'neutral'],
+    research: ['Research first', 'Build the research and idea board that ads are made from.', 'neutral'],
+  },
 } satisfies Record<string, Table>
 
 export type PlainDomain = keyof typeof VOCAB

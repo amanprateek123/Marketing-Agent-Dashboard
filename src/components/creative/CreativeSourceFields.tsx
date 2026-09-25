@@ -123,7 +123,7 @@ export function CreativeSourceFields({ tenantId, onChange }: { tenantId: string;
         <input value={value.headline} onChange={(e) => setValue((v) => ({ ...v, headline: e.target.value }))} className="input text-sm w-full" placeholder="Short hook line" />
       </div>
       <div>
-        <p className="micro-label mb-1">CTA</p>
+        <p className="micro-label mb-1">Button label</p>
         <select value={value.cta} onChange={(e) => setValue((v) => ({ ...v, cta: e.target.value }))} className="input text-sm w-full">
           {CTA_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>

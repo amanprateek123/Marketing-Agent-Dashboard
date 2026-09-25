@@ -2,14 +2,15 @@
 
 import { Star, CheckCircle2, ArrowUpRight } from 'lucide-react'
 import { AudienceStageBadge, ExplorationBadge } from '@/components/badges'
+import { humanise } from '@/lib/plain-language'
 import type { IntelligenceBrief } from '@/types'
 
 const SOURCE_META: Record<string, { label: string; icon: string; bg: string; color: string; border: string }> = {
-  scout_signal:   { label: 'Scout',   icon: '📡', bg: 'var(--accent-bg)', color: 'var(--accent)', border: 'var(--accent-border)' },
-  viral_trend:    { label: 'Viral',   icon: '🔥', bg: 'var(--warn-bg)',   color: 'var(--warn)',   border: 'var(--warn-border)' },
-  competitor_gap: { label: 'Gap',     icon: '🎯', bg: 'var(--bad-bg)',    color: 'var(--bad)',    border: 'var(--bad-border)' },
-  market_insight: { label: 'Insight', icon: '📊', bg: 'var(--good-bg)',   color: 'var(--good)',   border: 'var(--good-border)' },
-  meta_ads_gap:   { label: 'Ad Gap',  icon: '🏪', bg: 'var(--info-bg)',   color: 'var(--info)',   border: 'var(--info-border)' },
+  scout_signal:   { label: 'Trend spotted',   icon: '📡', bg: 'var(--accent-bg)', color: 'var(--accent)', border: 'var(--accent-border)' },
+  viral_trend:    { label: 'Going viral',   icon: '🔥', bg: 'var(--warn-bg)',   color: 'var(--warn)',   border: 'var(--warn-border)' },
+  competitor_gap: { label: 'Competitor gap',     icon: '🎯', bg: 'var(--bad-bg)',    color: 'var(--bad)',    border: 'var(--bad-border)' },
+  market_insight: { label: 'Market insight', icon: '📊', bg: 'var(--good-bg)',   color: 'var(--good)',   border: 'var(--good-border)' },
+  meta_ads_gap:   { label: 'Gap in ads',  icon: '🏪', bg: 'var(--info-bg)',   color: 'var(--info)',   border: 'var(--info-border)' },
 }
 
 function ScoreRing({ score }: { score?: number }) {
@@ -20,7 +21,7 @@ function ScoreRing({ score }: { score?: number }) {
   const color = score >= 8 ? 'var(--good)' : score >= 6 ? 'var(--warn)' : 'var(--bad)'
 
   return (
-    <div className="relative w-11 h-11 shrink-0">
+    <div className="relative w-11 h-11 shrink-0" title={`Score: ${score.toFixed(1)} out of 10`}>
       <svg viewBox="0 0 40 40" className="w-full h-full -rotate-90">
         <circle cx="20" cy="20" r="18" fill="none" stroke="var(--hairline-light)" strokeWidth="2.5" />
         <circle cx="20" cy="20" r="18" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round"
@@ -70,18 +71,18 @@ export function IdeaCard({ brief, isWinner, isProduced, isSelected, onClick, ind
           <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             {isWinner ? (
               <span className="chip chip-accent self-start">
-                <Star size={9} fill="currentColor" /> Strategy Pick
+                <Star size={9} fill="currentColor" /> Top pick
               </span>
             ) : isProduced ? (
               <span className="chip chip-good self-start">
-                <CheckCircle2 size={9} /> Produced
+                <CheckCircle2 size={9} /> Ads made
               </span>
             ) : (
               <span className="chip chip-neutral self-start">
-                Draft
+                Idea only
               </span>
             )}
-            <h4 className="text-[14px] font-semibold leading-snug line-clamp-2" style={{ color: 'var(--ink)' }}>
+            <h4 className="text-[14px] font-semibold leading-snug line-clamp-2 break-words" style={{ color: 'var(--ink)' }} title={brief.topic}>
               {brief.topic}
             </h4>
           </div>
@@ -98,18 +99,20 @@ export function IdeaCard({ brief, isWinner, isProduced, isSelected, onClick, ind
 
         {/* Tags */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {src && (
+          {src ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: src.bg, color: src.color }}>
               {src.icon} {src.label}
             </span>
-          )}
+          ) : brief.ideaSource ? (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{humanise(brief.ideaSource)}</span>
+          ) : null}
           <AudienceStageBadge stage={brief.audienceStage} />
           {brief.explorationArm && <ExplorationBadge />}
           {brief.platform && (
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{brief.platform}</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{humanise(brief.platform)}</span>
           )}
           {brief.format && (
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{brief.format}</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{humanise(brief.format)}</span>
           )}
           {brief.urgencyScore != null && brief.urgencyScore >= 8 && (
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>Urgent</span>

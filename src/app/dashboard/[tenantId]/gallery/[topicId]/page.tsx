@@ -15,6 +15,8 @@ import type { GalleryTopicSummary, GallerySheetSummary, GalleryAssetItem, Galler
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CreativePreviewModal } from '@/components/ui/CreativePreviewModal'
 import { AddCreativeSheet } from '@/components/creative/AddCreativeSheet'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, errorDetail } from '@/lib/plain-language'
 
 interface PageProps {
   params: Promise<{ tenantId: string; topicId: string }>
@@ -42,6 +44,8 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
   const [newSheetName, setNewSheetName] = useState('')
   const [creatingSheet, setCreatingSheet] = useState(false)
   const [error, setError] = useState('')
+  // The raw reason behind a load failure — shown only inside <Details>.
+  const [errorRaw, setErrorRaw] = useState('')
 
   // Choose-and-act: select any number of asset cards, then move / remove from
   // gallery / reject them together. Selection is scoped to whichever sheet is
@@ -111,7 +115,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
         const company = await getCompany(tenantId).catch(() => null)
         if (!cancelled && company) setProducts(company.products ?? [])
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load topic')
+        if (!cancelled) { setError(PLAIN_ERROR); setErrorRaw(errorDetail(e)) }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -127,7 +131,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       const list = await listGalleryAssets(tenantId, sheetId)
       setAssets(list)
     } catch {
-      setError('Failed to load assets')
+      setError("We couldn't load the images and videos in this sheet. Try again.")
     } finally {
       setAssetsLoading(false)
     }
@@ -150,7 +154,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       await loadSheets()
       setActiveSheetId(sheet._id)
     } catch {
-      setError('Failed to create sheet')
+      setError("We couldn't create the sheet. Try again.")
     } finally {
       setCreatingSheet(false)
     }
@@ -182,7 +186,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       clearSelection()
       await Promise.all([loadAssets(activeSheetId), loadSheets()])
     } catch {
-      setError('Failed to move assets')
+      setError("We couldn't move them. Try again.")
     } finally {
       setBulkBusy(false)
     }
@@ -202,7 +206,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       setRenamingTopic(false)
       await loadSheets()
     } catch {
-      setError('Failed to rename topic')
+      setError("We couldn't rename the topic. Try again.")
     } finally {
       setRenaming(false)
     }
@@ -222,7 +226,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       setRenamingSheetId(null)
       await loadSheets()
     } catch {
-      setError('Failed to rename sheet')
+      setError("We couldn't rename the sheet. Try again.")
     } finally {
       setRenaming(false)
     }
@@ -250,7 +254,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
       }
       setPendingConfirm(null)
     } catch {
-      setError('Action failed')
+      setError("That didn't work. Try again.")
       setPendingConfirm(null)
     } finally {
       setConfirming(false)
@@ -274,26 +278,26 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
 
   const confirmCopy: Record<string, { title: string; description: string; confirmLabel: string; variant: 'default' | 'danger' }> = {
     remove: {
-      title: `Remove ${selected.size} asset${selected.size === 1 ? '' : 's'} from gallery?`,
-      description: 'This only removes them from this Gallery organization — the underlying creative (copy, image/video) stays fully intact in the Creatives library.',
+      title: `Remove ${selected.size} ${selected.size === 1 ? 'item' : 'items'} from the Gallery?`,
+      description: 'This only takes them out of the Gallery — the ads themselves (words, images and videos) stay in your Creatives library.',
       confirmLabel: 'Remove',
       variant: 'default',
     },
     reject: {
-      title: `Reject ${selected.size} asset${selected.size === 1 ? '' : 's'}?`,
+      title: `Reject ${selected.size} ${selected.size === 1 ? 'item' : 'items'}?`,
       description: 'Hides them from this sheet until restored — nothing is deleted. Restore any of them later from the Rejected tab on the Creatives page.',
       confirmLabel: 'Reject',
       variant: 'danger',
     },
     deleteSheet: {
       title: `Delete sheet "${pendingConfirm?.type === 'deleteSheet' ? pendingConfirm.sheetName : ''}"?`,
-      description: 'Removes this sheet and its asset pointers from the gallery. The underlying creatives are never touched.',
+      description: 'Removes this sheet from the Gallery. Your ads themselves are kept.',
       confirmLabel: 'Delete sheet',
       variant: 'danger',
     },
     deleteTopic: {
       title: `Delete topic "${topic?.name ?? ''}"?`,
-      description: 'Removes this topic, all its sheets, and their asset pointers from the gallery. The underlying creatives are never touched — only how they were organized.',
+      description: 'Removes this topic and its sheets from the Gallery. Your ads themselves are kept — only how they were organised goes.',
       confirmLabel: 'Delete topic',
       variant: 'danger',
     },
@@ -302,7 +306,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
       <Link href={`/dashboard/${tenantId}/gallery`} className="flex items-center gap-1.5 text-[13px] font-medium mb-4" style={{ color: 'var(--ink-3)' }}>
-        <ArrowLeft size={14} /> Asset gallery
+        <ArrowLeft size={14} /> Gallery
       </Link>
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div className="flex-1 min-w-0">
@@ -342,7 +346,8 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
         </button>
       </div>
 
-      {error && <p className="text-[13px] mb-4" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {error && <p className="text-[13px] mb-4 break-words" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {error && errorRaw && <Details className="mb-4" items={[{ label: 'Error', value: errorRaw }]} />}
 
       <Tabs.Root value={activeSheetId} onValueChange={setActiveSheetId}>
         <Tabs.List className="flex gap-1 mb-6 flex-wrap items-center" style={{ borderBottom: '2px solid var(--border)' }}>
@@ -443,7 +448,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
             ) : assets.length === 0 ? (
               <div className="card px-6 py-14 text-center">
                 <LayoutGrid size={22} className="mx-auto mb-2" style={{ color: 'var(--ink-4)' }} />
-                <p style={{ color: 'var(--ink-3)' }}>No assets in this sheet yet.</p>
+                <p style={{ color: 'var(--ink-3)' }}>Nothing in this sheet yet.</p>
               </div>
             ) : (
               <>
@@ -519,7 +524,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
                             <video src={asset.assetUrl} className="w-full h-full object-cover" muted />
                           ) : (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={asset.assetUrl} alt="Creative asset" className="w-full h-full object-cover" />
+                            <img src={asset.assetUrl} alt="Ad image" className="w-full h-full object-cover" />
                           )}
                           <button onClick={() => toggleSelect(asset._id)} className="absolute inset-0" aria-label="Select" />
                           <span
@@ -582,7 +587,7 @@ export default function GalleryTopicDetailPage({ params }: PageProps) {
         headline={previewCopy?.headline}
         primaryText={previewCopy?.primaryText}
         cta={previewCopy?.cta}
-        meta={previewAsset ? `${previewAsset.assetType === 'video' ? 'Video' : 'Image'} · variant ${previewAsset.variantIndex + 1}` : undefined}
+        meta={previewAsset ? `${previewAsset.assetType === 'video' ? 'Video' : 'Image'} · version ${previewAsset.variantIndex + 1}` : undefined}
         tenantId={tenantId}
         packageId={previewAsset?.sourcePackageId}
         loading={previewLoading}

@@ -97,7 +97,7 @@ export function AddCreativeSheet({
     setLoading(true)
     listCreativePackages(tenantId)
       .then(setPackages)
-      .catch(() => setError('Failed to load existing creatives'))
+      .catch(() => setError("We couldn't load your creatives. Try again."))
       .finally(() => setLoading(false))
   }, [open, tenantId])
 
@@ -139,7 +139,7 @@ export function AddCreativeSheet({
       onAdded()
       onClose()
     } catch {
-      setError('Failed to add selected creatives')
+      setError("We couldn't add the creatives you picked. Try again.")
     } finally {
       setAdding(false)
     }
