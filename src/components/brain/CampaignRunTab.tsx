@@ -44,8 +44,9 @@ import type {
   BrainRunTone,
   BrainTabKey,
 } from '@/types/brain'
-import { cn, formatRelativeTime } from '@/lib/utils'
-import { BrainError, BrainSkeleton, BudgetAuthorityNotice, SectionCard } from './shared'
+import { cn } from '@/lib/utils'
+import { errorDetail, formatRelative, formatWhen, humanise, plainStatus } from '@/lib/plain-language'
+import { BrainError, BrainSkeleton, BudgetAuthorityNotice, SectionCard, plainIfCode } from './shared'
 import { CreativePreviewModal } from '@/components/ui/CreativePreviewModal'
 
 /** Tone → chip class. One table, so the whole tab says the same colour for the same thing. */
@@ -76,13 +77,20 @@ const STEP_TONE: Record<string, BrainRunTone> = {
   idle: 'idle',
 }
 
-const STEP_WORD: Record<string, string> = {
-  done: 'Done',
-  running: 'In progress',
-  waiting_for_human: 'Waiting for you',
-  blocked: 'Stopped',
-  failed: 'Failed',
-  idle: 'Not started',
+/** Step state in words — from the shared vocabulary, so it matches the Pipeline tab. */
+function stepWord(state: string): string {
+  return plainStatus('stageState', state).label
+}
+
+/** A date-only or ISO value as a human date; anything else (already words) passes through. */
+function humanDate(value: string | null | undefined): string {
+  if (!value) return '—'
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? formatWhen(value) : value
+}
+
+/** Meta call-to-action codes ("LEARN_MORE") read as words ("Learn more"). */
+function plainCta(cta: string): string {
+  return /^[A-Z0-9]+(_[A-Z0-9]+)*$/.test(cta) ? humanise(cta) : cta
 }
 
 interface CampaignRunTabProps {
@@ -110,7 +118,7 @@ export function CampaignRunTab({ tenantId, onGoToTab }: CampaignRunTabProps) {
         setError('')
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not read the campaigns.')
+        setError(errorDetail(err) || 'Could not read the campaigns.')
       }
     })()
     return () => {
@@ -149,11 +157,11 @@ function CampaignRunList({
 
   return (
     <SectionCard
-      title="Campaigns the Brain has built"
+      title="Campaigns the Brain has set up"
       description={
         runs.length === 0
-          ? 'Nothing has been built yet.'
-          : `${runs.length} in total · ${active} still moving · ${live} live`
+          ? 'Nothing has been set up yet.'
+          : `${runs.length} in total · ${active} still in progress · ${live} live`
       }
       padded={false}
     >
@@ -174,7 +182,7 @@ function CampaignRunList({
             <thead>
               <tr>
                 <th scope="col">Product</th>
-                <th scope="col">Kind</th>
+                <th scope="col">Type</th>
                 <th scope="col">Where it is</th>
                 <th scope="col">Ads</th>
                 <th scope="col">Started</th>
@@ -198,12 +206,12 @@ function CampaignRunList({
                   }}
                 >
                   <td>
-                    <span className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+                    <span className="block max-w-[32ch] break-words text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
                       {run.product}
                     </span>
                   </td>
                   <td>
-                    <span className="explain">{run.campaignType}</span>
+                    <span className="explain">{plainIfCode(run.campaignType, 'campaignType')}</span>
                   </td>
                   <td>
                     {/* While a run is moving, where it has got to is the news. Once it has stopped,
@@ -221,7 +229,7 @@ function CampaignRunList({
                     })()}
                   </td>
                   <td className="num">
-                    <span className="explain mono">
+                    <span className="explain tabular-nums">
                       {run.creativesChosen === null
                         ? '—'
                         : run.creativesPlanned
@@ -230,7 +238,7 @@ function CampaignRunList({
                     </span>
                   </td>
                   <td>
-                    <span className="explain mono">{run.startedOn || '—'}</span>
+                    <span className="explain whitespace-nowrap">{humanDate(run.startedOn)}</span>
                   </td>
                   <td>
                     <ArrowRight size={14} style={{ color: 'var(--accent)' }} aria-hidden="true" />
@@ -280,7 +288,7 @@ function CampaignRunDetail({
         setError('')
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not read that campaign.')
+        setError(errorDetail(err) || 'Could not read that campaign.')
       }
     })()
     return () => {
@@ -320,21 +328,21 @@ function CampaignRunDetail({
 
       {/* What this is, and whether it needs you. */}
       <SectionCard
-        title={run.product}
-        description={`${run.campaignType} · started ${run.startedOn}${
-          run.updatedAt ? ` · last moved ${formatRelativeTime(run.updatedAt)}` : ''
+        title={<span className="break-words">{run.product}</span>}
+        description={`${plainIfCode(run.campaignType, 'campaignType')} · started ${humanDate(run.startedOn)}${
+          run.updatedAt ? ` · last update ${formatRelative(run.updatedAt)}` : ''
         }`}
         action={<span className={cn('chip', TONE_CHIP[run.tone])}>{run.statusLabel}</span>}
       >
-        {run.whatHappened && <p className="insight-quote">{run.whatHappened}</p>}
+        {run.whatHappened && <p className="insight-quote break-words">{run.whatHappened}</p>}
 
         {run.needsYou && (
           <div
             className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3"
             style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
           >
-            <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
-              <Clock size={14} aria-hidden="true" />
+            <span className="flex min-w-0 items-center gap-2 break-words text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
+              <Clock size={14} aria-hidden="true" className="shrink-0" />
               {run.needsYou}
             </span>
             {gateStep?.gateId && (
@@ -374,12 +382,12 @@ function CampaignRunDetail({
         >
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {run.brief.map((field) => (
-              <div key={field.label} className="card-inset p-3.5">
+              <div key={field.label} className="card-inset min-w-0 p-3.5">
                 <dt className="micro-label">{field.label}</dt>
-                <dd className="mt-1 text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>
+                <dd className="mt-1 break-words text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>
                   {field.value}
                 </dd>
-                {field.hint && <p className="explain mt-1">{field.hint}</p>}
+                {field.hint && <p className="explain mt-1 break-words">{field.hint}</p>}
               </div>
             ))}
           </dl>
@@ -400,10 +408,10 @@ function CampaignRunDetail({
             {run.audiences.map((audience, index) => (
               <li key={`${audience.name}-${index}`} className="card-inset p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>
+                  <span className="min-w-0 break-words text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>
                     {audience.name}
                   </span>
-                  <span className="flex items-center gap-2">
+                  <span className="flex flex-wrap items-center gap-2">
                     {audience.budget && <span className="chip chip-accent">{audience.budget}</span>}
                     {audience.adsPlanned !== null && (
                       <span className="explain">
@@ -412,9 +420,9 @@ function CampaignRunDetail({
                     )}
                   </span>
                 </div>
-                {audience.excludes && <p className="explain mt-1.5">{audience.excludes}</p>}
+                {audience.excludes && <p className="explain mt-1.5 break-words">{audience.excludes}</p>}
                 {audience.why && (
-                  <p className="mt-2 text-[13px]" style={{ color: 'var(--ink-2)' }}>
+                  <p className="mt-2 break-words text-[13px]" style={{ color: 'var(--ink-2)' }}>
                     {audience.why}
                   </p>
                 )}
@@ -439,7 +447,7 @@ function CampaignRunDetail({
           mediaType="image"
           headline={preview.headline ?? undefined}
           primaryText={preview.caption ?? undefined}
-          cta={preview.callToAction ?? undefined}
+          cta={preview.callToAction ? plainCta(preview.callToAction) : undefined}
           meta={[preview.language, preview.style].filter(Boolean).join(' · ') || undefined}
         />
       )}
@@ -454,7 +462,7 @@ function StepCard({ step, index }: { step: BrainCampaignStep; index: number }) {
 
   return (
     <li
-      className="card p-4"
+      className="card min-w-0 p-4"
       style={
         isWaiting
           ? { borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }
@@ -462,14 +470,14 @@ function StepCard({ step, index }: { step: BrainCampaignStep; index: number }) {
       }
     >
       <span className="micro-label">Step {index + 1}</span>
-      <p className="mt-1 text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>
+      <p className="mt-1 break-words text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>
         {step.label}
       </p>
       <span className={cn('chip mt-2', TONE_CHIP[tone])}>
         <Icon size={12} className={step.state === 'running' ? 'animate-spin' : undefined} />
-        {STEP_WORD[step.state] ?? step.state}
+        {stepWord(step.state)}
       </span>
-      <p className="explain mt-2">{step.what}</p>
+      <p className="explain mt-2 break-words">{step.what}</p>
     </li>
   )
 }
@@ -530,8 +538,8 @@ function CreativeGrid({
                 type="button"
                 onClick={() => creative.imageUrl && onOpen(creative)}
                 disabled={!creative.imageUrl}
-                className="card-hover flex h-full w-full flex-col gap-3 rounded-xl p-3.5 text-left disabled:cursor-default"
-                aria-label={`Preview ${creative.headline ?? creative.id}`}
+                className="card-hover flex h-full w-full min-w-0 flex-col gap-3 rounded-xl p-3.5 text-left disabled:cursor-default"
+                aria-label={`Preview ${creative.headline ?? 'this ad'}`}
               >
                 <div
                   className="flex w-full items-center justify-center overflow-hidden rounded-[10px]"
@@ -548,7 +556,7 @@ function CreativeGrid({
                     <img
                       src={creative.imageUrl}
                       alt={creative.headline ?? 'Ad creative'}
-                      className="h-full w-full object-contain"
+                      className="h-full w-full max-w-full object-contain"
                     />
                   ) : (
                     // Never a broken <img>. When the picture cannot be fetched, say so.
@@ -565,17 +573,19 @@ function CreativeGrid({
                   <span className={cn('chip', TONE_CHIP[creative.tone])}>{creative.statusLabel}</span>
                   {creative.language && <span className="chip chip-neutral">{creative.language}</span>}
                   {creative.score !== null && (
-                    <span className="explain mono">Score {creative.score}</span>
+                    <span className="explain tabular-nums" title="How well the ad checker rated this ad">
+                      Rated {creative.score}
+                    </span>
                   )}
                 </div>
 
                 {creative.headline && (
-                  <p className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+                  <p className="break-words text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
                     {creative.headline}
                   </p>
                 )}
                 {creative.caption && (
-                  <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+                  <p className="break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
                     {creative.caption}
                   </p>
                 )}
@@ -586,15 +596,15 @@ function CreativeGrid({
                 >
                   {creative.callToAction && (
                     <span className="text-[11.5px] font-semibold" style={{ color: 'var(--accent)' }}>
-                      {creative.callToAction}
+                      {plainCta(creative.callToAction)}
                     </span>
                   )}
                   {creative.description && (
-                    <span className="explain">{creative.description}</span>
+                    <span className="explain min-w-0 break-words">{creative.description}</span>
                   )}
                 </div>
 
-                {creative.note && <p className="explain">{creative.note}</p>}
+                {creative.note && <p className="explain break-words">{creative.note}</p>}
               </button>
             </li>
           ))}

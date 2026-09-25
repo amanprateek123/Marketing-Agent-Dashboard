@@ -5,7 +5,7 @@ import { isBrainTabKey } from '@/types/brain'
 export const metadata: Metadata = {
   title: 'Brain',
   description:
-    'The Foundry marketing agents in one place — decisions, the core pipeline, the approvals that need a human, and the agents you can run yourself.',
+    'Your AI marketing head in one place — what it decided, the ads it is making, what needs your go-ahead, and the helpers you can ask yourself.',
 }
 
 /**

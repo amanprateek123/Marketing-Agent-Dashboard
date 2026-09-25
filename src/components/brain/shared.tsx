@@ -17,7 +17,9 @@ import {
   TriangleAlert,
   XCircle,
 } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, formatInr, formatWhen, humanise, plainStatus, toneChip, type PlainDomain } from '@/lib/plain-language'
 import type {
   BrainAgentKey,
   BrainEvidence,
@@ -38,31 +40,98 @@ export const RUN_STATUS_META: Record<
   BrainRunStatus,
   { label: string; chip: string; Icon: React.ComponentType<{ size?: number; className?: string }> }
 > = {
-  queued: { label: 'Queued', chip: 'chip-neutral', Icon: CircleDot },
-  running: { label: 'Running', chip: 'chip-info', Icon: Loader2 },
-  waiting_for_human: { label: 'Waiting for you', chip: 'chip-warn', Icon: Gavel },
-  succeeded: { label: 'Done', chip: 'chip-good', Icon: CircleCheck },
-  failed: { label: 'Failed', chip: 'chip-bad', Icon: XCircle },
-  cancelled: { label: 'Cancelled', chip: 'chip-neutral', Icon: CirclePause },
+  queued: { label: plainStatus('agentRun', 'queued').label, chip: 'chip-neutral', Icon: CircleDot },
+  running: { label: plainStatus('agentRun', 'running').label, chip: 'chip-info', Icon: Loader2 },
+  waiting_for_human: { label: plainStatus('agentRun', 'waiting_for_human').label, chip: 'chip-warn', Icon: Gavel },
+  succeeded: { label: plainStatus('agentRun', 'succeeded').label, chip: 'chip-good', Icon: CircleCheck },
+  failed: { label: plainStatus('agentRun', 'failed').label, chip: 'chip-bad', Icon: XCircle },
+  cancelled: { label: plainStatus('agentRun', 'cancelled').label, chip: 'chip-neutral', Icon: CirclePause },
 }
 
 export const STAGE_STATE_META: Record<
   BrainStageState,
   { label: string; chip: string; dot: string }
 > = {
-  idle: { label: 'Not started', chip: 'chip-neutral', dot: 'var(--ink-4)' },
-  running: { label: 'Running', chip: 'chip-info', dot: 'var(--info)' },
-  waiting_for_human: { label: 'Waiting for you', chip: 'chip-warn', dot: 'var(--warn)' },
-  done: { label: 'Done', chip: 'chip-good', dot: 'var(--good)' },
-  blocked: { label: 'Stopped', chip: 'chip-bad', dot: 'var(--bad)' },
-  failed: { label: 'Failed', chip: 'chip-bad', dot: 'var(--bad)' },
+  idle: { label: plainStatus('stageState', 'idle').label, chip: 'chip-neutral', dot: 'var(--ink-4)' },
+  running: { label: plainStatus('stageState', 'running').label, chip: 'chip-info', dot: 'var(--info)' },
+  waiting_for_human: { label: plainStatus('stageState', 'waiting_for_human').label, chip: 'chip-warn', dot: 'var(--warn)' },
+  done: { label: plainStatus('stageState', 'done').label, chip: 'chip-good', dot: 'var(--good)' },
+  blocked: { label: plainStatus('stageState', 'blocked').label, chip: 'chip-bad', dot: 'var(--bad)' },
+  failed: { label: plainStatus('stageState', 'failed').label, chip: 'chip-bad', dot: 'var(--bad)' },
+}
+
+/** Who started a run, in plain words (unknown triggers are humanised, never raw). */
+export function triggerLabel(trigger: BrainRunTrigger | string | null | undefined): string {
+  return plainStatus('runTrigger', trigger).label
 }
 
 export const TRIGGER_LABEL: Record<BrainRunTrigger, string> = {
-  dashboard: 'Started here',
-  brain: 'Brain-triggered',
-  schedule: 'Scheduled',
-  slack: 'From Slack',
+  dashboard: triggerLabel('dashboard'),
+  brain: triggerLabel('brain'),
+  schedule: triggerLabel('schedule'),
+  slack: triggerLabel('slack'),
+}
+
+/**
+ * Each agent described by what it does for a marketer — the agent's product name is secondary.
+ * `role` is the headline ("Writes your ads"); `detail` one plain sentence under it.
+ */
+export const AGENT_PLAIN: Record<BrainAgentKey, { role: string; detail: string }> = {
+  brain: {
+    role: 'Plans and decides',
+    detail: 'Looks at your whole account each day and decides where the money should go.',
+  },
+  'competitor-research': {
+    role: 'Watches your competitors',
+    detail: 'Finds what similar brands are advertising, so you can spot gaps and ideas.',
+  },
+  'campaign-report': {
+    role: 'Writes your reports',
+    detail: 'Sums up how your campaigns did, in plain words you can share.',
+  },
+  'performance-analyst': {
+    role: 'Checks how ads are doing',
+    detail: 'Reads your results and points out what is working and what is not.',
+  },
+  'creative-producer': {
+    role: 'Writes your ads',
+    detail: 'Writes and designs a batch of new ads for a product.',
+  },
+  'creative-curator': {
+    role: 'Checks your ads before they go live',
+    detail: 'Scores every new ad and keeps only the ones good enough to run.',
+  },
+  'campaign-builder': {
+    role: 'Sets up your campaigns',
+    detail: 'Creates the campaign, audiences and ads in Meta — switched off until approved.',
+  },
+  'campaign-launcher': {
+    role: 'Switches campaigns on',
+    detail: 'Turns a campaign on once someone has approved it.',
+  },
+}
+
+/**
+ * Some fields arrive as either prose or a bare code ("record_and_propose"). A bare code goes
+ * through the vocabulary (humanised if unknown); prose passes through untouched.
+ */
+export function plainIfCode(value: string | null | undefined, domain: PlainDomain): string {
+  if (!value) return ''
+  const trimmed = value.trim()
+  const known = plainStatus(domain, trimmed)
+  if (known.meaning) return known.label
+  return /^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$/.test(trimmed) ? humanise(trimmed) : value
+}
+
+/** A bare code ("pain_point", "LEARN_MORE") humanised; readable text passes through. */
+export function plainCode(value: string | null | undefined): string {
+  if (!value) return ''
+  const trimmed = value.trim()
+  return /^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$/.test(trimmed) ? humanise(trimmed) : value
+}
+
+export function agentRole(key: BrainAgentKey | string): string {
+  return AGENT_PLAIN[key as BrainAgentKey]?.role ?? 'Helper'
 }
 
 const AGENT_ICON: Record<BrainAgentKey, React.ComponentType<{ size?: number }>> = {
@@ -106,9 +175,14 @@ export function AgentGlyph({
 
 export function RunStatusChip({ status, className }: { status: BrainRunStatus; className?: string }) {
   const meta = RUN_STATUS_META[status]
+  if (!meta) {
+    // A status the dashboard does not know yet — humanised, never raw.
+    const plain = plainStatus('agentRun', status)
+    return <span className={cn('chip', toneChip(plain.tone), className)}>{plain.label}</span>
+  }
   const { Icon } = meta
   return (
-    <span className={cn('chip', meta.chip, className)}>
+    <span className={cn('chip', meta.chip, className)} title={plainStatus('agentRun', status).meaning || undefined}>
       <Icon size={12} className={status === 'running' ? 'animate-spin' : undefined} />
       {meta.label}
     </span>
@@ -191,9 +265,9 @@ const PROVENANCE_META: Record<
   BrainEvidence['provenance'],
   { label: string; color: string; border: string }
 > = {
-  measured: { label: 'Measured', color: 'var(--good)', border: 'solid' },
-  estimate: { label: 'Estimate', color: 'var(--viz-estimate)', border: 'dashed' },
-  unknown: { label: 'Unknown source', color: 'var(--viz-unknown)', border: 'dotted' },
+  measured: { label: plainStatus('provenance', 'measured').label, color: 'var(--good)', border: 'solid' },
+  estimate: { label: plainStatus('provenance', 'estimate').label, color: 'var(--viz-estimate)', border: 'dashed' },
+  unknown: { label: plainStatus('provenance', 'unknown').label, color: 'var(--viz-unknown)', border: 'dotted' },
 }
 
 /**
@@ -207,30 +281,37 @@ export function EvidenceList({ evidence }: { evidence: BrainEvidence[] }) {
   return (
     <ul className="flex flex-col gap-2">
       {evidence.map((item, index) => {
-        const meta = PROVENANCE_META[item.provenance]
+        const meta = PROVENANCE_META[item.provenance] ?? PROVENANCE_META.unknown
         return (
           <li
             key={`${item.label}-${index}`}
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[10px] px-3 py-2"
+            className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[10px] px-3 py-2"
             style={{
               background: 'var(--surface-warm)',
               border: `1px ${meta.border} var(--hairline)`,
             }}
           >
-            <span className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+            <span className="min-w-0 break-words text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
               {item.label}
             </span>
-            <span className="mono text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
+            <span className="min-w-0 break-words text-[13px] font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
               {item.value}
             </span>
-            <span className="ml-auto flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ink-3)' }}>
+            <span
+              className="ml-auto flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]"
+              style={{ color: 'var(--ink-3)' }}
+            >
               <span style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</span>
-              <span aria-hidden="true">·</span>
-              <span>{item.source}</span>
+              {item.source && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="min-w-0 break-words">{item.source}</span>
+                </>
+              )}
               {item.freshness && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="mono">{item.freshness}</span>
+                  <span>{humanFreshness(item.freshness)}</span>
                 </>
               )}
             </span>
@@ -239,6 +320,11 @@ export function EvidenceList({ evidence }: { evidence: BrainEvidence[] }) {
       })}
     </ul>
   )
+}
+
+/** Evidence freshness can arrive as an ISO timestamp — never print one raw. */
+function humanFreshness(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? formatWhen(value) : value
 }
 
 // ── Designed non-happy states (DESIGN.md §8) ───────────────────────────────
@@ -272,11 +358,14 @@ export function BrainError({ message, onRetry }: { message: string; onRetry: () 
       >
         <TriangleAlert size={18} />
       </span>
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <p className="font-semibold" style={{ color: 'var(--ink)' }}>
-          The Brain could not be reached
+          We couldn&apos;t reach the Brain
         </p>
-        <p className="explain mt-1">{message}</p>
+        <p className="explain mt-1">{PLAIN_ERROR}</p>
+        {message && (
+          <Details className="mt-2" items={[{ label: 'What went wrong', value: message }]} />
+        )}
       </div>
       <button type="button" className="btn btn-ghost" onClick={onRetry}>
         Try again
@@ -306,11 +395,11 @@ export function BudgetAuthorityNotice({
   if (!authority) return null
   const authorised =
     authority.authorisedDailyBudgetInr !== null
-      ? `${formatCurrency(authority.authorisedDailyBudgetInr)} a day`
+      ? formatInr(authority.authorisedDailyBudgetInr, { perDay: true })
       : 'nothing yet'
   const contract =
     authority.contractTotalInr !== null
-      ? `${formatCurrency(authority.contractTotalInr)} a day`
+      ? formatInr(authority.contractTotalInr, { perDay: true })
       : 'no daily budgets'
 
   if (authority.consistent) {

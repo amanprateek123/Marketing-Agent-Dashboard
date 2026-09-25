@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { BrainCircuit, RefreshCw, WifiOff } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
+import { errorDetail, formatRelative } from '@/lib/plain-language'
 import {
   BRAIN_MOCK,
   getBrainAgents,
@@ -74,7 +74,7 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
         ])
         setData({ state, agents, decisions, gates, pipeline, runs })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'The Brain bridge did not respond.')
+        setError(errorDetail(err) || 'No answer from the Brain.')
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -134,11 +134,11 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
             </span>
             {state.connected ? (
               <span className="chip chip-good">
-                <span className="beacon" aria-hidden="true" /> Foundry connected
+                <span className="beacon" aria-hidden="true" /> Connected
               </span>
             ) : (
-              <span className="chip chip-bad">
-                <WifiOff size={11} aria-hidden="true" /> Foundry unreachable
+              <span className="chip chip-bad" title="We can't reach the Brain right now, so what you see may be out of date.">
+                <WifiOff size={11} aria-hidden="true" /> Not connected
               </span>
             )}
             {BRAIN_MOCK && (
@@ -149,18 +149,17 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
                   color: 'var(--warn)',
                   border: '1px dashed var(--warn-border)',
                 }}
-                title="NEXT_PUBLIC_BRAIN_MOCK is on — this console is running against a local stand-in, not Foundry."
+                title="This page is showing made-up example data, not your real account."
               >
-                Sample data — bridge not connected
+                Example data — not your account
               </span>
             )}
           </div>
 
-          <h1 className="page-title">The marketing head, and everything it runs</h1>
+          <h1 className="page-title">The Brain: your AI marketing head</h1>
           <p className="page-subtitle">
-            Your Foundry marketing agents in one place — what the Brain decided, what the pipeline
-            is building, what needs you, and what you can run yourself. Read{' '}
-            {formatRelativeTime(state.generatedAt)}.
+            What the Brain decided, the ads it is making, what needs your go-ahead, and the helpers
+            you can ask yourself. Updated {formatRelative(state.generatedAt)}.
           </p>
         </div>
 

@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { CalendarClock, Loader2, Pause, Play, Webhook } from 'lucide-react'
 import { getAgentTriggers, setAgentTriggerEnabled } from '@/lib/brain-api'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, plainStatus } from '@/lib/plain-language'
 import type { BrainAgentKey, BrainTrigger } from '@/types/brain'
 
 /**
@@ -21,6 +23,20 @@ import type { BrainAgentKey, BrainTrigger } from '@/types/brain'
  * bridge's transport is allowlisted to `list_triggers` and `update_trigger`, so the rest of the
  * builder token's reach is unavailable to this page by construction.
  */
+/**
+ * Trigger names come from the builder and can carry internals ("fired by the Brain's
+ * pipeline_advance", "00:00 UTC"). Keep the readable part; anything code-like becomes a plain phrase.
+ * The full name stays in the row's tooltip.
+ */
+function plainTriggerName(name: string, isSchedule: boolean): string {
+  const cleaned = name.replace(/\s*[—-]\s*fired by .*$/i, '').trim()
+  if (!cleaned || /[a-z]+_[a-z_]+/.test(cleaned) || /[*/]/.test(cleaned)) {
+    return isSchedule ? 'Runs on a timetable' : 'Started by the Brain'
+  }
+  if (!isSchedule && /webhook/i.test(cleaned)) return 'Started by the Brain'
+  return cleaned
+}
+
 export function TriggerList({
   tenantId,
   agentKey,
@@ -31,15 +47,19 @@ export function TriggerList({
   const [triggers, setTriggers] = useState<BrainTrigger[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The raw technical message, for the collapsed Details only.
+  const [errorRaw, setErrorRaw] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
       setTriggers(await getAgentTriggers(tenantId, agentKey))
       setError(null)
+      setErrorRaw(null)
     } catch (err) {
       // Not fatal to the tab. Schedule control is separately configured from everything else here,
       // so an unconfigured builder token must degrade this panel alone.
-      setError(err instanceof Error ? err.message : 'Schedules could not be read.')
+      setError("We couldn't check this helper's timetable. Try again later.")
+      setErrorRaw(errorDetail(err) || null)
       setTriggers([])
     }
   }, [tenantId, agentKey])
@@ -55,11 +75,13 @@ export function TriggerList({
       const handle = trigger.id ?? trigger.name.slice(0, 40)
       setBusy(handle)
       setError(null)
+      setErrorRaw(null)
       try {
         await setAgentTriggerEnabled(tenantId, agentKey, handle, !trigger.enabled)
         await load()
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'That change was not applied.')
+        setError("That change didn't go through. Try again.")
+        setErrorRaw(errorDetail(err) || null)
       } finally {
         setBusy(null)
       }
@@ -68,14 +90,17 @@ export function TriggerList({
   )
 
   if (triggers === null) {
-    return <p className="explain">Reading schedules…</p>
+    return <p className="explain">Checking the timetable…</p>
   }
 
   if (triggers.length === 0) {
     return (
-      <p className="explain">
-        {error ?? 'Nothing starts this agent automatically — it runs only when you or the Brain ask.'}
-      </p>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="explain">
+          {error ?? 'Nothing starts this helper on its own — it works only when you or the Brain ask.'}
+        </p>
+        {errorRaw && <Details items={[{ label: 'What went wrong', value: errorRaw }]} />}
+      </div>
     )
   }
 
@@ -87,7 +112,7 @@ export function TriggerList({
         return (
           <div
             key={`${t.source}-${t.name}`}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+            className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl px-3 py-2.5 sm:flex-nowrap"
             style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
           >
             <span
@@ -102,15 +127,21 @@ export function TriggerList({
             </span>
 
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium" style={{ color: 'var(--ink-2)' }}>
-                {t.name}
+              <span
+                className="block truncate text-[13px] font-medium"
+                style={{ color: 'var(--ink-2)' }}
+                title={t.name}
+              >
+                {plainTriggerName(t.name, isSchedule)}
               </span>
               <span className="explain flex flex-wrap items-center gap-x-2">
-                <span className={t.enabled ? 'chip chip-good' : 'chip chip-neutral'}>
-                  {t.enabled ? 'On' : 'Paused'}
+                <span
+                  className={t.enabled ? 'chip chip-good' : 'chip chip-neutral'}
+                  title={plainStatus('triggerState', t.enabled ? 'enabled' : 'disabled').meaning}
+                >
+                  {plainStatus('triggerState', t.enabled ? 'enabled' : 'disabled').label}
                 </span>
-                {t.cron && <code>{t.cron}</code>}
-                {!isSchedule && <span>fired by the Brain, not a clock</span>}
+                {!isSchedule && <span>started by the Brain when the step before is done</span>}
               </span>
             </span>
 
@@ -139,14 +170,17 @@ export function TriggerList({
       })}
 
       {error && (
-        <p className="text-sm" style={{ color: 'var(--bad)' }}>
-          {error}
-        </p>
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm" style={{ color: 'var(--bad)' }}>
+            {error}
+          </p>
+          {errorRaw && <Details items={[{ label: 'What went wrong', value: errorRaw }]} />}
+        </div>
       )}
 
       <p className="explain">
-        On or off only. Changing <em>when</em> something runs stays in Studio — the bridge is
-        restricted to reading schedules and toggling them.
+        You can switch a timetable on or off here. To change <em>when</em> it runs, ask your
+        admin.
       </p>
     </div>
   )

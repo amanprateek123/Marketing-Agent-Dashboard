@@ -2,26 +2,28 @@
 
 import React from 'react'
 import { ArrowRight, CalendarClock, CircleCheck, Gavel, History, TrendingUp } from 'lucide-react'
-import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/utils'
+import { formatPercent } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { formatInr, formatRelative, plainStatus } from '@/lib/plain-language'
 import type { BrainState, BrainTabKey } from '@/types/brain'
-import { AgentGlyph, SectionCard, StatTile, STAGE_STATE_META } from './shared'
+import { AgentGlyph, SectionCard, StatTile, STAGE_STATE_META, plainIfCode } from './shared'
 
 const BRAIN_STATUS_META: Record<
   BrainState['brain']['status'],
   { label: string; chip: string; live: boolean }
 > = {
-  thinking: { label: 'Thinking now', chip: 'chip-info', live: true },
-  idle: { label: 'Idle — nothing pending', chip: 'chip-good', live: false },
-  blocked: { label: 'Waiting on you', chip: 'chip-warn', live: false },
-  offline: { label: 'Offline', chip: 'chip-bad', live: false },
+  thinking: { label: plainStatus('brainStatus', 'thinking').label, chip: 'chip-info', live: true },
+  idle: { label: plainStatus('brainStatus', 'idle').label, chip: 'chip-good', live: false },
+  blocked: { label: plainStatus('brainStatus', 'blocked').label, chip: 'chip-warn', live: false },
+  offline: { label: plainStatus('brainStatus', 'offline').label, chip: 'chip-bad', live: false },
 }
 
-const HEALTH_TONE = {
-  good: { chip: 'chip-good', bar: 'var(--good)', label: 'Working' },
-  watch: { chip: 'chip-warn', bar: 'var(--warn)', label: 'Watch this' },
-  bad: { chip: 'chip-bad', bar: 'var(--bad)', label: 'Losing money' },
-  unknown: { chip: 'chip-neutral', bar: 'var(--viz-unknown)', label: 'No signal yet' },
-} as const
+const HEALTH_TONE: Record<string, { chip: string; bar: string; label: string }> = {
+  good: { chip: 'chip-good', bar: 'var(--good)', label: plainStatus('health', 'good').label },
+  watch: { chip: 'chip-warn', bar: 'var(--warn)', label: plainStatus('health', 'watch').label },
+  bad: { chip: 'chip-bad', bar: 'var(--bad)', label: plainStatus('health', 'bad').label },
+  unknown: { chip: 'chip-neutral', bar: 'var(--viz-unknown)', label: plainStatus('health', 'unknown').label },
+}
 
 interface PulseTabProps {
   state: BrainState
@@ -29,7 +31,11 @@ interface PulseTabProps {
 }
 
 export function PulseTab({ state, onGoToTab }: PulseTabProps) {
-  const status = BRAIN_STATUS_META[state.brain.status]
+  const status = BRAIN_STATUS_META[state.brain.status] ?? {
+    label: plainStatus('brainStatus', state.brain.status).label,
+    chip: 'chip-neutral',
+    live: false,
+  }
   const { budget, pipeline } = state
   const movedProducts = budget.allocations.filter(
     (a) => a.previousDailyBudget != null && a.previousDailyBudget !== a.dailyBudget,
@@ -50,32 +56,39 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
             <AgentGlyph agentKey="brain" size={48} />
             <div className="min-w-0">
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className={`chip ${status.chip}`}>
+                <span
+                  className={`chip ${status.chip}`}
+                  title={plainStatus('brainStatus', state.brain.status).meaning || undefined}
+                >
                   {status.live && <span className="beacon" aria-hidden="true" />}
                   {status.label}
                 </span>
-                <span className="chip chip-neutral mono">{state.brain.version}</span>
               </div>
-              <p className="insight-quote">{state.brain.headline}</p>
-              <p className="explain mt-2 max-w-[70ch]">{state.brain.posture}</p>
+              <p className="insight-quote break-words">{state.brain.headline}</p>
+              <p className="explain mt-2 max-w-[70ch] break-words">
+                {plainIfCode(state.brain.posture, 'brainLabel')}
+              </p>
+              {state.brain.version && (
+                <Details className="mt-3" items={[{ label: 'Brain version', value: state.brain.version }]} />
+              )}
             </div>
           </div>
 
           <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 lg:text-right">
             <div>
               <dt className="micro-label flex items-center gap-1.5 lg:justify-end">
-                <History size={12} aria-hidden="true" /> Last cycle
+                <History size={12} aria-hidden="true" /> Last checked
               </dt>
               <dd className="mt-0.5 text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                {formatRelativeTime(state.brain.lastCycleAt)}
+                {formatRelative(state.brain.lastCycleAt)}
               </dd>
             </div>
             <div>
               <dt className="micro-label flex items-center gap-1.5 lg:justify-end">
-                <CalendarClock size={12} aria-hidden="true" /> Next cycle
+                <CalendarClock size={12} aria-hidden="true" /> Next check
               </dt>
               <dd className="mt-0.5 text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                {formatRelativeTime(state.brain.nextCycleAt)}
+                {formatRelative(state.brain.nextCycleAt)}
               </dd>
             </div>
           </dl>
@@ -84,12 +97,12 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
-          label="Daily budget it controls"
-          value={formatCurrency(budget.dailyTotal)}
+          label="Daily budget it manages"
+          value={formatInr(budget.dailyTotal)}
           meaning={
             budget.changedAt
-              ? `Last rebalanced ${formatRelativeTime(budget.changedAt)}`
-              : 'Not yet rebalanced'
+              ? `Split between products ${formatRelative(budget.changedAt)}`
+              : 'Not split between products yet'
           }
         />
         <StatTile
@@ -98,31 +111,35 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
           tone={state.openGates > 0 ? 'warn' : 'good'}
           meaning={
             state.openGates > 0
-              ? 'The pipeline cannot move until these are answered'
-              : 'Nothing is blocked on a human'
+              ? 'New ads and campaigns wait until you answer these'
+              : 'Nothing is waiting for your go-ahead'
           }
         />
         <StatTile
-          label="Agents live"
+          label="Helpers working"
           value={`${state.agentsLive} of ${state.agentsTotal}`}
-          meaning="Marketing agents only — internal agents are not shown here"
+          meaning="The AI helpers that make, check and launch your ads"
         />
         <StatTile
-          label="Pipeline"
-          value={pipeline ? STAGE_STATE_META[stageStateOf(pipeline)].label : 'Idle'}
+          label="New ads"
+          value={pipeline ? STAGE_STATE_META[stageStateOf(pipeline)].label : 'Nothing in progress'}
           tone={pipeline?.status === 'waiting_for_human' ? 'warn' : 'ink'}
-          meaning={pipeline ? pipeline.headline : 'No batch in flight'}
+          meaning={pipeline ? pipeline.headline : 'No new ads are being made right now'}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
         <SectionCard
           title="Where the money is going"
-          description="The Brain's current split, and why each product got what it got."
+          description="How the Brain is splitting the daily budget, and why each product got what it got."
         >
           <ul className="flex flex-col gap-4">
             {budget.allocations.map((allocation) => {
-              const tone = HEALTH_TONE[allocation.health]
+              const tone = HEALTH_TONE[allocation.health] ?? {
+                chip: 'chip-neutral',
+                bar: 'var(--viz-unknown)',
+                label: plainStatus('health', allocation.health).label,
+              }
               const delta =
                 allocation.previousDailyBudget != null
                   ? allocation.dailyBudget - allocation.previousDailyBudget
@@ -131,8 +148,8 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
               return (
                 <li key={allocation.product}>
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="min-w-0 break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                         {allocation.product}
                       </span>
                       <span className={`chip ${tone.chip}`}>{tone.label}</span>
@@ -142,17 +159,17 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
                         className="display-num text-[18px]"
                         style={{ color: 'var(--ink)' }}
                       >
-                        {formatCurrency(allocation.dailyBudget)}
+                        {formatInr(allocation.dailyBudget)}
                       </span>
-                      <span className="explain">/day</span>
+                      <span className="explain">a day</span>
                       {delta !== 0 && (
                         <span
                           className="chip chip-accent tabular-nums"
-                          title={`Was ${formatCurrency(allocation.previousDailyBudget ?? 0)}/day`}
+                          title={`Was ${formatInr(allocation.previousDailyBudget ?? 0, { perDay: true })}`}
                         >
                           <TrendingUp size={11} aria-hidden="true" />
                           {delta > 0 ? '+' : '−'}
-                          {formatCurrency(Math.abs(delta))}
+                          {formatInr(Math.abs(delta))}
                         </span>
                       )}
                     </div>
@@ -170,20 +187,20 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
                     />
                   </div>
 
-                  <p className="explain mt-1.5">{allocation.reason}</p>
+                  <p className="explain mt-1.5 break-words">{allocation.reason}</p>
                 </li>
               )
             })}
           </ul>
 
           {movedProducts.length === 0 && (
-            <p className="explain mt-4">No product&rsquo;s budget changed in the last cycle.</p>
+            <p className="explain mt-4">No product&rsquo;s budget changed at the last check.</p>
           )}
         </SectionCard>
 
         <SectionCard
           title="What needs you"
-          description="Nothing here resolves itself. Each one is holding something up."
+          description="These won't sort themselves out — each one is holding something up."
           action={
             state.openGates > 0 ? (
               <button type="button" className="btn btn-accent" onClick={() => onGoToTab('approvals')}>
@@ -219,10 +236,10 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
                       style={{ background: tone }}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                      <span className="block break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                         {item.label}
                       </span>
-                      <span className="explain mt-0.5 block">{item.detail}</span>
+                      <span className="explain mt-0.5 block break-words">{item.detail}</span>
                     </span>
                     {item.tab && (
                       <ArrowRight size={15} aria-hidden="true" style={{ color: 'var(--ink-4)' }} />

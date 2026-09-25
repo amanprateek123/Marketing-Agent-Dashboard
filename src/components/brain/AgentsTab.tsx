@@ -12,7 +12,8 @@ import {
   Square,
   TriangleAlert,
 } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, formatRelative, formatWhen } from '@/lib/plain-language'
 import {
   cancelBrainRun,
   getBrainRun,
@@ -26,16 +27,21 @@ import type {
   BrainRunEvent,
   BrainRunSummary,
 } from '@/types/brain'
-import { AgentGlyph, RunStatusChip, SectionCard, TRIGGER_LABEL } from './shared'
+import { AGENT_PLAIN, AgentGlyph, RunStatusChip, SectionCard, agentRole, triggerLabel } from './shared'
 import { TriggerList } from './TriggerList'
 import { RunOutputView } from './RunOutput'
 
+/** Which part of the job each helper covers, in words a marketer would use. */
 const STAGE_LABEL: Record<BrainAgent['stage'], string> = {
-  understand: 'Understand',
-  create: 'Create',
-  control: 'Control',
-  improve: 'Improve',
-  prove: 'Prove',
+  understand: 'Research',
+  create: 'Making ads',
+  control: 'Spending',
+  improve: 'Improving',
+  prove: 'Reporting',
+}
+
+function stageLabel(stage: BrainAgent['stage'] | string): string {
+  return STAGE_LABEL[stage as BrainAgent['stage']] ?? 'Other'
 }
 
 interface AgentsTabProps {
@@ -57,8 +63,8 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[320px_1fr]">
         <div className="flex flex-col gap-4">
           <SectionCard
-            title="Run an agent"
-            description="These four you can start yourself."
+            title="Ask a helper"
+            description="Each helper does one job for you. Pick one and start it whenever you like."
             padded={false}
           >
             <ul className="flex flex-col">
@@ -82,13 +88,14 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
                       <AgentGlyph agentKey={agent.key} size={34} tone={active ? 'accent' : 'neutral'} />
                       <span className="min-w-0 flex-1">
                         <span
-                          className="block text-[13.5px] font-semibold leading-snug"
+                          className="block break-words text-[13.5px] font-semibold leading-snug"
                           style={{ color: active ? 'var(--ink)' : 'var(--ink-2)' }}
                         >
-                          {agent.name}
+                          {agentRole(agent.key)}
                         </span>
+                        <span className="explain block break-words">{agent.name}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <span className="chip chip-neutral">{STAGE_LABEL[agent.stage]}</span>
+                          <span className="chip chip-neutral">{stageLabel(agent.stage)}</span>
                           {agent.lastRun && <RunStatusChip status={agent.lastRun.status} />}
                         </span>
                       </span>
@@ -100,8 +107,8 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
           </SectionCard>
 
           <SectionCard
-            title="Brain-triggered"
-            description="The core pipeline. You cannot start these — the Brain hands each one its work by webhook, and a sweeper re-fires anything the webhook missed."
+            title="Started by the Brain"
+            description="These helpers make and launch your ads. You don't start them — the Brain hands each one its work when the step before it is done."
             padded={false}
           >
             <ul className="flex flex-col">
@@ -113,11 +120,17 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
                 >
                   <AgentGlyph agentKey={agent.key} size={30} tone="neutral" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold leading-snug" style={{ color: 'var(--ink-2)' }}>
-                      {agent.name}
+                    <p
+                      className="break-words text-[13px] font-semibold leading-snug"
+                      style={{ color: 'var(--ink-2)' }}
+                    >
+                      {agentRole(agent.key)}
                     </p>
-                    <p className="explain mt-0.5 flex items-center gap-1">
-                      <Lock size={10} aria-hidden="true" /> {STAGE_LABEL[agent.stage]} · Brain-triggered
+                    <p className="explain mt-0.5 break-words">
+                      {AGENT_PLAIN[agent.key]?.detail ?? agent.name}
+                    </p>
+                    <p className="explain mt-0.5 flex flex-wrap items-center gap-1">
+                      <Lock size={10} aria-hidden="true" /> {stageLabel(agent.stage)} · Started by the Brain
                     </p>
                     {/* These four are precisely where a paused schedule misleads: they are
                         webhook-driven by design, so "every schedule paused" is the HEALTHY state
@@ -140,25 +153,25 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
             onRunFinished={onRunFinished}
           />
         ) : (
-          <SectionCard title="Run an agent">
-            <p className="explain">No agent is available to run right now.</p>
+          <SectionCard title="Ask a helper">
+            <p className="explain">No helper is available to start right now.</p>
           </SectionCard>
         )}
       </div>
 
       <SectionCard
-        title="Run history"
-        description="Every run, whoever started it — you, the Brain, or a schedule."
+        title="What the helpers have done"
+        description="Every piece of work, whoever started it — you, the Brain, or a timetable."
         padded={false}
       >
         {runs.length === 0 ? (
-          <p className="explain px-5 py-8 text-center">Nothing has run yet.</p>
+          <p className="explain px-5 py-8 text-center">No helper has done any work yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Agent</th>
+                  <th scope="col">Helper</th>
                   <th scope="col">Status</th>
                   <th scope="col">Started by</th>
                   <th scope="col">Started</th>
@@ -171,20 +184,25 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
                     <td>
                       <span className="flex items-center gap-2.5">
                         <AgentGlyph agentKey={run.agentKey} size={28} tone="neutral" />
-                        <span className="text-[13.5px] font-semibold">{run.agentName}</span>
+                        <span className="min-w-0">
+                          <span className="block text-[13.5px] font-semibold">{agentRole(run.agentKey)}</span>
+                          <span className="explain block">{run.agentName}</span>
+                        </span>
                       </span>
                     </td>
                     <td>
                       <RunStatusChip status={run.status} />
                     </td>
                     <td>
-                      <span className="explain">{TRIGGER_LABEL[run.trigger]}</span>
+                      <span className="explain">{triggerLabel(run.trigger)}</span>
                     </td>
                     <td>
-                      <span className="explain mono">{formatRelativeTime(run.startedAt)}</span>
+                      <span className="explain whitespace-nowrap" title={formatWhen(run.startedAt)}>
+                        {formatRelative(run.startedAt)}
+                      </span>
                     </td>
                     <td>
-                      <span className="explain block max-w-[52ch]">{run.summary ?? '—'}</span>
+                      <span className="explain block max-w-[52ch] break-words">{run.summary ?? '—'}</span>
                     </td>
                   </tr>
                 ))}
@@ -195,6 +213,13 @@ export function AgentsTab({ tenantId, agents, runs, onRunFinished }: AgentsTabPr
       </SectionCard>
     </div>
   )
+}
+
+function formatDuration(ms: number | null | undefined): string {
+  const seconds = Math.max(0, Math.round((ms ?? 0) / 1000))
+  if (seconds < 60) return `${seconds} seconds`
+  const minutes = Math.round(seconds / 60)
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`
 }
 
 // ── One agent: its form, its live run, its output ──────────────────────────
@@ -216,6 +241,8 @@ function AgentRunPanel({
   const [events, setEvents] = useState<BrainRunEvent[]>([])
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The raw technical message behind `error`, kept for the collapsed Details only.
+  const [errorRaw, setErrorRaw] = useState<string | null>(null)
 
   // Guards a stale poll from writing over a newer run's state after the
   // operator starts a second run before the first finished.
@@ -260,7 +287,10 @@ function AgentRunPanel({
           onRunFinished()
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Lost track of that run.')
+        if (!cancelled) {
+          setError("We lost track of this piece of work. Refresh the page to see where it got to.")
+          setErrorRaw(errorDetail(err) || null)
+        }
       }
     }
 
@@ -272,11 +302,13 @@ function AgentRunPanel({
 
   async function start() {
     if (missingRequired.length) {
-      setError(`${missingRequired.join(' and ')} is required.`)
+      setError(`Please fill in ${missingRequired.join(' and ')}.`)
+      setErrorRaw(null)
       return
     }
     setStarting(true)
     setError(null)
+    setErrorRaw(null)
     setEvents([])
     setRun(null)
     notifiedRef.current = false
@@ -285,7 +317,8 @@ function AgentRunPanel({
       activeRunRef.current = id
       setRunId(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That run could not be started.')
+      setError("We couldn't start this. Try again.")
+      setErrorRaw(errorDetail(err) || null)
     } finally {
       setStarting(false)
     }
@@ -301,21 +334,26 @@ function AgentRunPanel({
   return (
     <div className="flex flex-col gap-5">
       <SectionCard
-        title={agent.name}
-        description={agent.whatItDoes}
-        action={<span className="chip chip-good">Live</span>}
+        title={agentRole(agent.key)}
+        description={
+          <>
+            <span className="block break-words">{agent.whatItDoes}</span>
+            <span className="mt-0.5 block break-words" style={{ color: 'var(--ink-4)' }}>
+              {agent.name}
+            </span>
+          </>
+        }
+        action={<span className="chip chip-good">Ready</span>}
       >
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="chip chip-neutral mono" title="Foundry agent id">
-            {agent.foundryAgentId}
-          </span>
           {agent.schedule && (
-            <span className="chip chip-info">
-              <CalendarClock size={11} aria-hidden="true" /> {agent.schedule}
+            <span className="chip chip-info max-w-full">
+              <CalendarClock size={11} aria-hidden="true" />{' '}
+              <span className="min-w-0 break-words">{agent.schedule}</span>
             </span>
           )}
           {agent.nextRunAt && (
-            <span className="explain">Next automatic run {formatRelativeTime(agent.nextRunAt)}</span>
+            <span className="explain">Next starts on its own {formatRelative(agent.nextRunAt)}</span>
           )}
         </div>
 
@@ -382,13 +420,15 @@ function AgentRunPanel({
           ))}
 
           {error && (
-            <p
-              role="alert"
-              className="flex items-center gap-2 text-[13px] font-semibold"
-              style={{ color: 'var(--bad)' }}
-            >
-              <TriangleAlert size={14} aria-hidden="true" /> {error}
-            </p>
+            <div role="alert" className="flex min-w-0 flex-col gap-1">
+              <p
+                className="flex items-center gap-2 break-words text-[13px] font-semibold"
+                style={{ color: 'var(--bad)' }}
+              >
+                <TriangleAlert size={14} aria-hidden="true" className="shrink-0" /> {error}
+              </p>
+              {errorRaw && <Details items={[{ label: 'What went wrong', value: errorRaw }]} />}
+            </div>
           )}
 
           <div className="flex flex-wrap items-center gap-2">
@@ -398,7 +438,7 @@ function AgentRunPanel({
               ) : (
                 <Play size={13} fill="currentColor" aria-hidden="true" />
               )}
-              {busy ? 'Running…' : run ? 'Run again' : 'Run now'}
+              {busy ? 'Working…' : run ? 'Start again' : 'Start now'}
             </button>
             {busy && runId && (
               <button type="button" className="btn btn-ghost" onClick={() => void stop()}>
@@ -408,7 +448,7 @@ function AgentRunPanel({
             {run?.status === 'succeeded' && (
               <span className="chip chip-good">
                 <CircleCheck size={11} aria-hidden="true" /> Finished in{' '}
-                {Math.round((run.durationMs ?? 0) / 1000)}s
+                {formatDuration(run.durationMs)}
               </span>
             )}
           </div>
@@ -417,12 +457,8 @@ function AgentRunPanel({
 
       {run && (
         <SectionCard
-          title="This run"
-          description={
-            <>
-              <span className="mono">{run.runId}</span> · started {formatRelativeTime(run.startedAt)}
-            </>
-          }
+          title="This piece of work"
+          description={<>Started {formatRelative(run.startedAt)}</>}
           action={<RunStatusChip status={run.status} />}
         >
           <ol className="mb-5 flex flex-col gap-2">
@@ -436,7 +472,7 @@ function AgentRunPanel({
                   <CircleDot size={15} aria-hidden="true" style={{ color: 'var(--ink-4)' }} />
                 )}
                 <span
-                  className="text-[13.5px]"
+                  className="min-w-0 break-words text-[13.5px]"
                   style={{
                     color: step.state === 'pending' ? 'var(--ink-4)' : 'var(--ink-2)',
                     fontWeight: step.state === 'running' ? 600 : 400,
@@ -450,22 +486,22 @@ function AgentRunPanel({
 
           {events.length > 0 && (
             <details className="mb-5" open={run.status === 'running'}>
-              <summary className="micro-label">Live log ({events.length})</summary>
+              <summary className="micro-label">Step-by-step progress ({events.length})</summary>
               <ul
                 className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto rounded-xl px-3 py-2.5"
                 style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}
               >
                 {events.map((event) => (
-                  <li key={event.seq} className="animate-feed-in flex gap-2">
-                    <span className="mono shrink-0 text-[11px]" style={{ color: 'var(--ink-4)' }}>
+                  <li key={event.seq} className="animate-feed-in flex min-w-0 gap-2">
+                    <span className="shrink-0 text-[11px] tabular-nums" style={{ color: 'var(--ink-4)' }}>
                       {new Date(event.at).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
+                        hour: 'numeric',
                         minute: '2-digit',
                         second: '2-digit',
                       })}
                     </span>
                     <span
-                      className="text-[12.5px] leading-snug"
+                      className="min-w-0 break-words text-[12.5px] leading-snug"
                       style={{
                         color:
                           event.level === 'error'
@@ -491,14 +527,18 @@ function AgentRunPanel({
             </div>
           ) : run.status === 'running' ? (
             <p className="explain flex items-center gap-2">
-              <RefreshCw size={13} className="animate-spin" aria-hidden="true" /> The output appears
-              here the moment the agent finishes.
+              <RefreshCw size={13} className="animate-spin" aria-hidden="true" /> The result appears
+              here as soon as it is done.
             </p>
           ) : run.error ? (
-            <p className="text-[13px] font-semibold" style={{ color: 'var(--bad)' }}>
-              {run.error}
-            </p>
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--bad)' }}>
+                This didn&apos;t finish. Try starting it again.
+              </p>
+              <Details items={[{ label: 'What went wrong', value: run.error }]} />
+            </div>
           ) : null}
+          <Details className="mt-4" reference={run.runId} />
         </SectionCard>
       )}
     </div>

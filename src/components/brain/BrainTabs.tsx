@@ -13,13 +13,13 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { key: 'pulse', label: 'Pulse', description: 'What the Brain is doing right now', Icon: Gauge },
-  { key: 'decisions', label: 'Decisions', description: 'Every call it made, with its evidence', Icon: ScrollText },
-  { key: 'pipeline', label: 'Pipeline', description: 'Producer → Curator → Builder → Launcher', Icon: Workflow },
-  { key: 'campaign-run', label: 'Campaigns', description: 'What is being built, and the ads going out', Icon: Megaphone },
+  { key: 'decisions', label: 'Decisions', description: 'What it decided, and why', Icon: ScrollText },
+  { key: 'pipeline', label: 'Pipeline', description: 'Make ads → pick the best → set up → go live', Icon: Workflow },
+  { key: 'campaign-run', label: 'Campaigns', description: 'What is being set up, and the ads going out', Icon: Megaphone },
   { key: 'experiments', label: 'Experiments', description: "What we're testing, and what we learned", Icon: FlaskConical },
-  { key: 'approvals', label: 'Approvals', description: 'The gates that need a human', Icon: Gavel },
-  { key: 'agents', label: 'Agents', description: 'Run an agent and read its output', Icon: Activity },
-  { key: 'conversation', label: 'Conversation', description: 'Ask it something and keep the thread', Icon: MessagesSquare },
+  { key: 'approvals', label: 'Approvals', description: 'What needs your go-ahead', Icon: Gavel },
+  { key: 'agents', label: 'Agents', description: 'Helpers you can ask to do a job', Icon: Activity },
+  { key: 'conversation', label: 'Conversation', description: 'Ask the Brain a question', Icon: MessagesSquare },
 ]
 
 interface BrainTabsProps {
@@ -56,7 +56,7 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
             aria-selected={isActive}
             aria-controls={`brain-panel-${key}`}
             onClick={() => onChange(key)}
-            className="group flex min-h-16 items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none"
+            className="group flex min-h-16 min-w-0 items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none"
             style={
               isActive
                 ? {
@@ -80,7 +80,8 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2">
                 <span
-                  className="text-sm font-semibold"
+                  className="truncate text-sm font-semibold"
+                  title={label}
                   style={{ color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}
                 >
                   {label}

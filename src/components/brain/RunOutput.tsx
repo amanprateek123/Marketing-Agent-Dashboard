@@ -10,16 +10,18 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
-import { formatCurrency, formatPercent } from '@/lib/utils'
+import { formatPercent } from '@/lib/utils'
+import { formatInr, plainStatus } from '@/lib/plain-language'
 import type { BrainRunOutput } from '@/types/brain'
-import { EvidenceList } from './shared'
+import { EvidenceList, plainCode } from './shared'
 
-const SEVERITY_META = {
+const SEVERITY_META: Record<string, { chip: string; label: string }> = {
   good: { chip: 'chip-good', label: 'Working' },
   watch: { chip: 'chip-warn', label: 'Watch this' },
   bad: { chip: 'chip-bad', label: 'Problem' },
   neutral: { chip: 'chip-neutral', label: 'Note' },
-} as const
+}
+
 
 /**
  * One renderer per output shape. The union is closed, so adding a new agent
@@ -31,9 +33,9 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
     case 'answer':
       return (
         <div className="flex flex-col gap-4">
-          <p className="insight-quote">{output.headline}</p>
+          <p className="insight-quote break-words">{output.headline}</p>
           {output.body.split('\n\n').map((paragraph, index) => (
-            <p key={index} className="text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+            <p key={index} className="break-words text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
               {paragraph}
             </p>
           ))}
@@ -47,7 +49,7 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
     case 'allocation':
       return (
         <div className="flex flex-col gap-4">
-          <p className="text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+          <p className="break-words text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
             {output.rationale}
           </p>
           <ul className="flex flex-col gap-2">
@@ -58,16 +60,16 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
                 style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}
               >
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  <span className="block break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                     {allocation.product}
                   </span>
-                  <span className="explain block">{allocation.reason}</span>
+                  <span className="explain block break-words">{allocation.reason}</span>
                 </span>
                 <span className="text-right">
                   <span className="display-num block text-[17px]" style={{ color: 'var(--ink)' }}>
-                    {formatCurrency(allocation.dailyBudget)}
+                    {formatInr(allocation.dailyBudget, { perDay: true })}
                   </span>
-                  <span className="explain mono block">{formatPercent(allocation.share)} of daily</span>
+                  <span className="explain block">{formatPercent(allocation.share)} of the day&apos;s budget</span>
                 </span>
               </li>
             ))}
@@ -89,8 +91,8 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
             )}
           </div>
 
-          <h3 className="section-title">{output.title}</h3>
-          <p className="text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+          <h3 className="section-title break-words">{output.title}</h3>
+          <p className="break-words text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
             {output.summary}
           </p>
 
@@ -106,7 +108,7 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
                     : 'var(--ink-3)'
 
               return (
-                <li key={highlight.label} className="card-inset px-3.5 py-3">
+                <li key={highlight.label} className="card-inset min-w-0 px-3.5 py-3">
                   <p className="micro-label">{highlight.label}</p>
                   <p className="display-num mt-1 text-[22px]" style={{ color: 'var(--ink)' }}>
                     {highlight.value}
@@ -127,8 +129,7 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
             </a>
           ) : (
             <p className="explain">
-              The full report page is published by the agent. Its link will appear here once the
-              bridge returns one.
+              The full report will have its own page. A link appears here as soon as it is ready.
             </p>
           )}
         </div>
@@ -138,12 +139,12 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
       return (
         <div className="flex flex-col gap-5">
           <p className="explain">
-            Read {output.observationsRead} observations · wrote {output.learnings.length} learnings ·
-            proposed {output.ideas.length} ideas
+            Looked at {output.observationsRead} things · learned {output.learnings.length} ·
+            suggested {output.ideas.length} ideas
           </p>
 
           <div>
-            <p className="micro-label mb-2">Learnings written into the brain</p>
+            <p className="micro-label mb-2">What it learned</p>
             <ul className="flex flex-col gap-3">
               {output.learnings.map((learning) => (
                 <li
@@ -152,10 +153,10 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
                   style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="max-w-[72ch] text-[14px] leading-snug" style={{ color: 'var(--ink)' }}>
+                    <p className="min-w-0 max-w-[72ch] break-words text-[14px] leading-snug" style={{ color: 'var(--ink)' }}>
                       {learning.statement}
                     </p>
-                    <span className="chip chip-neutral mono shrink-0">
+                    <span className="chip chip-neutral shrink-0">
                       {formatPercent(learning.confidence)} confident
                     </span>
                   </div>
@@ -171,7 +172,7 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
           </div>
 
           <div>
-            <p className="micro-label mb-2">Ideas proposed — nothing is built until a human briefs one</p>
+            <p className="micro-label mb-2">Ideas it suggests — nothing is made until someone picks one</p>
             <ul className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
               {output.ideas.map((idea) => (
                 <li
@@ -181,14 +182,14 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
                 >
                   <Lightbulb size={15} aria-hidden="true" style={{ color: 'var(--accent-strong)', marginTop: 2, flexShrink: 0 }} />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    <p className="break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                       {idea.title}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className="chip chip-neutral">{idea.product}</span>
-                      <span className="chip chip-accent">{idea.angle}</span>
+                      <span className="chip chip-accent">{plainCode(idea.angle)}</span>
                     </div>
-                    <p className="explain mt-1.5">{idea.rationale}</p>
+                    <p className="explain mt-1.5 break-words">{idea.rationale}</p>
                   </div>
                 </li>
               ))}
@@ -202,7 +203,10 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
         <div className="flex flex-col gap-5">
           <ul className="flex flex-col gap-2.5">
             {output.findings.map((finding) => {
-              const severity = SEVERITY_META[finding.severity]
+              const severity = SEVERITY_META[finding.severity] ?? {
+                chip: 'chip-neutral',
+                label: plainStatus('severity', finding.severity).label,
+              }
               return (
                 <li
                   key={finding.id}
@@ -211,12 +215,14 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`chip ${severity.chip}`}>{severity.label}</span>
-                    {finding.metric && <span className="chip chip-neutral mono">{finding.metric}</span>}
+                    {finding.metric && (
+                      <span className="chip chip-neutral max-w-full break-words">{finding.metric}</span>
+                    )}
                   </div>
-                  <p className="mt-1.5 text-[14.5px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
+                  <p className="mt-1.5 break-words text-[14.5px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
                     {finding.headline}
                   </p>
-                  <p className="explain mt-1 max-w-[76ch]">{finding.detail}</p>
+                  <p className="explain mt-1 max-w-[76ch] break-words">{finding.detail}</p>
                 </li>
               )
             })}
@@ -228,19 +234,20 @@ export function RunOutputView({ output }: { output: BrainRunOutput }) {
               style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
             >
               <p className="micro-label" style={{ color: 'var(--accent-strong)' }}>
-                The next creative brief it authored
+                The next ad brief it wrote
               </p>
-              <p className="mt-1.5 text-[14px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+              <p className="mt-1.5 break-words text-[14px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
                 {output.nextBrief}
               </p>
               <p className="explain mt-2">
-                The Brain decides whether to hand this to the Creative Batch Producer. It is not
-                queued from here.
+                The Brain decides whether to have ads made from this. Nothing starts from here.
               </p>
             </div>
           )}
 
-          <p className="explain">{output.learningsWritten} learnings written into the brain.</p>
+          <p className="explain">
+            The Brain learned {output.learningsWritten} {output.learningsWritten === 1 ? 'thing' : 'things'} from this.
+          </p>
         </div>
       )
   }

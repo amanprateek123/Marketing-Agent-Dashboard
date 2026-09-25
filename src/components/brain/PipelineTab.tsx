@@ -2,7 +2,8 @@
 
 import React from 'react'
 import { ArrowRight, Gavel, ImageIcon, Info, Megaphone, Package } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { formatRelative, plainStatus } from '@/lib/plain-language'
 import type { BrainArtifact, BrainPipelineRun, BrainTabKey } from '@/types/brain'
 import { AgentGlyph, BudgetAuthorityNotice, RunStatusChip, SectionCard, STAGE_STATE_META } from './shared'
 
@@ -19,15 +20,18 @@ interface PipelineTabProps {
 export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
   if (!pipeline) {
     return (
-      <SectionCard title="The core pipeline" description="Producer → Curator → Builder → Launcher.">
+      <SectionCard
+        title="How new ads get made"
+        description="Make the ads → pick the best → set up the campaign → go live."
+      >
         <div className="py-12 text-center">
           <Package size={22} aria-hidden="true" style={{ color: 'var(--ink-4)' }} className="mx-auto" />
           <p className="mt-3 text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
-            No batch in flight
+            No new ads are being made right now
           </p>
           <p className="explain mx-auto mt-1 max-w-[46ch]">
-            The Brain starts this chain when it briefs an idea. You cannot start it from here —
-            that is deliberate, so nothing gets built that the Brain has not decided on.
+            The Brain starts this when it decides on an idea. You can&apos;t start it from here, on
+            purpose — so nothing gets made that the Brain hasn&apos;t decided on.
           </p>
         </div>
       </SectionCard>
@@ -37,16 +41,15 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
   return (
     <div className="flex flex-col gap-6">
       <SectionCard
-        title={`Current batch · ${pipeline.product}`}
+        title={<span className="break-words">New ads for {pipeline.product}</span>}
         description={
           <>
-            Triggered by {pipeline.triggeredBy} · started {formatRelativeTime(pipeline.startedAt)} ·{' '}
-            <span className="mono">{pipeline.pipelineRunId}</span>
+            {startedByLabel(pipeline.triggeredBy)} · started {formatRelative(pipeline.startedAt)}
           </>
         }
         action={<RunStatusChip status={pipeline.status} />}
       >
-        <p className="insight-quote mb-5">{pipeline.headline}</p>
+        <p className="insight-quote mb-5 break-words">{pipeline.headline}</p>
 
         {pipeline.budgetAuthority && (
           <div className="mb-5">
@@ -58,18 +61,24 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
           className="flex items-start gap-3 rounded-xl px-4 py-3"
           style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)' }}
         >
-          <Info size={16} aria-hidden="true" style={{ color: 'var(--info)', marginTop: 2 }} />
-          <p className="explain" style={{ color: 'var(--ink-2)' }}>
-            These four agents are triggered by the Brain, not by you. This view is read-only apart
-            from the gates — if a stage is waiting, answering its gate is what moves it on.
+          <Info size={16} aria-hidden="true" style={{ color: 'var(--info)', marginTop: 2, flexShrink: 0 }} />
+          <p className="explain min-w-0" style={{ color: 'var(--ink-2)' }}>
+            The Brain moves these four steps along on its own. The only thing you do here is give
+            the go-ahead when a step is waiting for you.
           </p>
         </div>
+        <Details className="mt-4" reference={pipeline.pipelineRunId} />
       </SectionCard>
 
       {/* Stage rail — horizontal on desktop, stacked on narrow screens. */}
       <ol className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         {pipeline.stages.map((stage, index) => {
-          const meta = STAGE_STATE_META[stage.state]
+          const meta = STAGE_STATE_META[stage.state] ?? {
+            label: plainStatus('stageState', stage.state).label,
+            chip: 'chip-neutral',
+            dot: 'var(--ink-4)',
+          }
+          const stageName = plainStatus('stageKey', stage.key)
           const isLast = index === pipeline.stages.length - 1
 
           return (
@@ -103,16 +112,19 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--ink-4)' }}>
                       Step {index + 1}
                     </p>
-                    <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
-                      {stage.label}
+                    <p className="break-words text-sm font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
+                      {stageName.meaning ? stageName.label : stage.label}
                     </p>
                   </div>
                 </div>
 
-                <p className="explain mt-2.5 leading-snug">{stage.description}</p>
+                <p className="explain mt-2.5 break-words leading-snug">{stage.description}</p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className={`chip ${meta.chip}`}>
+                  <span
+                    className={`chip ${meta.chip}`}
+                    title={plainStatus('stageState', stage.state).meaning || undefined}
+                  >
                     <span
                       aria-hidden="true"
                       className={stage.state === 'running' ? 'beacon' : undefined}
@@ -125,16 +137,16 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
                     {meta.label}
                   </span>
                   {stage.startedAt && (
-                    <span className="explain mono">
+                    <span className="explain">
                       {stage.finishedAt
-                        ? `finished ${formatRelativeTime(stage.finishedAt)}`
-                        : `started ${formatRelativeTime(stage.startedAt)}`}
+                        ? `finished ${formatRelative(stage.finishedAt)}`
+                        : `started ${formatRelative(stage.startedAt)}`}
                     </span>
                   )}
                 </div>
 
                 {stage.detail && (
-                  <p className="mt-2 text-[13px] font-medium" style={{ color: 'var(--ink-2)' }}>
+                  <p className="mt-2 break-words text-[13px] font-medium" style={{ color: 'var(--ink-2)' }}>
                     {stage.detail}
                   </p>
                 )}
@@ -156,7 +168,7 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
                     className="btn btn-accent mt-auto w-full"
                     style={{ marginTop: 16 }}
                   >
-                    <Gavel size={14} aria-hidden="true" /> Answer this gate
+                    <Gavel size={14} aria-hidden="true" /> Give your go-ahead
                   </button>
                 )}
               </div>
@@ -166,6 +178,13 @@ export function PipelineTab({ pipeline, onGoToTab }: PipelineTabProps) {
       </ol>
     </div>
   )
+}
+
+/** "brain" / "dashboard" become plain words; a name or sentence passes through. */
+function startedByLabel(triggeredBy: string | null | undefined): string {
+  if (!triggeredBy) return 'Started by the Brain'
+  const known = plainStatus('runTrigger', triggeredBy)
+  return known.meaning ? known.label : `Started by ${triggeredBy}`
 }
 
 function ArtifactRow({ artifact }: { artifact: BrainArtifact }) {
@@ -178,11 +197,15 @@ function ArtifactRow({ artifact }: { artifact: BrainArtifact }) {
     >
       <Icon size={14} aria-hidden="true" style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+        <span
+          className="block truncate text-[12.5px] font-semibold"
+          style={{ color: 'var(--ink-2)' }}
+          title={artifact.label}
+        >
           {artifact.label}
         </span>
         {artifact.meta && (
-          <span className="block truncate text-[11px]" style={{ color: 'var(--ink-3)' }}>
+          <span className="block truncate text-[11px]" style={{ color: 'var(--ink-3)' }} title={artifact.meta}>
             {artifact.meta}
           </span>
         )}

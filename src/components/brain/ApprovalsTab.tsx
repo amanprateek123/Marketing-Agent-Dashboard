@@ -15,8 +15,7 @@ import {
   TriangleAlert,
   XCircle,
 } from 'lucide-react'
-import { formatCurrency, formatRelativeTime } from '@/lib/utils'
-import { formatInr, formatWhen, plainStatus, toneChip } from '@/lib/plain-language'
+import { errorDetail, formatInr, formatRelative, formatWhen, plainStatus, toneChip } from '@/lib/plain-language'
 import { Details } from '@/components/plain/Details'
 import { decideBrainGate } from '@/lib/brain-api'
 import type {
@@ -28,18 +27,46 @@ import type {
   BrainGatePlan,
   BrainIdea,
 } from '@/types/brain'
-import { SectionCard } from './shared'
+import { SectionCard, plainCode, plainIfCode } from './shared'
 
 const KIND_META: Record<
   BrainGate['kind'],
   { label: string; chip: string; Icon: React.ComponentType<{ size?: number }> }
 > = {
-  creative_craft: { label: 'Craft gate', chip: 'chip-info', Icon: ShieldCheck },
-  idea_selection: { label: 'Idea gate', chip: 'chip-accent', Icon: Lightbulb },
-  campaign_launch: { label: 'Launch gate', chip: 'chip-warn', Icon: BadgeCheck },
+  creative_craft: { label: plainStatus('gateKind', 'creative_craft').label, chip: 'chip-info', Icon: ShieldCheck },
+  idea_selection: { label: plainStatus('gateKind', 'idea_selection').label, chip: 'chip-accent', Icon: Lightbulb },
+  campaign_launch: { label: plainStatus('gateKind', 'campaign_launch').label, chip: 'chip-warn', Icon: BadgeCheck },
   // A plan gate spends the day's money. Warn rather than accent: it is the one gate on this page
   // where approving commits real budget before a single creative exists.
-  plan_approval: { label: 'Day plan', chip: 'chip-warn', Icon: CalendarCheck },
+  plan_approval: { label: plainStatus('gateKind', 'plan_approval').label, chip: 'chip-warn', Icon: CalendarCheck },
+}
+
+/**
+ * The chip for a gate. A spend gate says which spend decision it is (build / launch / scale) —
+ * "Launch approval" on a build gate would tell someone the wrong thing is about to happen.
+ */
+function gateMeta(gate: BrainGate) {
+  const base = KIND_META[gate.kind] ?? {
+    label: plainStatus('gateKind', gate.kind).label,
+    chip: 'chip-neutral',
+    Icon: BadgeCheck,
+  }
+  if (gate.spendGate && gate.kind !== 'plan_approval') {
+    const spend = plainStatus('spendGate', gate.spendGate)
+    return { ...base, label: spend.label, meaning: spend.meaning }
+  }
+  return { ...base, meaning: plainStatus('gateKind', gate.kind).meaning }
+}
+
+/** Plain words for the Curator's verdict on an ad; unknown verdicts are humanised. */
+function verdictMeta(verdict: string) {
+  const plain = plainStatus('creativeVerdict', verdict)
+  return { label: plain.label, chip: toneChip(plain.tone), meaning: plain.meaning }
+}
+
+/** Status words arriving in capitals from Meta ("Created · PAUSED") read as plain words. */
+function plainMetaWords(text: string): string {
+  return text.replace(/\b[A-Z][A-Z_]{2,}\b/g, (word) => plainStatus('campaignStatus', word).label.toLowerCase())
 }
 
 interface ApprovalsTabProps {
@@ -75,15 +102,15 @@ export function ApprovalsTab({ tenantId, gates, onDecided }: ApprovalsTabProps) 
     return (
       <div className="flex flex-col gap-6">
         {outcomeList}
-        <SectionCard title="Approvals" description="The human-in-the-loop gates, on the platform.">
+        <SectionCard title="Approvals" description="Anything the Brain needs your go-ahead on shows up here.">
           <div className="py-12 text-center">
             <CircleCheck size={24} aria-hidden="true" style={{ color: 'var(--good)' }} className="mx-auto" />
             <p className="mt-3 text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
               Nothing is waiting on you
             </p>
             <p className="explain mx-auto mt-1 max-w-[52ch]">
-              When the Curator finishes a batch, or the Builder has a campaign paused and ready, the
-              gate appears here as well as in Slack. Answering it in either place clears it in both.
+              When new ads are ready for a look, or a campaign is set up and ready to switch on, it
+              shows up here and in Slack. Answering it in either place clears it in both.
             </p>
           </div>
         </SectionCard>
@@ -97,10 +124,10 @@ export function ApprovalsTab({ tenantId, gates, onDecided }: ApprovalsTabProps) 
         className="flex items-start gap-3 rounded-xl px-4 py-3"
         style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
       >
-        <Info size={16} aria-hidden="true" style={{ color: 'var(--accent-strong)', marginTop: 2 }} />
-        <p className="explain" style={{ color: 'var(--ink-2)' }}>
-          These are the same gates the agents post to Slack. Each one shows where it also lives, so
-          the two surfaces never disagree about what was decided or by whom.
+        <Info size={16} aria-hidden="true" style={{ color: 'var(--accent-strong)', marginTop: 2, flexShrink: 0 }} />
+        <p className="explain min-w-0" style={{ color: 'var(--ink-2)' }}>
+          These are the same requests posted to Slack. Answer in either place — the other one
+          updates too.
         </p>
       </div>
 
@@ -130,7 +157,7 @@ function GateCard({
   onDecided: () => void
   onOutcome: (outcome: DecisionOutcome) => void
 }) {
-  const meta = KIND_META[gate.kind]
+  const meta = gateMeta(gate)
   const { Icon } = meta
 
   const [selected, setSelected] = useState<string[]>(() => defaultSelection(gate))
@@ -140,6 +167,8 @@ function GateCard({
   const [amount, setAmount] = useState('')
   const [pending, setPending] = useState<BrainGateActionKey | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The raw reason a decision failed to save — Details only.
+  const [errorRaw, setErrorRaw] = useState<string | null>(null)
 
   const selectable = gate.selection !== 'none'
 
@@ -152,23 +181,27 @@ function GateCard({
 
   async function decide(action: BrainGateActionKey, requiresNote: boolean) {
     if (requiresNote && !note.trim()) {
-      setError('Write a note first — it is what goes back to the agent.')
+      setError('Write a note first — it tells the Brain what to change.')
+      setErrorRaw(null)
       return
     }
     if (action === 'approve' && selectable && selected.length === 0) {
       setError('Pick at least one before approving.')
+      setErrorRaw(null)
       return
     }
 
     const typed = amount.trim()
     const overrideInr = typed === '' ? undefined : Number(typed)
     if (overrideInr !== undefined && (!Number.isFinite(overrideInr) || overrideInr < 0)) {
-      setError('That daily amount is not a number.')
+      setError('Enter the daily amount as a number, like 5000.')
+      setErrorRaw(null)
       return
     }
 
     setPending(action)
     setError(null)
+    setErrorRaw(null)
     try {
       const amountInr = action === 'approve' ? overrideInr : undefined
       const result = await decideBrainGate(tenantId, gate.gateId, {
@@ -189,7 +222,8 @@ function GateCard({
       }
       onDecided()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That decision could not be recorded.')
+      setError("We couldn't save your answer. Try again.")
+      setErrorRaw(errorDetail(err) || null)
       setPending(null)
     }
   }
@@ -197,7 +231,7 @@ function GateCard({
   return (
     <section className="card animate-reveal-up overflow-hidden">
       <header
-        className="flex flex-wrap items-start justify-between gap-3 px-5 py-4"
+        className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5"
         style={{ background: 'var(--surface-warm)', borderBottom: '1px solid var(--hairline)' }}
       >
         <div className="flex min-w-0 gap-3">
@@ -210,40 +244,67 @@ function GateCard({
           </span>
           <div className="min-w-0">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
-              <span className={`chip ${meta.chip}`}>{meta.label}</span>
-              {gate.product && <span className="chip chip-neutral">{gate.product}</span>}
+              <span className={`chip ${meta.chip}`} title={meta.meaning || undefined}>
+                {meta.label}
+              </span>
+              {gate.product && (
+                <span className="chip chip-neutral max-w-full truncate" title={gate.product}>
+                  {gate.product}
+                </span>
+              )}
               {gate.expiresAt && (
-                <span className="chip chip-neutral">
-                  <Clock3 size={11} aria-hidden="true" /> Expires {formatRelativeTime(gate.expiresAt)}
+                <span className="chip chip-neutral" title={formatWhen(gate.expiresAt)}>
+                  <Clock3 size={11} aria-hidden="true" /> Answer {formatRelative(gate.expiresAt)}
                 </span>
               )}
             </div>
-            <h2 className="section-title">{gate.title}</h2>
-            <p className="explain mt-1 max-w-[72ch]">{gate.summary}</p>
+            <h2 className="section-title break-words">{cleanGateText(gate.title) || meta.label}</h2>
+            {/* A plan gate shows its own card below; every other gate's summary can still carry the
+                Slack reply grammar and [H…] ids, so it is cleaned the same way. */}
+            {gate.kind !== 'plan_approval' && (
+              <div className="explain mt-1 max-w-[72ch]">
+                {cleanGateText(gate.summary)
+                  .split('\n')
+                  .map((line, index) => (
+                    <p key={index} className="break-words">
+                      {line}
+                    </p>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="min-w-0 sm:text-right">
           <p className="micro-label">Asked by</p>
-          <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+          <p className="break-words text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
             {gate.askedBy}
           </p>
-          <p className="explain mono">{formatRelativeTime(gate.askedAt)}</p>
+          <p className="explain" title={formatWhen(gate.askedAt)}>
+            {formatRelative(gate.askedAt)}
+          </p>
           {gate.slackChannel && (
-            <p className="explain mt-1 flex items-center justify-end gap-1">
-              <MessageSquare size={11} aria-hidden="true" /> also in{' '}
-              <span className="mono">{gate.slackChannel}</span>
+            <p className="explain mt-1 flex flex-wrap items-center gap-1 sm:justify-end">
+              <MessageSquare size={11} aria-hidden="true" /> also in Slack{' '}
+              <span className="break-all">{gate.slackChannel}</span>
             </p>
           )}
         </div>
       </header>
 
-      <div className="p-5">
+      <div className="min-w-0 p-4 sm:p-5">
         <GatePayload gate={gate} selected={selected} onToggle={toggle} />
+        {gate.kind !== 'plan_approval' && (
+          <Details
+            className="mt-4"
+            reference={gate.gateId}
+            items={gate.pipelineRunId ? [{ label: 'Campaign reference', value: gate.pipelineRunId }] : undefined}
+          />
+        )}
       </div>
 
       <footer
-        className="flex flex-col gap-3 px-5 py-4"
+        className="flex flex-col gap-3 px-4 py-4 sm:px-5"
         style={{ background: 'var(--surface-warm)', borderTop: '1px solid var(--hairline)' }}
       >
         {/* Slack has always accepted `approve at <amount>`; the console had no equivalent, so an
@@ -253,17 +314,17 @@ function GateCard({
         {(gate.kind === 'plan_approval' || gate.kind === 'campaign_launch') && (
           <label className="block">
             <span className="micro-label">Approve at a different daily amount</span>
-            <span className="mt-1.5 flex items-center gap-2">
+            <span className="mt-1.5 flex min-w-0 items-center gap-2">
               <span className="text-[15px] font-semibold" style={{ color: 'var(--ink-3)' }}>₹</span>
               <input
-                className="input"
+                className="input min-w-0"
                 type="number"
                 min={0}
                 step={500}
                 inputMode="numeric"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
-                placeholder="leave blank to approve at the amount proposed"
+                placeholder="Leave blank to keep the suggested amount"
                 disabled={pending != null}
               />
               <span className="explain shrink-0">per day</span>
@@ -273,7 +334,7 @@ function GateCard({
         )}
 
         <label className="block">
-          <span className="micro-label">Note back to the agent</span>
+          <span className="micro-label">Note to the Brain</span>
           <textarea
             className="input mt-1.5"
             rows={2}
@@ -282,20 +343,22 @@ function GateCard({
             placeholder={
               gate.kind === 'creative_craft'
                 ? 'What should change in the revision? e.g. “Drop the portrait — the copy promises an expert the image never shows.”'
-                : 'Optional for approve. Required when sending back or rejecting.'
+                : 'Optional when approving. Needed when you send it back or say no.'
             }
             disabled={pending != null}
           />
         </label>
 
         {error && (
-          <p
-            role="alert"
-            className="flex items-center gap-2 text-[13px] font-semibold"
-            style={{ color: 'var(--bad)' }}
-          >
-            <TriangleAlert size={14} aria-hidden="true" /> {error}
-          </p>
+          <div role="alert" className="flex min-w-0 flex-col gap-1">
+            <p
+              className="flex items-center gap-2 break-words text-[13px] font-semibold"
+              style={{ color: 'var(--bad)' }}
+            >
+              <TriangleAlert size={14} aria-hidden="true" className="shrink-0" /> {error}
+            </p>
+            {errorRaw && <Details items={[{ label: 'What went wrong', value: errorRaw }]} />}
+          </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -352,25 +415,24 @@ function amountHelp(gate: BrainGate): string {
   switch (spend) {
     case 'plan':
       return gate.pipelineRunId
-        ? `This day plan names run ${gate.pipelineRunId}, so approving at an amount rescales that ` +
-            "run's audience budgets to add up to it, and the campaign is built at that amount."
-        : 'This day plan does not name a single run, so an amount here is recorded but changes no ' +
-            "run's budget — it could mean the day's total or one launch's budget, and the Brain " +
-            "will not guess. To change a run's budget, approve that run's build gate with the amount."
+        ? 'This plan is for one campaign, so its audiences are adjusted to add up to your amount, ' +
+            'and the campaign is set up at that amount.'
+        : "This plan covers more than one campaign, so your amount is noted but doesn't change " +
+            "any campaign's budget — it could mean the day's total or one campaign's, and the Brain " +
+            "won't guess. To change one campaign's budget, enter the amount when you approve its set-up."
     case 'build':
       return (
-        "The run's audience budgets are rescaled to add up to this amount, and the campaign is " +
-        'built at it. If an audience ends up over the per-ad-set cap, that is shown once you approve.'
+        "The campaign's audiences are adjusted to add up to this amount, and it is set up at it. " +
+        "If one audience ends up above Meta's daily limit for it, you'll see that once you approve."
       )
     case 'launch':
-      return 'The Launcher sets the live Meta ad-set budget to this amount when it switches the campaign on.'
+      return "When the campaign is switched on, its daily budget in Meta is set to this amount."
     case 'scale':
-      return 'Recorded as the amount you authorised. What the Brain did with it is shown once you approve.'
+      return "Your amount is noted. What the Brain did with it shows once you approve."
     default:
       return (
-        "What this amount changes depends on the gate: a build gate rescales the run's audience " +
-        'budgets, a launch gate sets the live ad-set budget at activation. What the Brain did is ' +
-        'shown once you approve.'
+        'What this amount changes depends on the request: before set-up it adjusts the audiences; ' +
+        "at switch-on it sets the daily budget in Meta. What the Brain did shows once you approve."
       )
   }
 }
@@ -395,7 +457,7 @@ function DecisionOutcomes({
           <div
             key={outcome.gateId}
             role="status"
-            className="flex items-start gap-3 rounded-xl px-4 py-3"
+            className="flex flex-wrap items-start gap-3 rounded-xl px-4 py-3 sm:flex-nowrap"
             style={{
               background: warn ? 'var(--warn-bg)' : 'var(--surface-warm)',
               border: `1px solid ${warn ? 'var(--warn-border)' : 'var(--hairline)'}`,
@@ -407,14 +469,25 @@ function DecisionOutcomes({
               <CircleCheck size={16} aria-hidden="true" style={{ color: 'var(--good)', marginTop: 2 }} />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
-                Approved at {formatCurrency(outcome.amountInr ?? 0)} a day — {outcome.title}
+              <p className="break-words text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+                Approved at {formatInr(outcome.amountInr ?? 0, { perDay: true })} —{' '}
+                {cleanGateText(outcome.title)}
               </p>
               {lines.map((line, index) => (
-                <p key={index} className="explain mt-1" style={{ color: 'var(--ink-2)' }}>
+                <p key={index} className="explain mt-1 break-words" style={{ color: 'var(--ink-2)' }}>
                   {line.text}
                 </p>
               ))}
+              {(outcome.result.budgetRescale?.length ?? 0) > 0 && (
+                <Details
+                  className="mt-2"
+                  reference={outcome.gateId}
+                  items={(outcome.result.budgetRescale ?? []).map((r, index) => ({
+                    label: `Campaign ${index + 1} reference`,
+                    value: r.pipelineRunId,
+                  }))}
+                />
+              )}
             </div>
             <button type="button" className="btn btn-ghost shrink-0" onClick={() => onDismiss(outcome.gateId)}>
               Dismiss
@@ -429,50 +502,53 @@ function DecisionOutcomes({
 function describeOutcome(outcome: DecisionOutcome): Array<{ text: string; tone: 'ok' | 'warn' }> {
   const { result, spendGate, amountInr } = outcome
   const lines: Array<{ text: string; tone: 'ok' | 'warn' }> = []
-  for (const r of result.budgetRescale ?? []) {
+  const rescales = result.budgetRescale ?? []
+  rescales.forEach((r, index) => {
+    // Campaign references live in Details; on screen a campaign is "This campaign" or "Campaign 2".
+    const which = rescales.length === 1 ? 'This campaign' : `Campaign ${index + 1}`
     if (r.rescaled) {
       lines.push({
         tone: 'ok',
         text:
-          `Run ${r.pipelineRunId}: audience budgets rescaled` +
-          (r.contractTotalBeforeInr !== null ? ` from ${formatCurrency(r.contractTotalBeforeInr)}` : '') +
-          (r.contractTotalInr !== null ? ` to ${formatCurrency(r.contractTotalInr)} a day` : '') +
-          '. The Builder builds from this.',
+          `${which}: audience budgets adjusted` +
+          (r.contractTotalBeforeInr !== null ? ` from ${formatInr(r.contractTotalBeforeInr)}` : '') +
+          (r.contractTotalInr !== null ? ` to ${formatInr(r.contractTotalInr, { perDay: true })}` : '') +
+          '. It will be set up at this amount.',
       })
     } else {
       lines.push({
         tone: 'warn',
         text:
-          `Run ${r.pipelineRunId} is now authorised at ${formatCurrency(r.authorisedDailyBudgetInr ?? amountInr ?? 0)} ` +
-          `a day, but its audience budgets were not rescaled${r.why ? `: ${r.why}` : ''}.`,
+          `${which} is now approved at ${formatInr(r.authorisedDailyBudgetInr ?? amountInr ?? 0, { perDay: true })}, ` +
+          `but its audience budgets were not adjusted${r.why ? `: ${r.why}` : ''}.`,
       })
     }
     if (r.exceedsAdsetCap) {
       lines.push({
         tone: 'warn',
         text:
-          `Over the ${r.exceedsAdsetCap.capInr !== null ? formatCurrency(r.exceedsAdsetCap.capInr) + ' ' : ''}` +
-          `per-ad-set cap: ${r.exceedsAdsetCap.entries.join(', ') || 'one or more audiences'}. ` +
+          `Above Meta's ${r.exceedsAdsetCap.capInr !== null ? formatInr(r.exceedsAdsetCap.capInr) + ' ' : ''}` +
+          `daily limit per audience: ${r.exceedsAdsetCap.entries.join(', ') || 'one or more audiences'}. ` +
           (r.exceedsAdsetCap.note ?? 'Meta will refuse it as it stands.'),
       })
     }
-  }
+  })
   if (result.budgetRescaleSkipped) {
-    lines.push({ tone: 'warn', text: `No run's budget was changed: ${result.budgetRescaleSkipped}` })
+    lines.push({ tone: 'warn', text: `No campaign's budget was changed: ${result.budgetRescaleSkipped}` })
   }
   if (lines.length === 0) {
     if (spendGate === 'launch') {
       lines.push({
         tone: 'ok',
-        text: 'Recorded. The Launcher applies this amount to the live Meta ad-set budget when it activates.',
+        text: "Saved. When the campaign is switched on, its daily budget in Meta is set to this amount.",
       })
     } else if (result.budgetRescale === undefined || result.budgetRescale === null) {
       lines.push({
         tone: 'warn',
-        text: 'Recorded, but the bridge did not report what the Brain did with the amount.',
+        text: "Saved, but we couldn't confirm what the Brain did with the amount.",
       })
     } else {
-      lines.push({ tone: 'ok', text: "Recorded. The Brain changed no run's budget for this gate." })
+      lines.push({ tone: 'ok', text: "Saved. The Brain didn't change any campaign's budget for this." })
     }
   }
   return lines
@@ -589,7 +665,7 @@ function PlanCard({ gate, plan }: { gate: BrainGate; plan: BrainGatePlan }) {
                   <thead>
                     <tr>
                       <th scope="col">Product</th>
-                      <th scope="col">Kind</th>
+                      <th scope="col">Type</th>
                       <th scope="col">Daily budget</th>
                       <th scope="col">Ads</th>
                       <th scope="col">Ad sets</th>
@@ -702,12 +778,6 @@ function cleanGateText(text: string): string {
     .join('\n')
 }
 
-const VERDICT_META: Record<BrainGateCreative['verdict'], { label: string; chip: string }> = {
-  fit: { label: 'Fit to go live', chip: 'chip-good' },
-  near_miss: { label: 'Near-miss', chip: 'chip-warn' },
-  unfit: { label: 'Unfit', chip: 'chip-bad' },
-}
-
 function CreativeCard({
   creative,
   checked,
@@ -717,11 +787,11 @@ function CreativeCard({
   checked: boolean
   onToggle: () => void
 }) {
-  const verdict = VERDICT_META[creative.verdict]
+  const verdict = verdictMeta(creative.verdict)
 
   return (
     <label
-      className="card-hover flex h-full cursor-pointer flex-col gap-3 rounded-xl p-3.5"
+      className="card-hover flex h-full min-w-0 cursor-pointer flex-col gap-3 rounded-xl p-3.5"
       style={{
         background: 'var(--surface)',
         border: checked ? '1px solid var(--accent)' : '1px solid var(--hairline)',
@@ -738,12 +808,14 @@ function CreativeCard({
           aria-label={`Select ${creative.label}`}
         />
         <span className="min-w-0 flex-1">
-          <span className="block text-[13.5px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
+          <span className="block break-words text-[13.5px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
             {creative.label}
           </span>
           <span className="mt-1 flex flex-wrap gap-1.5">
-            <span className={`chip ${verdict.chip}`}>{verdict.label}</span>
-            <span className="chip chip-neutral">{creative.language}</span>
+            <span className={`chip ${verdict.chip}`} title={verdict.meaning || undefined}>
+              {verdict.label}
+            </span>
+            {creative.language && <span className="chip chip-neutral">{creative.language}</span>}
           </span>
         </span>
       </div>
@@ -759,7 +831,7 @@ function CreativeCard({
           <img
             src={creative.imageUrl}
             alt={creative.label}
-            className="h-full w-full rounded-[10px] object-cover"
+            className="h-full w-full max-w-full rounded-[10px] object-cover"
           />
         ) : (
           <span className="flex flex-col items-center gap-1.5 px-3 text-center">
@@ -771,27 +843,28 @@ function CreativeCard({
         )}
       </div>
 
-      <p className="text-[13px] leading-snug" style={{ color: 'var(--ink-2)' }}>
+      <p className="break-words text-[13px] leading-snug" style={{ color: 'var(--ink-2)' }}>
         {creative.copy}
       </p>
 
       {creative.rubric.length > 0 && (
         <ul className="flex flex-col gap-1 border-t pt-2.5" style={{ borderColor: 'var(--hairline-light)' }}>
+          <li className="micro-label">How the ad checker scored it</li>
           {creative.rubric.map((line) => (
             <li key={line.criterion}>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
-                  {line.criterion}
+                <span className="min-w-0 break-words text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
+                  {plainCode(line.criterion)}
                 </span>
                 <span
-                  className="mono text-[11.5px] font-bold"
+                  className="shrink-0 text-[11.5px] font-bold tabular-nums"
                   style={{ color: line.score >= 4 ? 'var(--good)' : line.score >= 3 ? 'var(--warn)' : 'var(--bad)' }}
                 >
                   {line.score}/5
                 </span>
               </div>
               {line.note && (
-                <p className="text-[11px] leading-snug" style={{ color: 'var(--ink-4)' }}>
+                <p className="break-words text-[11px] leading-snug" style={{ color: 'var(--ink-4)' }}>
                   {line.note}
                 </p>
               )}
@@ -814,7 +887,7 @@ function IdeaRow({
 }) {
   return (
     <label
-      className="flex cursor-pointer items-start gap-3 rounded-xl px-3.5 py-3"
+      className="flex min-w-0 cursor-pointer items-start gap-3 rounded-xl px-3.5 py-3"
       style={{
         background: 'var(--surface)',
         border: checked ? '1px solid var(--accent)' : '1px solid var(--hairline)',
@@ -831,13 +904,13 @@ function IdeaRow({
       />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+          <span className="min-w-0 break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
             {idea.title}
           </span>
           <span className="chip chip-neutral">{idea.product}</span>
-          <span className="chip chip-accent">{idea.angle}</span>
+          <span className="chip chip-accent">{plainCode(idea.angle)}</span>
         </span>
-        <span className="explain mt-1 block">{idea.rationale}</span>
+        <span className="explain mt-1 block break-words">{idea.rationale}</span>
       </span>
     </label>
   )
@@ -847,34 +920,34 @@ function CampaignPreview({ campaign }: { campaign: BrainGateCampaign }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className="card-inset p-4">
+        <div className="card-inset min-w-0 p-4">
           <p className="micro-label">Campaign</p>
-          <p className="mono mt-1 text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+          <p className="mt-1 break-words text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
             {campaign.name}
           </p>
 
           <dl className="mt-4 flex flex-col gap-3">
-            <Row label="Objective" value={campaign.objective} mono />
-            <Row label="Daily budget" value={`${formatCurrency(campaign.dailyBudget)} / day`} />
+            <Row label="Goal" value={plainIfCode(campaign.objective, 'objective')} />
+            <Row label="Daily budget" value={formatInr(campaign.dailyBudget, { perDay: true })} />
             <Row label="Audience" value={campaign.audience} />
             <Row label="Placements" value={campaign.placements} />
           </dl>
         </div>
 
-        <div className="card-inset p-4">
-          <p className="micro-label">What is already built in Meta</p>
+        <div className="card-inset min-w-0 p-4">
+          <p className="micro-label">What is already set up in Meta</p>
           <ul className="mt-2.5 flex flex-col gap-2">
             {campaign.levels.map((level) => (
               <li key={level.label} className="flex items-baseline justify-between gap-3">
-                <span className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+                <span className="shrink-0 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
                   {level.label}
                 </span>
-                <span className="text-right">
-                  <span className="mono block text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-                    {level.value}
+                <span className="min-w-0 text-right">
+                  <span className="block break-words text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>
+                    {plainMetaWords(level.value)}
                   </span>
                   {level.note && (
-                    <span className="block text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                    <span className="block break-words text-[11px]" style={{ color: 'var(--ink-3)' }}>
                       {level.note}
                     </span>
                   )}
@@ -893,11 +966,11 @@ function CampaignPreview({ campaign }: { campaign: BrainGateCampaign }) {
                   <TriangleAlert size={14} aria-hidden="true" style={{ color: 'var(--warn)', marginTop: 2, flexShrink: 0 }} />
                 )}
                 <span className="min-w-0">
-                  <span className="block text-[12.5px] font-medium" style={{ color: 'var(--ink-2)' }}>
+                  <span className="block break-words text-[12.5px] font-medium" style={{ color: 'var(--ink-2)' }}>
                     {check.label}
                   </span>
                   {check.note && (
-                    <span className="block text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                    <span className="block break-words text-[11px]" style={{ color: 'var(--ink-3)' }}>
                       {check.note}
                     </span>
                   )}
@@ -924,10 +997,10 @@ function CampaignPreview({ campaign }: { campaign: BrainGateCampaign }) {
                   <ImageIcon size={16} aria-hidden="true" style={{ color: 'var(--ink-4)' }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
+                  <p className="break-words text-[13px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
                     {creative.label}
                   </p>
-                  <p className="mt-1 text-[12px] leading-snug" style={{ color: 'var(--ink-2)' }}>
+                  <p className="mt-1 break-words text-[12px] leading-snug" style={{ color: 'var(--ink-2)' }}>
                     {creative.copy}
                   </p>
                 </div>
@@ -940,14 +1013,14 @@ function CampaignPreview({ campaign }: { campaign: BrainGateCampaign }) {
   )
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-2">
       <dt className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
         {label}
       </dt>
       <dd
-        className={`max-w-[38ch] text-right text-[12.5px] font-semibold ${mono ? 'mono' : ''}`}
+        className="min-w-0 max-w-[38ch] break-words text-right text-[12.5px] font-semibold"
         style={{ color: 'var(--ink)' }}
       >
         {value}

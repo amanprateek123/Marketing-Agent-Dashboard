@@ -5,6 +5,8 @@ import { BrainCircuit, CornerDownLeft, Loader2, RotateCcw, User } from 'lucide-r
 import { getBrainAgents, getBrainConversation, sendBrainMessage } from '@/lib/brain-api'
 import { getBrainSessionId, resetBrainSessionId } from '@/lib/brain-session'
 import type { BrainConversation, BrainConversationTurn } from '@/types/brain'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, humanise } from '@/lib/plain-language'
 import { BrainError, SectionCard } from './shared'
 
 /**
@@ -26,6 +28,8 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [conversation, setConversation] = useState<BrainConversation | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A send that failed, in plain words; the raw reason sits in Details.
+  const [sendError, setSendError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   // The send we are waiting on. `correlationId` is what Brain v2 (2.11.0+) stamps as the answering
@@ -61,7 +65,7 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
         setError(null)
         return next
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'The conversation could not be read.')
+        setError(errorDetail(err) || 'The conversation could not be read.')
         return null
       }
     },
@@ -110,13 +114,14 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
     if (!text || !sessionId || sending) return
     setSending(true)
     setError(null)
+    setSendError(null)
     try {
       const { runId, correlationId } = await sendBrainMessage(tenantId, sessionId, text)
       setDraft('')
       setAwaiting({ runId, correlationId: correlationId ?? null })
       await load(sessionId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The message was not sent.')
+      setSendError(errorDetail(err) || 'The message was not sent.')
     } finally {
       setSending(false)
     }
@@ -137,11 +142,11 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
 
   return (
     <SectionCard
-      title="Ask the marketing head"
-      description="It reads the account, the accepted learnings and the company wiki before answering, so a reply takes minutes — not seconds. Follow-ups continue this thread."
+      title="Ask the Brain"
+      description="Before it answers, the Brain looks through your account, what it has learned and your company notes — so a reply takes a few minutes, not seconds. Follow-up questions carry on in the same conversation."
       action={
         <button type="button" className="btn btn-ghost" onClick={startNewThread}>
-          <RotateCcw size={14} aria-hidden="true" /> New thread
+          <RotateCcw size={14} aria-hidden="true" /> New conversation
         </button>
       }
       padded={false}
@@ -156,26 +161,24 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
               color: 'var(--ink-2)',
             }}
           >
-            <strong>The Brain is not granted to this Foundry run token yet.</strong> You can still
-            write here and the turn is recorded, but no run will start to answer it until the token
-            allows <code>agt_01a08a637be471038bba2efa34cb8c92</code>. Re-sending afterwards lands on
-            the same turn rather than asking twice.
+            <strong>The Brain can&apos;t answer questions from here yet.</strong> You can still
+            write your question and it will be saved, but no answer will come until your admin
+            switches this on. Sending it again later won&apos;t ask twice.
           </p>
         )}
         {conversation && conversation.omittedOlder > 0 && (
           <p className="explain px-5 pt-4">
-            {conversation.omittedOlder} older turn{conversation.omittedOlder === 1 ? '' : 's'} not
-            shown. The Brain reads a bounded window of this thread too — a history that looks
-            complete when it is not is how an agent contradicts what it agreed to earlier.
+            {conversation.omittedOlder} older message{conversation.omittedOlder === 1 ? '' : 's'} not
+            shown. The Brain only reads the recent part of a long conversation too, so start a new
+            one if you want it to take a fresh look.
           </p>
         )}
 
         <ol className="flex flex-col gap-4 p-5">
           {turns.length === 0 && !awaitingRun && (
             <li className="explain">
-              Nothing asked yet. Try a question it can actually answer from evidence — “which
-              product is carrying the portfolio this week, and what would you stop?” — rather than
-              one that needs a number nobody has recorded.
+              Nothing asked yet. Try a question it can answer from your results — “which product
+              is doing best this week, and what would you stop?”
             </li>
           )}
           {turns.map((turn) => (
@@ -192,9 +195,10 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
                     <Loader2 size={13} className="animate-spin" aria-hidden="true" /> Thinking
                   </p>
                   <p className="explain mt-1">
-                    Run <code>{awaitingRun}</code> is reading the account and the learnings. The
-                    answer lands in this thread when it commits — you can leave this tab.
+                    The Brain is looking through your account and what it has learned. The answer
+                    will appear here in a few minutes — you can leave this tab and come back.
                   </p>
+                  <Details className="mt-2" reference={awaitingRun} />
                 </div>
               </div>
             </li>
@@ -202,10 +206,21 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
           <div ref={bottomRef} />
         </ol>
 
+        {sendError && (
+          <div className="flex min-w-0 flex-col gap-1 px-5 pb-2">
+            <p className="text-sm" style={{ color: 'var(--bad)' }}>
+              Your message didn&apos;t go through. Try again.
+            </p>
+            <Details items={[{ label: 'What went wrong', value: sendError }]} />
+          </div>
+        )}
         {error && conversation && (
-          <p className="px-5 pb-2 text-sm" style={{ color: 'var(--bad)' }}>
-            {error}
-          </p>
+          <div className="flex min-w-0 flex-col gap-1 px-5 pb-2">
+            <p className="text-sm" style={{ color: 'var(--bad)' }}>
+              We couldn&apos;t refresh this conversation. Try again.
+            </p>
+            <Details items={[{ label: 'What went wrong', value: error }]} />
+          </div>
         )}
 
         <div className="px-5 pb-5">
@@ -229,8 +244,8 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
                 }
               }}
               rows={2}
-              placeholder="Should we cut automatic placements on nadi_report_premium?"
-              className="min-h-[52px] flex-1 resize-y bg-transparent px-2 py-1.5 text-sm outline-none"
+              placeholder="Should we stop showing ads on every placement for our premium report?"
+              className="min-h-[52px] min-w-0 flex-1 resize-y bg-transparent px-2 py-1.5 text-sm outline-none"
             />
             <button
               type="button"
@@ -247,7 +262,7 @@ export function ConversationTab({ tenantId }: { tenantId: string }) {
             </button>
           </div>
           <p className="explain mt-2">
-            Every message starts a real run and is recorded as a turn the Brain reads next time.
+            Every question is saved, and the Brain remembers it the next time you ask.
           </p>
         </div>
       </div>
@@ -278,24 +293,61 @@ function Turn({ turn }: { turn: BrainConversationTurn }) {
       <Avatar role={turn.role} />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{isBrain ? 'Brain' : 'You'}</p>
-        <p className="mt-1 whitespace-pre-wrap text-sm" style={{ color: 'var(--ink-2)' }}>
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm" style={{ color: 'var(--ink-2)' }}>
           {turn.content}
-          {turn.contentClipped && (
-            <span className="explain"> … (this turn is longer than what was returned)</span>
-          )}
+          {turn.contentClipped && <span className="explain"> … (the rest of this message is cut off)</span>}
         </p>
         {isBrain && (turn.evidenceRefs.length > 0 || turn.runId) && (
-          <p className="explain mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {turn.runId && <span>Run {turn.runId}</span>}
-            {/* The refs are what makes an answer checkable rather than merely fluent. They are
-                pointers into the brain's own rows — `policies:7`, `observations:54` — and showing
-                them is the difference between a claim and a citation. */}
-            {turn.evidenceRefs.map((ref) => (
-              <code key={ref}>{ref}</code>
-            ))}
-          </p>
+          <>
+            {/* The refs are what makes an answer checkable rather than merely fluent. On screen
+                they are summarised in words ("Based on 2 rules and 3 results"); the raw pointers
+                — `policies:7`, `observations:54` — stay in Details for anyone checking them. */}
+            {turn.evidenceRefs.length > 0 && (
+              <p className="explain mt-1.5">{evidenceSummary(turn.evidenceRefs)}</p>
+            )}
+            <Details
+              className="mt-1.5"
+              reference={turn.runId}
+              items={
+                turn.evidenceRefs.length > 0
+                  ? [{ label: 'Sources', value: turn.evidenceRefs.join(', ') }]
+                  : undefined
+              }
+            />
+          </>
         )}
       </div>
     </div>
   )
+}
+
+/** What each kind of evidence pointer is, in words. Unknown kinds are humanised. */
+const EVIDENCE_NOUN: Record<string, [one: string, many: string]> = {
+  policies: ['rule', 'rules'],
+  policy: ['rule', 'rules'],
+  observations: ['result', 'results'],
+  observation: ['result', 'results'],
+  learnings: ['thing it has learned', 'things it has learned'],
+  learning: ['thing it has learned', 'things it has learned'],
+  decisions: ['earlier decision', 'earlier decisions'],
+  decision: ['earlier decision', 'earlier decisions'],
+  wiki: ['company note', 'company notes'],
+  hypotheses: ['experiment', 'experiments'],
+  hypothesis: ['experiment', 'experiments'],
+}
+
+function evidenceSummary(refs: string[]): string {
+  const counts = new Map<string, number>()
+  for (const ref of refs) {
+    const kind = ref.split(':')[0]?.trim().toLowerCase() || 'source'
+    counts.set(kind, (counts.get(kind) ?? 0) + 1)
+  }
+  const parts = Array.from(counts, ([kind, n]) => {
+    const noun = EVIDENCE_NOUN[kind]
+    const word = noun ? (n === 1 ? noun[0] : noun[1]) : humanise(kind).toLowerCase()
+    return `${n} ${word}`
+  })
+  const list =
+    parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return `Based on ${list}.`
 }
