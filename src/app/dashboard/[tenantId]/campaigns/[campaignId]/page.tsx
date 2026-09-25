@@ -20,6 +20,7 @@ import { getShadowActions, getIntelligenceDecisions, syncCampaigns, getMetaAccou
 import type { BulkAdsResult } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { plainStatus, humanise, formatInr, formatWhen, formatRelative } from '@/lib/plain-language'
+import { CampaignBetsCard } from '@/components/brain/CampaignBetsCard'
 import { Details } from '@/components/plain/Details'
 import { PlainErrorNote, plainFailure } from '@/components/campaign/PlainErrorNote'
 import { describeAudience } from '@/components/campaign/audienceText'
@@ -2482,6 +2483,10 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
                   pending, where the Awaiting Approval panel already shows it. */}
               {!isPendingApproval && (
                 <CampaignSetup tenantId={tenantId} campaign={campaign} />
+              )}
+              {/* The Brain's bets on this campaign, and until when it leaves them running. */}
+              {campaign.metaCampaignId && (
+                <CampaignBetsCard tenantId={tenantId} metaCampaignId={campaign.metaCampaignId} />
               )}
               {(campaign.reviewNotes || campaign.reviewAdjustments?.budgetAdjusted) && (
                 <div className="card p-6">
