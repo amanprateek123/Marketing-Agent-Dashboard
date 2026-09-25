@@ -27,6 +27,9 @@ import type {
   BrainConversationTurn,
   BrainDecision,
   BrainEventPage,
+  BrainExperiment,
+  BrainExperimentSummary,
+  BrainExperimentView,
   BrainGate,
   BrainGateDecisionBody,
   BrainGateDecisionResult,
@@ -636,6 +639,59 @@ function creativeSet(): BrainGate['payload'] {
 
 function seedGates(): BrainGate[] {
   return [
+    {
+      gateId: 'approval:48',
+      kind: 'plan_approval',
+      title: 'Day plan for Friday, 25 Sep',
+      summary: '2 campaigns · ₹4,000 a day of ₹5,000 · 2 ideas to test',
+      askedBy: 'Brain',
+      askedAt: isoAgo(35 * MINUTE),
+      product: null,
+      slackChannel: '#91astro-marketing',
+      slackPermalink: null,
+      expiresAt: null,
+      runId: null,
+      spendGate: 'plan',
+      pipelineRunId: null,
+      selection: 'none',
+      payload: {
+        kind: 'plan_approval',
+        plan: { planDate: '2026-09-25', budgetInr: null, summary: '', posted: true },
+      },
+      plan: {
+        dateLabel: 'Friday, 25 Sep',
+        totalDailyInr: 4000,
+        budgetInr: 5000,
+        unspentInr: 1000,
+        runs: [
+          { product: 'Saathi Report', typeLabel: 'Test', dailyBudgetInr: 2500, creatives: 6, adSets: 2 },
+          { product: 'Nadi Reading', typeLabel: 'Always-on', dailyBudgetInr: 1500, creatives: 4, adSets: 1 },
+        ],
+        testing: [
+          {
+            claim: 'Ads that open with a question will get more clicks than the other ads in the same campaign.',
+            kindLabel: 'Proven idea',
+            levelLabel: 'Ad',
+            product: 'Saathi Report',
+          },
+          {
+            claim: 'Ads using the gain message angle will get more clicks than the proven idea it builds on.',
+            kindLabel: 'New twist on a proven idea',
+            levelLabel: 'Ad',
+            product: 'Saathi Report',
+          },
+        ],
+        mix: '1 proven idea, 1 new twist',
+        why: 'Saathi is converting at a steady cost per sale; Nadi holds at its current level while its new ads settle.',
+        structured: true,
+        summaryText:
+          'PLAN 2026-09-25 — daily total ₹4000 of ₹5000 governed; ₹1000 left unspent · 2 run(s) to release\nWhy: Saathi is converting; Nadi holds.',
+      },
+      actions: [
+        { key: 'approve', label: 'Approve', tone: 'primary', requiresNote: false },
+        { key: 'reject', label: 'Reject', tone: 'danger', requiresNote: true },
+      ],
+    },
     {
       gateId: 'gate_launch_1',
       kind: 'campaign_launch',
@@ -1486,4 +1542,136 @@ export function readCampaignRun(runId: string): BrainCampaignRun {
 
 export function readCampaignRunCreatives(runId: string): BrainCampaignCreative[] {
   return CAMPAIGN_CREATIVES[runId] ?? []
+}
+
+// ── Experiments ────────────────────────────────────────────────────────────
+
+const EXPERIMENTS: Record<BrainExperimentView, BrainExperiment[]> = {
+  testing: [
+    {
+      ref: 'exp-131',
+      productKey: 'saathi_report',
+      product: 'Saathi Report',
+      levelLabel: 'Ad',
+      claim: 'Ads that open with a question will get more clicks than the other ads in the same campaign.',
+      kindLabel: 'Proven idea',
+      kind: 'proven',
+      statusLabel: 'Testing now',
+      statusMeaning: 'Ads that test this are running and results are coming in.',
+      tone: 'progress',
+      progress: { spentInr: 312, neededInr: 500, impressions: 1500, neededImpressions: 2000, daysLeft: 4, note: 'Still collecting results.' },
+      result: null,
+      since: '22 Sep',
+      sinceAt: isoAgo(3 * 24 * HOUR),
+    },
+    {
+      ref: 'exp-132',
+      productKey: 'saathi_report',
+      product: 'Saathi Report',
+      levelLabel: 'Ad',
+      claim: 'Ads using the gain message angle will get more clicks than the proven idea it builds on.',
+      kindLabel: 'New twist on a proven idea',
+      kind: 'variant',
+      statusLabel: 'Testing now',
+      statusMeaning: 'Ads that test this are running and results are coming in.',
+      tone: 'progress',
+      progress: { spentInr: 540, neededInr: 500, impressions: 1200, neededImpressions: 2000, daysLeft: 2, note: 'Still collecting results.' },
+      result: null,
+      since: '20 Sep',
+      sinceAt: isoAgo(5 * 24 * HOUR),
+    },
+    {
+      ref: 'exp-140',
+      productKey: 'nadi_reading',
+      product: 'Nadi Reading',
+      levelLabel: 'Placement',
+      claim: 'Showing ads in all placements will get sales more cheaply than this product\'s usual ads.',
+      kindLabel: 'Exploring',
+      kind: 'seed',
+      statusLabel: 'Planned',
+      statusMeaning: 'Written down; the ads that test it have not started yet.',
+      tone: 'waiting',
+      progress: { spentInr: 0, neededInr: 1500, impressions: 0, neededImpressions: 5000, daysLeft: null, note: 'Starts when its ads go live.' },
+      result: null,
+      since: 'Today',
+      sinceAt: isoAgo(2 * HOUR),
+    },
+  ],
+  learned: [
+    {
+      ref: 'exp-118',
+      productKey: 'saathi_report',
+      product: 'Saathi Report',
+      levelLabel: 'Ad',
+      claim: 'Ads in Hindi will get more clicks than ads with a different language.',
+      kindLabel: 'Proven idea',
+      kind: 'proven',
+      statusLabel: 'Worked',
+      statusMeaning: 'The results backed the idea up.',
+      tone: 'good',
+      progress: null,
+      result: { sentence: 'It worked: 2.1% vs 1.4% click rate.', confidenceLabel: 'Fairly sure' },
+      since: '18 Sep',
+      sinceAt: isoAgo(7 * 24 * HOUR),
+    },
+    {
+      ref: 'exp-121',
+      productKey: 'nadi_reading',
+      product: 'Nadi Reading',
+      levelLabel: 'Ad',
+      claim: 'Ads using the price-led message angle will earn a better return on ad spend than the other ads in the same campaign.',
+      kindLabel: 'New twist on a proven idea',
+      kind: 'variant',
+      statusLabel: "Didn't work",
+      statusMeaning: 'The results went against the idea.',
+      tone: 'bad',
+      progress: null,
+      result: { sentence: "It didn't hold up: 0.84x vs 1.21x return on ad spend.", confidenceLabel: 'Early signal' },
+      since: '16 Sep',
+      sinceAt: isoAgo(9 * 24 * HOUR),
+    },
+  ],
+  dropped: [
+    {
+      ref: 'exp-109',
+      productKey: 'saathi_report',
+      product: 'Saathi Report',
+      levelLabel: 'Audience',
+      claim: 'Letting Meta choose the audience automatically will get sales more cheaply than this product\'s usual ads.',
+      kindLabel: 'Exploring',
+      kind: 'seed',
+      statusLabel: 'No clear answer',
+      statusMeaning: 'The test ended without enough evidence either way.',
+      tone: 'idle',
+      progress: null,
+      result: { sentence: 'Not enough was spent in time to tell either way.', confidenceLabel: null },
+      since: '10 Sep',
+      sinceAt: isoAgo(15 * 24 * HOUR),
+    },
+  ],
+}
+
+export function readExperiments(view: BrainExperimentView, product?: string | null): BrainExperiment[] {
+  return EXPERIMENTS[view].filter((e) => !product || e.productKey === product)
+}
+
+export function readExperimentSummary(): BrainExperimentSummary {
+  const products = new Map<string, { productKey: string; product: string; testing: number; learned: number; dropped: number }>()
+  for (const view of ['testing', 'learned', 'dropped'] as const) {
+    for (const e of EXPERIMENTS[view]) {
+      if (!e.productKey || !e.product) continue
+      const row = products.get(e.productKey) ?? { productKey: e.productKey, product: e.product, testing: 0, learned: 0, dropped: 0 }
+      row[view] += 1
+      products.set(e.productKey, row)
+    }
+  }
+  return {
+    views: {
+      testing: EXPERIMENTS.testing.length,
+      learned: EXPERIMENTS.learned.length,
+      dropped: EXPERIMENTS.dropped.length,
+    },
+    products: [...products.values()],
+    partial: false,
+  }
 }

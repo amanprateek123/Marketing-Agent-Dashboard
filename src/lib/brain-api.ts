@@ -20,6 +20,8 @@
  *   GET  /brain/:tenantId/pipeline/runs?limit=<n>
  *   GET  /brain/:tenantId/pipeline/runs/:runId
  *   GET  /brain/:tenantId/pipeline/runs/:runId/creatives
+ *   GET  /brain/:tenantId/experiments?view=testing|learned|dropped&product=<productKey>
+ *   GET  /brain/:tenantId/experiments/summary
  *   GET  /brain/:tenantId/runs
  *   GET  /brain/:tenantId/runs/:runId
  *   GET  /brain/:tenantId/runs/:runId/events?after=<cursor>
@@ -44,6 +46,8 @@ import {
   readConversation,
   readDecisions,
   readEvents,
+  readExperiments,
+  readExperimentSummary,
   readGates,
   readPipeline,
   readRun,
@@ -65,6 +69,9 @@ import type {
   BrainConversation,
   BrainDecision,
   BrainEventPage,
+  BrainExperiment,
+  BrainExperimentSummary,
+  BrainExperimentView,
   BrainGate,
   BrainGateDecisionBody,
   BrainGateDecisionResult,
@@ -177,6 +184,27 @@ export function getCampaignRunCreatives(
   return apiFetch<BrainCampaignCreative[]>(
     `${base(tenantId)}/pipeline/runs/${encodeURIComponent(runId)}/creatives`,
   )
+}
+
+/**
+ * The Brain's experiments on one shelf — testing now, learned, or tried and dropped — already in
+ * plain words. `product` is a `productKey` from the summary; omit it for every product.
+ */
+export function getExperiments(
+  tenantId: string,
+  view: BrainExperimentView,
+  product?: string | null,
+): Promise<BrainExperiment[]> {
+  if (BRAIN_MOCK) return settle(() => readExperiments(view, product))
+  const query = new URLSearchParams({ view })
+  if (product) query.set('product', product)
+  return apiFetch<BrainExperiment[]>(`${base(tenantId)}/experiments?${query.toString()}`)
+}
+
+/** How many experiments sit on each shelf, overall and per product. */
+export function getExperimentSummary(tenantId: string): Promise<BrainExperimentSummary> {
+  if (BRAIN_MOCK) return settle(readExperimentSummary)
+  return apiFetch<BrainExperimentSummary>(`${base(tenantId)}/experiments/summary`)
 }
 
 export function getBrainRuns(tenantId: string): Promise<BrainRunSummary[]> {

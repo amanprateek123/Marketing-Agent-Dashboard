@@ -439,6 +439,11 @@ export interface BrainGate {
   spendGate?: BrainSpendGate | null
   /** The pipeline run this gate names, when it names one. A plan gate usually does not. */
   pipelineRunId?: string | null
+  /**
+   * A PLAN gate's day plan as facts read from the brain (never parsed from the Slack text). Null or
+   * absent on other gates and from an older bridge. `structured: false` → render `summaryText`.
+   */
+  plan?: BrainPlanView | null
 }
 
 export type BrainSpendGate = 'plan' | 'build' | 'launch' | 'scale'
@@ -559,6 +564,7 @@ export type BrainTabKey =
   | 'decisions'
   | 'pipeline'
   | 'campaign-run'
+  | 'experiments'
   | 'approvals'
   | 'agents'
   | 'conversation'
@@ -568,6 +574,7 @@ export const BRAIN_TAB_KEYS: BrainTabKey[] = [
   'decisions',
   'pipeline',
   'campaign-run',
+  'experiments',
   'approvals',
   'agents',
   'conversation',
@@ -660,4 +667,102 @@ export interface BrainCampaignRun extends BrainCampaignRunSummary {
   needsYou: string | null
   /** Which budget governs this run and whether its contract agrees. Absent from an older bridge. */
   budgetAuthority?: BrainBudgetAuthority | null
+}
+
+/* ── Experiments (the brain's hypotheses), in plain language ─────────────────────
+ *
+ * Mirrors marketing-agent src/foundry-bridge/brain.types.ts. Every string is already the sentence
+ * a marketer reads; the page never re-derives a label. `ref` and `productKey` are opaque — `ref`
+ * belongs in <Details> only, `productKey` is only a filter value.
+ */
+
+/** testing = planned + testing now · learned = worked + didn't work · dropped = dropped + no clear answer. */
+export type BrainExperimentView = 'testing' | 'learned' | 'dropped'
+
+export type BrainExperimentTone = 'progress' | 'waiting' | 'good' | 'bad' | 'idle'
+
+export interface BrainExperimentProgress {
+  spentInr: number
+  neededInr: number | null
+  impressions: number
+  neededImpressions: number | null
+  /** Days until the test's time is up; 0 once passed; null before it has started. */
+  daysLeft: number | null
+  /** "Still collecting results." or null. */
+  note: string | null
+}
+
+export interface BrainExperimentResult {
+  /** "It worked: 2.1% vs 1.4% click rate." */
+  sentence: string
+  /** "Early signal" | "Fairly sure" | "Confident" | null. */
+  confidenceLabel: string | null
+}
+
+export interface BrainExperiment {
+  ref: string
+  productKey: string | null
+  product: string | null
+  levelLabel: string
+  claim: string
+  kindLabel: string
+  kind: 'proven' | 'variant' | 'seed' | 'other'
+  statusLabel: string
+  statusMeaning: string
+  tone: BrainExperimentTone
+  progress: BrainExperimentProgress | null
+  result: BrainExperimentResult | null
+  /** Human date ("Today", "24 Sep"). */
+  since: string | null
+  /** ISO — sorting only, never displayed. */
+  sinceAt: string | null
+}
+
+export interface BrainExperimentProductCount {
+  productKey: string
+  product: string
+  testing: number
+  learned: number
+  dropped: number
+}
+
+export interface BrainExperimentSummary {
+  views: Record<BrainExperimentView, number>
+  products: BrainExperimentProductCount[]
+  /** True when a count is a floor because the brain cut a read short. */
+  partial: boolean
+}
+
+/* ── A plan gate, as facts ─────────────────────────────────────────────────────── */
+
+export interface BrainPlanRun {
+  product: string
+  typeLabel: string
+  dailyBudgetInr: number | null
+  creatives: number | null
+  adSets: number | null
+}
+
+export interface BrainPlanClaim {
+  claim: string
+  kindLabel: string
+  levelLabel: string
+  product: string | null
+}
+
+export interface BrainPlanView {
+  /** "Friday, 25 Sep". */
+  dateLabel: string | null
+  totalDailyInr: number | null
+  budgetInr: number | null
+  unspentInr: number | null
+  runs: BrainPlanRun[]
+  testing: BrainPlanClaim[]
+  /** "4 proven ideas, 2 new twists". */
+  mix: string | null
+  why: string | null
+  /** False → the brain rows were unreadable; render `summaryText`. */
+  structured: boolean
+  /** The gate text without the Slack reply line or internal ids. Always present. */
+  summaryText: string
 }

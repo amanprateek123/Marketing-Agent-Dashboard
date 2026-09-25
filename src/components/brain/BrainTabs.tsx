@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Activity, Gavel, Gauge, MessagesSquare, Megaphone, ScrollText, Workflow } from 'lucide-react'
+import { Activity, FlaskConical, Gavel, Gauge, MessagesSquare, Megaphone, ScrollText, Workflow } from 'lucide-react'
 import type { BrainTabKey } from '@/types/brain'
 
 interface TabDef {
@@ -16,6 +16,7 @@ const TABS: TabDef[] = [
   { key: 'decisions', label: 'Decisions', description: 'Every call it made, with its evidence', Icon: ScrollText },
   { key: 'pipeline', label: 'Pipeline', description: 'Producer → Curator → Builder → Launcher', Icon: Workflow },
   { key: 'campaign-run', label: 'Campaigns', description: 'What is being built, and the ads going out', Icon: Megaphone },
+  { key: 'experiments', label: 'Experiments', description: "What we're testing, and what we learned", Icon: FlaskConical },
   { key: 'approvals', label: 'Approvals', description: 'The gates that need a human', Icon: Gavel },
   { key: 'agents', label: 'Agents', description: 'Run an agent and read its output', Icon: Activity },
   { key: 'conversation', label: 'Conversation', description: 'Ask it something and keep the thread', Icon: MessagesSquare },
@@ -39,7 +40,7 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
     <div
       role="tablist"
       aria-label="Brain console sections"
-      className="grid grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
+      className="grid grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-8"
       style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
     >
       {TABS.map(({ key, label, description, Icon }, index) => {

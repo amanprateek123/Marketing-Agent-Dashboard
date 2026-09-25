@@ -16,6 +16,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { formatCurrency, formatRelativeTime } from '@/lib/utils'
+import { formatInr, formatWhen, plainStatus, toneChip } from '@/lib/plain-language'
+import { Details } from '@/components/plain/Details'
 import { decideBrainGate } from '@/lib/brain-api'
 import type {
   BrainGate,
@@ -527,43 +529,177 @@ function GatePayload({
     case 'campaign_launch':
       return <CampaignPreview campaign={gate.payload.campaign} />
     case 'plan_approval':
-      return <PlanPreview plan={gate.payload.plan} />
+      return <PlanCard gate={gate} plan={gate.payload.plan} />
   }
 }
 
 /**
- * The day's spend plan, presented as the Brain wrote it.
+ * The day's spend plan, as facts.
  *
- * Deliberately not parsed into fields. A plan gate's `summary` IS the review — the allocation, its
- * basis, month-to-date spend against the ceiling — written by the agent for a person to read, and
- * chopping it into a table here would mean this component deciding which sentences matter. Rendered
- * whole, in a monospaced block, so what is approved is exactly what was read.
+ * `gate.plan` is built by the bridge from the brain's own rows — the day plan, the runs this gate
+ * releases and what their decisions test — never parsed from the Slack message. When those rows
+ * could not be read (or the bridge is older and sends no `plan`), the gate's text is shown instead,
+ * cleaned of the Slack reply grammar and internal ids, as plain paragraphs rather than a raw block.
  */
-function PlanPreview({ plan }: { plan: BrainGatePlan }) {
+function PlanCard({ gate, plan }: { gate: BrainGate; plan: BrainGatePlan }) {
+  const view = gate.plan ?? null
+  const dateLabel = view?.dateLabel ?? (plan.planDate ? formatWhen(plan.planDate) : null)
+  const fallbackText = view?.summaryText ?? cleanGateText(plan.summary || gate.summary)
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {plan.planDate && <span className="chip chip-neutral">Plan date {plan.planDate}</span>}
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {dateLabel && <span className="chip chip-neutral">{dateLabel}</span>}
         {plan.budgetInr !== null && (
-          <span className="chip chip-neutral">Amount override ₹{plan.budgetInr.toLocaleString('en-IN')}</span>
+          <span className="chip chip-neutral">You set {formatInr(plan.budgetInr, { perDay: true })}</span>
         )}
         {!plan.posted && (
           <span
             className="chip chip-warn"
-            title="The gate has not reached Slack yet. You are seeing it before the daemon posts it — deciding here is what closes it."
+            title="This has not been posted to Slack yet. Deciding here closes it."
           >
-            Not yet posted to Slack
+            Not in Slack yet
           </span>
         )}
       </div>
-      <pre
-        className="overflow-x-auto whitespace-pre-wrap rounded-xl p-4 text-sm"
-        style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' }}
-      >
-        {plan.summary}
-      </pre>
+
+      {view?.structured ? (
+        <>
+          {view.totalDailyInr !== null && (
+            <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
+              <span className="font-semibold" style={{ color: 'var(--ink)' }}>
+                {formatInr(view.totalDailyInr, { perDay: true })}
+              </span>
+              {view.budgetInr !== null && <> of the {formatInr(view.budgetInr)} daily budget</>}
+              {view.unspentInr !== null && view.unspentInr > 0 && (
+                <> · {formatInr(view.unspentInr)} left unspent</>
+              )}
+            </p>
+          )}
+
+          <div className="min-w-0">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+              Campaigns this approves
+            </p>
+            {view.runs.length === 0 ? (
+              <p className="explain">No campaigns are attached to this plan.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Product</th>
+                      <th scope="col">Kind</th>
+                      <th scope="col">Daily budget</th>
+                      <th scope="col">Ads</th>
+                      <th scope="col">Ad sets</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.runs.map((run, index) => (
+                      <tr key={`${run.product}-${index}`}>
+                        <td className="max-w-[16rem] truncate" title={run.product}>
+                          {run.product}
+                        </td>
+                        <td>{run.typeLabel}</td>
+                        <td className="tabular-nums">{formatInr(run.dailyBudgetInr)}</td>
+                        <td className="tabular-nums">{run.creatives ?? '—'}</td>
+                        <td className="tabular-nums">{run.adSets ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {view.testing.length > 0 && (
+            <div className="min-w-0">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+                What it will test{view.mix ? ` · ${view.mix}` : ''}
+              </p>
+              <ul className="flex min-w-0 flex-col gap-2">
+                {view.testing.map((t, index) => (
+                  <li
+                    key={`${t.claim}-${index}`}
+                    className="flex min-w-0 flex-col gap-1.5 rounded-xl p-3"
+                    style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
+                  >
+                    <span className="flex min-w-0 flex-wrap gap-1.5">
+                      <span className={`chip ${toneChip(plainStatus('experimentKind', kindKey(t.kindLabel)).tone)}`}>
+                        {t.kindLabel}
+                      </span>
+                      {t.product && <span className="chip chip-neutral">{t.product}</span>}
+                    </span>
+                    <span className="break-words text-sm" style={{ color: 'var(--ink-2)' }}>
+                      {t.claim}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {view.why && (
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+                Why
+              </p>
+              <p className="break-words text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+                {view.why}
+              </p>
+            </div>
+          )}
+        </>
+      ) : (
+        <div
+          className="flex min-w-0 flex-col gap-1.5 rounded-xl p-4 text-sm"
+          style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' }}
+        >
+          {fallbackText ? (
+            fallbackText.split('\n').map((line, index) => (
+              <p key={index} className="break-words">
+                {line}
+              </p>
+            ))
+          ) : (
+            <p>The Brain did not write a summary for this plan.</p>
+          )}
+        </div>
+      )}
+
+      <Details reference={gate.gateId} />
     </div>
   )
+}
+
+/** The label the bridge sends back to the vocabulary key, only to pick a chip colour. */
+function kindKey(label: string): string {
+  if (label.startsWith('Proven')) return 'proven'
+  if (label.startsWith('New twist')) return 'variant'
+  if (label.startsWith('Exploring')) return 'seed'
+  return label
+}
+
+/**
+ * For a bridge too old to send `plan.summaryText`: drop the Slack "Reply: …" line and the internal
+ * ids ([H123], → H45, Run #94) the gate text carries.
+ */
+function cleanGateText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*Reply\s*:/i.test(line))
+    .map((line) =>
+      line
+        .replace(/\[(?:H\d+|not opened)\]/g, '')
+        .replace(/\s*(?:→|->)\s*H\d+\b/g, '')
+        .replace(/\bH\d+\b/g, '')
+        .replace(/\bRun\s*#\d+\s*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join('\n')
 }
 
 const VERDICT_META: Record<BrainGateCreative['verdict'], { label: string; chip: string }> = {

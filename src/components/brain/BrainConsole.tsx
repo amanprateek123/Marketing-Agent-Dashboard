@@ -27,6 +27,7 @@ import { PulseTab } from './PulseTab'
 import { DecisionsTab } from './DecisionsTab'
 import { PipelineTab } from './PipelineTab'
 import { CampaignRunTab } from './CampaignRunTab'
+import { ExperimentsTab } from './ExperimentsTab'
 import { ApprovalsTab } from './ApprovalsTab'
 import { AgentsTab } from './AgentsTab'
 import { ConversationTab } from './ConversationTab'
@@ -195,6 +196,7 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
         {tab === 'campaign-run' && (
           <CampaignRunTab tenantId={tenantId} onGoToTab={changeTab} />
         )}
+        {tab === 'experiments' && <ExperimentsTab tenantId={tenantId} />}
         {tab === 'approvals' && (
           <ApprovalsTab tenantId={tenantId} gates={gates} onDecided={() => void load('refresh')} />
         )}
