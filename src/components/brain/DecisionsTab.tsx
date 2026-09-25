@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   Coins,
   CirclePause,
   ImageIcon,
+  Loader2,
   Rocket,
   ScrollText,
   Scale,
@@ -13,9 +14,11 @@ import {
 } from 'lucide-react'
 import { formatPercent } from '@/lib/utils'
 import { Details } from '@/components/plain/Details'
-import { formatRelative, formatWhen, plainStatus } from '@/lib/plain-language'
-import type { BrainDecision, BrainDecisionKind } from '@/types/brain'
+import { PLAIN_ERROR, errorDetail, formatRelative, formatWhen, plainStatus } from '@/lib/plain-language'
+import { getDecisionBets } from '@/lib/brain-api'
+import type { BrainDecision, BrainDecisionBets, BrainDecisionKind } from '@/types/brain'
 import { EvidenceList, SectionCard } from './shared'
+import { BetList } from './Bets'
 
 const KIND_META: Record<
   BrainDecisionKind,
@@ -50,7 +53,7 @@ const FILTERS: Array<{ key: 'all' | BrainDecisionKind; label: string }> = [
   { key: 'hold', label: 'Holds' },
 ]
 
-export function DecisionsTab({ decisions }: { decisions: BrainDecision[] }) {
+export function DecisionsTab({ decisions, tenantId }: { decisions: BrainDecision[]; tenantId?: string }) {
   const [filter, setFilter] = useState<'all' | BrainDecisionKind>('all')
   const [openId, setOpenId] = useState<string | null>(decisions[0]?.id ?? null)
 
@@ -218,6 +221,17 @@ export function DecisionsTab({ decisions }: { decisions: BrainDecision[] }) {
                         How sure: {formatPercent(decision.confidence)}
                       </p>
 
+                      {decision.expected && (
+                        <>
+                          <p className="micro-label mt-4 mb-1">What it expected</p>
+                          <p className="break-words text-[14px]" style={{ color: 'var(--ink-2)' }}>
+                            {decision.expected}
+                          </p>
+                        </>
+                      )}
+
+                      {tenantId && <DecisionBets tenantId={tenantId} decisionId={decision.id} />}
+
                       {decision.evidence.length > 0 && (
                         <>
                           <p className="micro-label mt-4 mb-2">The numbers it looked at</p>
@@ -239,6 +253,55 @@ export function DecisionsTab({ decisions }: { decisions: BrainDecision[] }) {
           </ol>
         )}
       </SectionCard>
+    </div>
+  )
+}
+
+/**
+ * The ideas one decision is testing and how each turned out — read when the decision is opened,
+ * not for all fifty at once (GET brain/:t/decisions/:id/bets).
+ */
+function DecisionBets({ tenantId, decisionId }: { tenantId: string; decisionId: string }) {
+  const [data, setData] = useState<BrainDecisionBets | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const next = await getDecisionBets(tenantId, decisionId)
+        if (!cancelled) setData(next)
+      } catch (err) {
+        if (!cancelled) setError(errorDetail(err) || 'Unknown error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, decisionId])
+
+  if (error) {
+    return (
+      <div className="mt-4 flex flex-col gap-2">
+        <p className="micro-label">What it is testing</p>
+        <p className="explain">{PLAIN_ERROR}</p>
+        <Details items={[{ label: 'Error', value: error }]} />
+      </div>
+    )
+  }
+  if (!data) {
+    return (
+      <p className="explain mt-4 inline-flex items-center gap-2" aria-busy="true">
+        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+        Loading what it is testing…
+      </p>
+    )
+  }
+  if (data.bets.length === 0) return null
+  return (
+    <div className="mt-4 min-w-0">
+      <p className="micro-label mb-2">What it is testing, and how it turned out</p>
+      <BetList bets={data.bets} />
     </div>
   )
 }

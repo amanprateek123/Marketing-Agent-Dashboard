@@ -188,7 +188,7 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
         className="animate-fade-up mt-6"
       >
         {tab === 'pulse' && <PulseTab state={state} onGoToTab={changeTab} />}
-        {tab === 'decisions' && <DecisionsTab decisions={decisions} />}
+        {tab === 'decisions' && <DecisionsTab decisions={decisions} tenantId={tenantId} />}
         {tab === 'pipeline' && <PipelineTab pipeline={pipeline} onGoToTab={changeTab} />}
         {/* Owns its own fetching: the run list and one run's ads are two more reads, and the
             console's opening Promise.all should not grow for a tab most visits never open. */}
