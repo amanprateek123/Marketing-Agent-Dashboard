@@ -26,8 +26,11 @@ import type {
   BrainGateCreative,
   BrainGatePlan,
   BrainIdea,
+  BrainPlanClaim,
+  BrainPlanView,
 } from '@/types/brain'
 import { SectionCard, plainCode, plainIfCode } from './shared'
+import { BetList } from './Bets'
 
 const KIND_META: Record<
   BrainGate['kind'],
@@ -603,7 +606,23 @@ function GatePayload({
         </ul>
       )
     case 'campaign_launch':
-      return <CampaignPreview campaign={gate.payload.campaign} />
+      return (
+        <div className="flex min-w-0 flex-col gap-4">
+          <CampaignPreview campaign={gate.payload.campaign} />
+          {gate.bets !== undefined && gate.bets !== null && (
+            <div className="min-w-0">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+                What this campaign is testing
+              </p>
+              <BetList
+                bets={gate.bets}
+                showProduct={false}
+                empty="This campaign is not testing any ideas — it runs on what already works."
+              />
+            </div>
+          )}
+        </div>
+      )
     case 'plan_approval':
       return <PlanCard gate={gate} plan={gate.payload.plan} />
   }
@@ -689,32 +708,7 @@ function PlanCard({ gate, plan }: { gate: BrainGate; plan: BrainGatePlan }) {
             )}
           </div>
 
-          {view.testing.length > 0 && (
-            <div className="min-w-0">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
-                What it will test{view.mix ? ` · ${view.mix}` : ''}
-              </p>
-              <ul className="flex min-w-0 flex-col gap-2">
-                {view.testing.map((t, index) => (
-                  <li
-                    key={`${t.claim}-${index}`}
-                    className="flex min-w-0 flex-col gap-1.5 rounded-xl p-3"
-                    style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
-                  >
-                    <span className="flex min-w-0 flex-wrap gap-1.5">
-                      <span className={`chip ${toneChip(plainStatus('experimentKind', kindKey(t.kindLabel)).tone)}`}>
-                        {t.kindLabel}
-                      </span>
-                      {t.product && <span className="chip chip-neutral">{t.product}</span>}
-                    </span>
-                    <span className="break-words text-sm" style={{ color: 'var(--ink-2)' }}>
-                      {t.claim}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <PlanBets view={view} />
 
           {view.why && (
             <div className="min-w-0">
@@ -746,6 +740,103 @@ function PlanCard({ gate, plan }: { gate: BrainGate; plan: BrainGatePlan }) {
 
       <Details reference={gate.gateId} />
     </div>
+  )
+}
+
+/**
+ * What the plan will test, grouped by the campaign that tests it: each campaign's bets, then each
+ * of its ad sets with the audience bet it carries. Bets that belong to no one campaign follow under
+ * "Across the plan". An older bridge sends no per-run bets; then the flat list is shown as before.
+ */
+function PlanBets({ view }: { view: BrainPlanView }) {
+  if (view.testing.length === 0 && !view.runs.some((r) => (r.audiences ?? []).some((a) => a.bet))) {
+    return null
+  }
+  const grouped = view.runs.some((r) => r.bets !== undefined)
+  const inRuns = new Set(view.runs.flatMap((r) => (r.bets ?? []).map((b) => b.claim)))
+  const across = grouped ? view.testing.filter((t) => !inRuns.has(t.claim)) : view.testing
+
+  return (
+    <div className="min-w-0">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+        What it will test{view.mix ? ` · ${view.mix}` : ''}
+      </p>
+      <div className="flex min-w-0 flex-col gap-3">
+        {grouped &&
+          view.runs.map((run, index) => {
+            const bets = run.bets ?? []
+            const audiences = run.audiences ?? []
+            if (bets.length === 0 && !audiences.some((a) => a.bet)) return null
+            return (
+              <section
+                key={`${run.product}-${index}`}
+                className="flex min-w-0 flex-col gap-2 rounded-xl p-3"
+                style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }}
+              >
+                <p className="min-w-0 break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  {run.product} <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>· {run.typeLabel}</span>
+                </p>
+                {bets.length > 0 && <ClaimList claims={bets} showProduct={false} />}
+                {audiences.length > 0 && (
+                  <div className="min-w-0">
+                    <p className="mb-1 text-xs font-semibold" style={{ color: 'var(--ink-3)' }}>
+                      Ad sets
+                    </p>
+                    <ul className="flex min-w-0 flex-col gap-1.5">
+                      {audiences.map((a, i) => (
+                        <li key={`${a.name}-${i}`} className="min-w-0 break-words text-sm" style={{ color: 'var(--ink-2)' }}>
+                          <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                            {a.name}
+                          </span>
+                          {a.budgetInr !== null && <> · {formatInr(a.budgetInr, { perDay: true })}</>}
+                          <span className="block text-xs" style={{ color: 'var(--ink-3)' }}>
+                            {a.bet ? `Testing: ${a.bet}` : 'Not testing an audience idea.'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )
+          })}
+        {across.length > 0 && (
+          <div className="min-w-0">
+            {grouped && (
+              <p className="mb-1.5 text-xs font-semibold" style={{ color: 'var(--ink-3)' }}>
+                Across the plan
+              </p>
+            )}
+            <ClaimList claims={across} showProduct />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ClaimList({ claims, showProduct }: { claims: BrainPlanClaim[]; showProduct: boolean }) {
+  return (
+    <ul className="flex min-w-0 flex-col gap-2">
+      {claims.map((t, index) => (
+        <li
+          key={`${t.claim}-${index}`}
+          className="flex min-w-0 flex-col gap-1.5 rounded-xl p-3"
+          style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
+        >
+          <span className="flex min-w-0 flex-wrap gap-1.5">
+            <span className={`chip ${toneChip(plainStatus('experimentKind', kindKey(t.kindLabel)).tone)}`}>
+              {t.kindLabel}
+            </span>
+            <span className="chip chip-neutral">{t.levelLabel}</span>
+            {showProduct && t.product && <span className="chip chip-neutral">{t.product}</span>}
+          </span>
+          <span className="break-words text-sm" style={{ color: 'var(--ink-2)' }}>
+            {t.claim}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
