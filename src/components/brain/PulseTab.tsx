@@ -1,11 +1,12 @@
 'use client'
 
-import React from 'react'
-import { ArrowRight, CalendarClock, CircleCheck, Gavel, History, TrendingUp } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { ArrowRight, CalendarClock, CircleCheck, FlaskConical, Gavel, History, TrendingUp } from 'lucide-react'
 import { formatPercent } from '@/lib/utils'
 import { Details } from '@/components/plain/Details'
 import { formatInr, formatRelative, plainStatus } from '@/lib/plain-language'
-import type { BrainState, BrainTabKey } from '@/types/brain'
+import type { BrainExperimentSummary, BrainState, BrainTabKey } from '@/types/brain'
+import { getExperimentSummary } from '@/lib/brain-api'
 import { AgentGlyph, SectionCard, StatTile, STAGE_STATE_META, plainIfCode } from './shared'
 
 const BRAIN_STATUS_META: Record<
@@ -28,9 +29,11 @@ const HEALTH_TONE: Record<string, { chip: string; bar: string; label: string }> 
 interface PulseTabProps {
   state: BrainState
   onGoToTab: (tab: BrainTabKey) => void
+  /** Needed for the experiment counts; without it the row is left out. */
+  tenantId?: string
 }
 
-export function PulseTab({ state, onGoToTab }: PulseTabProps) {
+export function PulseTab({ state, onGoToTab, tenantId }: PulseTabProps) {
   const status = BRAIN_STATUS_META[state.brain.status] ?? {
     label: plainStatus('brainStatus', state.brain.status).label,
     chip: 'chip-neutral',
@@ -127,6 +130,8 @@ export function PulseTab({ state, onGoToTab }: PulseTabProps) {
           meaning={pipeline ? pipeline.headline : 'No new ads are being made right now'}
         />
       </div>
+
+      {tenantId && <ExperimentCounts tenantId={tenantId} onGoToTab={onGoToTab} />}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
         <SectionCard
@@ -284,4 +289,68 @@ function stageStateOf(pipeline: NonNullable<BrainState['pipeline']>) {
   if (pipeline.stages.some((stage) => stage.state === 'running')) return 'running'
   if (pipeline.stages.every((stage) => stage.state === 'done')) return 'done'
   return 'idle'
+}
+
+/**
+ * How many ideas the Brain is testing and how many it got an answer on this week — the same
+ * summary the Experiments tab reads. Hidden if the counts cannot be read: the rest of Pulse stands
+ * on its own, and a tile saying "unknown" twice helps nobody.
+ */
+function ExperimentCounts({ tenantId, onGoToTab }: { tenantId: string; onGoToTab: (tab: BrainTabKey) => void }) {
+  const [summary, setSummary] = useState<BrainExperimentSummary | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const next = await getExperimentSummary(tenantId)
+        if (!cancelled) setSummary(next)
+      } catch {
+        if (!cancelled) setSummary(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId])
+
+  if (!summary) return null
+  const plus = summary.partial ? '+' : ''
+  const learned = summary.learnedThisWeek
+  return (
+    <section className="card min-w-0 p-4 sm:p-5" aria-label="Experiments">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <p className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+          <FlaskConical size={15} aria-hidden="true" style={{ color: 'var(--ink-3)' }} />
+          What the Brain is testing
+        </p>
+        <button type="button" className="btn btn-ghost" onClick={() => onGoToTab('experiments')}>
+          See experiments <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatTile
+          label="Being tested now"
+          value={`${summary.views.testing}${plus}`}
+          tone="accent"
+          meaning="Ideas the Brain is checking with real ads"
+        />
+        <StatTile
+          label="Answered this week"
+          value={learned === null || learned === undefined ? '—' : String(learned)}
+          tone="good"
+          meaning={
+            learned === null || learned === undefined
+              ? 'Not available right now'
+              : 'Tests that got a clear answer in the last 7 days'
+          }
+        />
+        <StatTile
+          label="Learned so far"
+          value={`${summary.views.learned}${plus}`}
+          meaning="Every test that worked or didn't, all time"
+        />
+      </div>
+    </section>
+  )
 }
