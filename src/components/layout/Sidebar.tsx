@@ -12,6 +12,7 @@ import {
   Image as ImageIcon,
   Inbox,
   LayoutGrid,
+  Lock,
   LogOut,
   Megaphone,
   Menu,
@@ -25,6 +26,7 @@ import { cn } from '@/lib/utils'
 import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
 import { getBrainGates } from '@/lib/brain-api'
 import { logout } from '@/lib/auth'
+import { useBrainUnlocked } from '@/lib/use-brain-auth'
 import { MeridianGlyph } from '@/components/ui/MeridianMark'
 import styles from './Sidebar.module.css'
 
@@ -38,6 +40,8 @@ interface NavItem {
   hint: string
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
   badge?: number
+  /** Drawn with a small lock: still reachable, but needs its own sign-in first. */
+  locked?: boolean
 }
 
 interface NavGroup {
@@ -50,6 +54,7 @@ function navGroups(
   pendingCount: number,
   proposedCount: number,
   openGateCount: number,
+  brainLocked: boolean,
 ): NavGroup[] {
   const root = `/dashboard/${tenantId}`
 
@@ -110,7 +115,8 @@ function navGroups(
           label: 'Brain',
           hint: 'The AI marketing lead: its plans, decisions and questions for you',
           icon: BrainCircuit,
-          badge: openGateCount,
+          badge: brainLocked ? undefined : openGateCount,
+          locked: brainLocked,
         },
         {
           href: `${root}/proposed-actions`,
@@ -171,6 +177,7 @@ interface SidebarContentProps {
   pendingCount: number
   proposedCount: number
   openGateCount: number
+  brainLocked: boolean
   reachable: boolean | null
   onNavigate?: () => void
   onClose?: () => void
@@ -182,12 +189,13 @@ function SidebarContent({
   pendingCount,
   proposedCount,
   openGateCount,
+  brainLocked,
   reachable,
   onNavigate,
   onClose,
 }: SidebarContentProps) {
   const root = `/dashboard/${tenantId}`
-  const groups = navGroups(tenantId, pendingCount, proposedCount, openGateCount)
+  const groups = navGroups(tenantId, pendingCount, proposedCount, openGateCount, brainLocked)
   const status = reachable === null
     ? { label: 'Checking data', className: styles.statusConnecting }
     : reachable
@@ -238,6 +246,16 @@ function SidebarContent({
                       <span className={styles.navLabel}>{item.label}</span>
                       <span className={styles.navHint}>{item.hint}</span>
                     </span>
+                    {item.locked && (
+                      <span
+                        className="shrink-0"
+                        style={{ color: 'var(--ink-3)' }}
+                        title="Needs its own sign-in"
+                        aria-label="Locked — needs its own sign-in"
+                      >
+                        <Lock size={13} aria-hidden="true" />
+                      </span>
+                    )}
                     {item.badge != null && item.badge > 0 && (
                       <span className={styles.badge} aria-label={`${item.badge} waiting`}>
                         {item.badge > 99 ? '99+' : item.badge}
@@ -286,6 +304,8 @@ export function Sidebar({ tenantId }: SidebarProps) {
   const [pendingCount, setPendingCount] = useState(0)
   const [proposedCount, setProposedCount] = useState(0)
   const [openGateCount, setOpenGateCount] = useState(0)
+  // Unknown (before hydration) draws as unlocked, so the lock never flickers on for a Brain that is open.
+  const brainLocked = useBrainUnlocked() === false
   const [reachable, setReachable] = useState<boolean | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -322,6 +342,8 @@ export function Sidebar({ tenantId }: SidebarProps) {
   // polls separately: one being down must not blank the other's badge, and an
   // unreachable Foundry must not report the whole workspace as offline.
   useEffect(() => {
+    // A locked Brain has no badge to show — and asking would only be refused.
+    if (brainLocked) return
     let cancelled = false
 
     async function tick() {
@@ -339,7 +361,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [tenantId])
+  }, [tenantId, brainLocked])
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -383,6 +405,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
     pendingCount,
     proposedCount,
     openGateCount,
+    brainLocked,
     reachable,
   }
 

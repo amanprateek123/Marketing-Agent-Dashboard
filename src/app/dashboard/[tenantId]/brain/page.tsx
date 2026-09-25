@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { BrainConsole } from '@/components/brain/BrainConsole'
+import { BrainGatekeeper } from '@/components/brain/BrainGatekeeper'
 import { isBrainTabKey } from '@/types/brain'
 
 export const metadata: Metadata = {
@@ -29,6 +29,9 @@ export default async function BrainPage({ params, searchParams }: BrainPageProps
   const requested = Array.isArray(tab) ? tab[0] : tab
 
   return (
-    <BrainConsole tenantId={tenantId} initialTab={isBrainTabKey(requested) ? requested : 'pulse'} />
+    <BrainGatekeeper
+      tenantId={tenantId}
+      initialTab={isBrainTabKey(requested) ? requested : 'pulse'}
+    />
   )
 }

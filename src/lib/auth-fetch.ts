@@ -28,9 +28,13 @@ export function installAuthFetchInterceptor(): void {
     // The login call itself 401s on a wrong password — that's the login
     // form's own error to show inline, not a "your session expired" signal.
     const isLoginCall = url.startsWith(`${API_BASE}/auth/login`)
+    // The Brain has its own token (lib/auth.ts). brain-api attaches it and handles a Brain 401/403
+    // by locking the Brain alone — overwriting it with the workspace token, or treating a Brain
+    // refusal as "your workspace session expired", would sign people out of everything.
+    const isBrainCall = url.startsWith(`${API_BASE}/brain/`)
 
     let finalInit = init
-    if (isApiCall && !isLoginCall && !(input instanceof Request)) {
+    if (isApiCall && !isLoginCall && !isBrainCall && !(input instanceof Request)) {
       const token = getToken()
       if (token) {
         const headers = new Headers(init?.headers)
@@ -41,7 +45,7 @@ export function installAuthFetchInterceptor(): void {
 
     const res = await originalFetch(input, finalInit)
 
-    if (isApiCall && !isLoginCall && res.status === 401) {
+    if (isApiCall && !isLoginCall && !isBrainCall && res.status === 401) {
       clearToken()
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'

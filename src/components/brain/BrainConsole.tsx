@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { BrainCircuit, RefreshCw, WifiOff } from 'lucide-react'
+import { BrainCircuit, Lock, RefreshCw, WifiOff } from 'lucide-react'
 import { errorDetail, formatRelative } from '@/lib/plain-language'
 import {
   BRAIN_MOCK,
@@ -46,9 +46,11 @@ interface Snapshot {
 interface BrainConsoleProps {
   tenantId: string
   initialTab: BrainTabKey
+  /** Signs out of the Brain only. Absent in example-data mode, where there is nothing to lock. */
+  onLock?: () => void
 }
 
-export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
+export function BrainConsole({ tenantId, initialTab, onLock }: BrainConsoleProps) {
   const router = useRouter()
   const pathname = usePathname()
 
@@ -163,15 +165,27 @@ export function BrainConsole({ tenantId, initialTab }: BrainConsoleProps) {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-ghost shrink-0"
-          onClick={() => void load('refresh')}
-          disabled={refreshing}
-        >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => void load('refresh')}
+            disabled={refreshing}
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {onLock && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={onLock}
+              title="Sign out of the Brain only. You stay signed in to the rest of the workspace."
+            >
+              <Lock size={14} aria-hidden="true" /> Lock the Brain
+            </button>
+          )}
+        </div>
       </header>
 
       <BrainTabs

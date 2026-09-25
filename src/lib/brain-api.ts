@@ -37,7 +37,8 @@
  * bridge, exactly as the creative pipeline's token is today.
  */
 
-import { apiFetch } from './api'
+import { API_BASE } from './api'
+import { clearBrainToken, getBrainToken } from './auth'
 import {
   readAgents,
   readCampaignRun,
@@ -111,6 +112,48 @@ function settle<T>(value: () => T, ms = 320): Promise<T> {
       }
     }, ms)
   })
+}
+
+/**
+ * Thrown when the Brain refuses this browser: no Brain token, a Brain 401/403, or a server whose
+ * Brain login is not set up (503). The token is already cleared by the time this is thrown, so the
+ * page's gate swaps the console for the sign-in card on its own; the message is plain words.
+ */
+export class BrainLockedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BrainLockedError'
+  }
+}
+
+/**
+ * `apiFetch` for the Brain: the same parsing, but it sends the Brain token (never the workspace
+ * one), and a refusal locks the Brain instead of signing anyone out of the workspace.
+ */
+async function apiFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  const token = getBrainToken()
+  if (!token) throw new BrainLockedError('Sign in to the Brain to see this.')
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  if (res.status === 401 || res.status === 403) {
+    clearBrainToken('expired')
+    throw new BrainLockedError('Your Brain sign-in has ended. Sign in again to continue.')
+  }
+  const body = await res.text()
+  if (res.status === 503 && /not configured/i.test(body)) {
+    clearBrainToken('not_configured')
+    throw new BrainLockedError("The Brain login hasn't been set up on the server yet.")
+  }
+  if (!res.ok) throw new Error(`${res.status} ${body}`)
+  // A 200 with an empty body is Nest's `null` — GET /pipeline returns it when nothing is building.
+  if (!body) return null as T
+  return JSON.parse(body) as T
 }
 
 function base(tenantId: string): string {
