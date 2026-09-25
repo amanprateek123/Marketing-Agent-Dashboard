@@ -11,6 +11,8 @@ import {
   Target,
 } from 'lucide-react'
 import { askCampaignInsights, getInsightCampaigns } from '@/lib/api'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, errorDetail, formatInr, plainStatus, toneChip } from '@/lib/plain-language'
 import type {
   InsightsCampaignOption,
   InsightsCampaignSnapshot,
@@ -40,15 +42,20 @@ const STARTERS = [
 ]
 
 function rupees(value: number | null | undefined): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
-  return `₹${Math.round(value).toLocaleString('en-IN')}`
+  return formatInr(value)
 }
 
 function StatusChip({ value }: { value: string }) {
-  const v = value.toLowerCase()
-  const cls =
-    v === 'active' ? 'chip-good' : v === 'paused' ? 'chip-warn' : 'chip-neutral'
-  return <span className={`chip ${cls}`} style={{ fontSize: '9.5px', padding: '1px 6px' }}>{value}</span>
+  const plain = plainStatus('campaignStatus', value)
+  return (
+    <span
+      className={`chip ${toneChip(plain.tone)}`}
+      style={{ fontSize: '9.5px', padding: '1px 6px' }}
+      title={plain.meaning || undefined}
+    >
+      {plain.label}
+    </span>
+  )
 }
 
 // ── right panel: what the assistant is actually reading ──────────────────────
@@ -106,7 +113,7 @@ function ReadingPanel({
         <div className="p-4">
           {campaign ? (
             <>
-              <p className="text-[13.5px] font-bold leading-snug" style={{ color: 'var(--ink)' }}>
+              <p className="text-[13.5px] font-bold leading-snug break-words" style={{ color: 'var(--ink)' }}>
                 {campaign.name}
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -114,12 +121,12 @@ function ReadingPanel({
                 {campaign.source === 'manual' ? (
                   <span className="chip chip-neutral" style={{ fontSize: '9.5px', padding: '1px 6px' }}>Built in Meta</span>
                 ) : (
-                  <span className="chip chip-accent" style={{ fontSize: '9.5px', padding: '1px 6px' }}>Built in Meridian</span>
+                  <span className="chip chip-accent" style={{ fontSize: '9.5px', padding: '1px 6px' }}>Built here</span>
                 )}
               </div>
 
               {context && (
-                <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+                <p className="mt-2 text-[11.5px] break-words leading-relaxed" style={{ color: 'var(--ink-3)' }}>
                   {context.resolutionNote}
                 </p>
               )}
@@ -142,13 +149,13 @@ function ReadingPanel({
                             : 'var(--bad)',
                     }}
                   >
-                    {campaign.roas === null ? '—' : `₹${campaign.roas.toFixed(2)}`}
+                    {campaign.roas === null ? '—' : formatInr(campaign.roas, { decimals: 2 })}
                   </p>
                 </div>
               </div>
               {campaign.breakevenRoas !== null && (
                 <p className="mt-1.5 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-                  Needs ₹{campaign.breakevenRoas.toFixed(2)} per ₹1 to break even.
+                  Needs {formatInr(campaign.breakevenRoas, { decimals: 2 })} back per ₹1 to break even.
                 </p>
               )}
 
@@ -170,7 +177,7 @@ function ReadingPanel({
                       style={{ background: 'var(--warn-bg)', color: 'var(--ink-2)', border: '1px solid var(--warn-border)' }}
                     >
                       <AlertTriangle size={11} className="mt-0.5 shrink-0" aria-hidden="true" style={{ color: 'var(--warn)' }} />
-                      {c}
+                      <span className="min-w-0 break-words">{c}</span>
                     </li>
                   ))}
                 </ul>
@@ -203,8 +210,9 @@ function ReadingPanel({
                         spend: 0,
                       })
                     }
-                    className="w-full rounded-lg px-2.5 py-1.5 text-left text-[11.5px] transition-colors hover:bg-[var(--accent-bg)]"
+                    className="w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[11.5px] transition-colors hover:bg-[var(--accent-bg)]"
                     style={{ color: 'var(--ink-2)', border: '1px solid var(--hairline-light)' }}
+                    title={a.name}
                   >
                     {a.name}
                   </button>
@@ -228,7 +236,7 @@ function ReadingPanel({
             <button
               type="button"
               onClick={() => onPin(null)}
-              className="mb-2 w-full rounded-lg px-2.5 py-2 text-left text-[11.5px] font-semibold"
+              className="mb-2 w-full break-words rounded-lg px-2.5 py-2 text-left text-[11.5px] font-semibold"
               style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)', border: '1px solid var(--accent-border)' }}
             >
               <Check size={11} className="mr-1 inline" aria-hidden="true" />
@@ -255,21 +263,21 @@ function ReadingPanel({
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className="rounded-md px-2 py-0.5 text-[10.5px] font-semibold capitalize"
+                className="rounded-md px-2 py-0.5 text-[10.5px] font-semibold"
                 style={
                   statusFilter === s
                     ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)' }
                     : { background: 'var(--muted)', color: 'var(--ink-3)' }
                 }
               >
-                {s}
+                {s === 'all' ? 'All' : plainStatus('campaignStatus', s).label}
               </button>
             ))}
             <span className="mx-0.5" aria-hidden="true" />
             {(
               [
                 ['all', 'Any source'],
-                ['dashboard', 'Meridian'],
+                ['dashboard', 'Built here'],
                 ['manual', 'Meta'],
               ] as const
             ).map(([key, label]) => (
@@ -327,6 +335,7 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorRaw, setErrorRaw] = useState('')
   const [options, setOptions] = useState<InsightsCampaignOption[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
   const [pinned, setPinned] = useState<InsightsCampaignOption | null>(null)
@@ -360,6 +369,7 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
       if (!trimmed || busy) return
       setInput('')
       setError(null)
+      setErrorRaw('')
       setBusy(true)
       const history = turns.map((t) => ({ role: t.role, content: t.content }))
       setTurns((prev) => [...prev, { role: 'user', content: trimmed }])
@@ -375,7 +385,8 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
           { role: 'assistant', content: result.answer, context: result.context },
         ])
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not get an answer')
+        setError("We couldn't get an answer. Try again.")
+        setErrorRaw(errorDetail(err) || PLAIN_ERROR)
       } finally {
         setBusy(false)
       }
@@ -384,13 +395,13 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
   )
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className="card flex min-h-[520px] flex-col overflow-hidden" aria-label="Campaign questions">
         <div
           className="flex items-center justify-between gap-3 px-4 py-3"
           style={{ borderBottom: '1px solid var(--hairline-light)' }}
         >
-          <div>
+          <div className="min-w-0">
             <p className="text-[13px] font-bold" style={{ color: 'var(--ink)' }}>Ask about your ads</p>
             <p className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
               Running or paused — answers come only from your recorded Meta data.
@@ -432,7 +443,7 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
           {turns.map((t, i) => (
             <div key={i} className={t.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
               <div
-                className="max-w-[85%] rounded-xl px-3.5 py-2.5 text-[12.5px] leading-relaxed"
+                className="min-w-0 max-w-[85%] rounded-xl px-3.5 py-2.5 text-[12.5px] leading-relaxed"
                 style={
                   t.role === 'user'
                     ? { background: 'var(--accent)', color: '#fff' }
@@ -440,11 +451,11 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
                 }
               >
                 {t.role === 'assistant' && t.context?.campaign && (
-                  <p className="mb-1.5 text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
+                  <p className="mb-1.5 break-words text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
                     About: {t.context.campaign.name}
                   </p>
                 )}
-                <span className="whitespace-pre-wrap">{t.content}</span>
+                <span className="whitespace-pre-wrap break-words">{t.content}</span>
               </div>
             </div>
           ))}
@@ -456,11 +467,14 @@ export function CampaignQueries({ tenantId }: { tenantId: string }) {
             </div>
           )}
           {error && (
-            <div
-              className="rounded-lg px-3 py-2 text-[12px]"
-              style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}
-            >
-              {error}
+            <div className="space-y-2">
+              <div
+                className="rounded-lg px-3 py-2 text-[12px]"
+                style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}
+              >
+                {error}
+              </div>
+              {errorRaw && <Details title="Technical details" items={[{ label: 'Error', value: errorRaw }]} />}
             </div>
           )}
           <div ref={endRef} />

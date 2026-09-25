@@ -2,7 +2,7 @@ import Link from 'next/link'
 import {
   AlertOctagon, AlertTriangle, ArrowRight, CheckCircle2, Info,
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatInr } from '@/lib/plain-language'
 import type { DashboardAlert, AlertSeverity } from '@/types'
 
 const SEVERITY_STYLE: Record<AlertSeverity, {
@@ -17,7 +17,7 @@ const SEVERITY_STYLE: Record<AlertSeverity, {
     color: 'var(--bad)',
     bg: 'var(--bad-bg)',
     border: 'var(--bad-border)',
-    label: 'Urgent evidence',
+    label: 'Urgent',
   },
   warning: {
     icon: AlertTriangle,
@@ -56,7 +56,7 @@ export function AlertFeed({ alerts }: { alerts: DashboardAlert[] }) {
           Nothing needs attention.
         </p>
         <p className="explain mt-2">
-          No urgent evidence or configuration alerts in the current data.
+          Nothing urgent in your campaigns or settings right now.
         </p>
       </div>
     )
@@ -80,19 +80,19 @@ export function AlertFeed({ alerts }: { alerts: DashboardAlert[] }) {
             </span>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">
-                <p className="font-semibold" style={{ color: 'var(--ink)' }}>
+                <p className="min-w-0 break-words font-semibold" style={{ color: 'var(--ink)' }}>
                   {a.title}
                 </p>
                 {a.amount != null && a.amount > 0 && (
                   <span className="mono" style={{ fontSize: 12, color: s.color }}>
-                    {formatCurrency(Math.round(a.amount))}
+                    {formatInr(a.amount)}
                   </span>
                 )}
               </div>
-              <p className="explain mt-1">{a.detail}</p>
+              <p className="explain mt-1 break-words">{a.detail}</p>
               {a.suggestedAction && (
                 <p
-                  className="mt-1.5 font-medium"
+                  className="mt-1.5 break-words font-medium"
                   style={{ fontSize: 12.5, color: s.color }}
                 >
                   → {a.suggestedAction}

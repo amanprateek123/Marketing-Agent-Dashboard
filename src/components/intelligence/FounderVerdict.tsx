@@ -19,6 +19,7 @@ import type {
   IntelligenceReviewHierarchyNode,
   IntelligenceReviewResult,
 } from '@/types/intelligence-review'
+import { formatInr, humanise } from '@/lib/plain-language'
 
 /**
  * The founder-facing half of the review. Everything here answers "what is
@@ -43,7 +44,7 @@ const ACTION_PHRASE: Record<string, string> = {
 }
 
 function actionPhrase(type: string): string {
-  return ACTION_PHRASE[type] ?? type.replace(/_/g, ' ')
+  return ACTION_PHRASE[type] ?? humanise(type)
 }
 
 function numericParam(
@@ -109,7 +110,12 @@ function toneColor(tone: 'good' | 'warn' | 'bad') {
 // ── formatting ───────────────────────────────────────────────────────────────
 
 function rupees(value: number): string {
-  return `₹${Math.round(value).toLocaleString('en-IN')}`
+  return formatInr(value)
+}
+
+/** "₹2.35" — the rupees back for every ₹1 spent. */
+function perRupeeOf(value: number): string {
+  return formatInr(value, { decimals: 2 })
 }
 
 function metricOf(node: IntelligenceReviewHierarchyNode, key: string): number | null {
@@ -143,7 +149,7 @@ function MoneyHeadline({
 
   const returned = spend * roas
   const losing = breakeven !== null ? roas < breakeven : roas < 1
-  const perRupee = roas.toFixed(2)
+  const perRupee = perRupeeOf(roas)
 
   // Bar is scaled against whichever is larger so neither bar overflows.
   const ceiling = Math.max(spend, returned, 1)
@@ -166,9 +172,9 @@ function MoneyHeadline({
       <p className="mt-2 text-[14px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
         You spent <strong style={{ color: 'var(--ink)' }}>{rupees(spend)}</strong> and got{' '}
         <strong style={{ color: 'var(--ink)' }}>{rupees(returned)}</strong> back — that is{' '}
-        <strong style={{ color: losing ? 'var(--bad)' : 'var(--good)' }}>₹{perRupee} for every ₹1 spent</strong>.
+        <strong style={{ color: losing ? 'var(--bad)' : 'var(--good)' }}>{perRupee} for every ₹1 spent</strong>.
         {breakeven !== null && (
-          <> This product needs <strong style={{ color: 'var(--ink)' }}>₹{breakeven.toFixed(2)}</strong> per ₹1 just to break even.</>
+          <> This product needs <strong style={{ color: 'var(--ink)' }}>{perRupeeOf(breakeven)}</strong> per ₹1 just to break even.</>
         )}
       </p>
 
@@ -214,7 +220,7 @@ function BreakdownRow({
   const body = (
     <>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <span className="chip chip-neutral shrink-0" style={{ fontSize: '9.5px', padding: '1px 6px' }}>{levelLabel}</span>
           <span className="truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }} title={node.name}>
             {node.name}
@@ -228,7 +234,7 @@ function BreakdownRow({
         className="w-28 shrink-0 text-right text-[12.5px] font-bold tabular-nums"
         style={{ color: profitable === null ? 'var(--ink-2)' : profitable ? 'var(--good)' : 'var(--bad)' }}
       >
-        {roas === null ? '—' : `₹${roas.toFixed(2)}`}
+        {roas === null ? '—' : perRupeeOf(roas)}
       </span>
       <span className="hidden w-32 shrink-0 text-right text-[11px] font-semibold sm:block" style={{ color: profitable ? 'var(--good)' : 'var(--ink-3)' }}>
         {profitable === null ? '' : profitable ? 'Making money' : roas === 0 ? 'No sales at all' : 'Losing money'}
@@ -295,7 +301,7 @@ function Breakdown({
       {bestIsProfitable && best && (
         <p className="mt-1 text-[13px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
           Not everything here is failing — <strong style={{ color: 'var(--good)' }}>{best.name}</strong> is
-          bringing back ₹{bestRoas?.toFixed(2)} per ₹1, which is above break-even. A cut across the whole
+          bringing back {bestRoas === null ? '—' : perRupeeOf(bestRoas)} per ₹1, which is above break-even. A cut across the whole
           campaign would slow this one down too.
         </p>
       )}
@@ -308,7 +314,7 @@ function Breakdown({
           <span className="min-w-0 flex-1">Name</span>
           <span className="w-24 shrink-0 text-right">Spent</span>
           <span className="w-28 shrink-0 text-right">Back per ₹1</span>
-          <span className="hidden w-32 shrink-0 text-right sm:block">Verdict</span>
+          <span className="hidden w-32 shrink-0 text-right sm:block">Is it paying off?</span>
           <span className="w-3.5 shrink-0" aria-hidden="true" />
         </div>
         {rows.map((node) => (
@@ -358,11 +364,11 @@ function Opinions({
 
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg p-3.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}>
+      <div className="min-w-0 rounded-lg p-3.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}>
         <p className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
-          What Meridian suggests
+          Suggested change
         </p>
-        <p className="mt-1.5 text-[14px] font-bold" style={{ color: 'var(--ink)' }}>
+        <p className="mt-1.5 break-words text-[14px] font-bold" style={{ color: 'var(--ink)' }}>
           {actionSentence(review.recommendation.action)}
         </p>
         {typeof currentDailyBudget === 'number' && reductionPct !== null && (
@@ -372,9 +378,9 @@ function Opinions({
         )}
       </div>
 
-      <div className="rounded-lg p-3.5" style={{ background: tone.bg, border: `1px solid ${tone.border}` }}>
+      <div className="min-w-0 rounded-lg p-3.5" style={{ background: tone.bg, border: `1px solid ${tone.border}` }}>
         <p className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
-          What the second opinion says
+          What a second check says
         </p>
         <p className="mt-1.5 flex items-center gap-1.5 text-[14px] font-bold" style={{ color: tone.fg }}>
           {verdict === 'support' ? <CheckCircle2 size={15} aria-hidden="true" /> : verdict === 'reject' ? <XCircle size={15} aria-hidden="true" /> : <AlertTriangle size={15} aria-hidden="true" />}
@@ -407,7 +413,7 @@ function OpenQuestions({ review }: { review: IntelligenceReviewResult }) {
         {questions.map((item) => (
           <li
             key={item.question}
-            className="rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed"
+            className="break-words rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed"
             style={{ background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline-light)' }}
           >
             {item.question}
@@ -528,7 +534,7 @@ export function FounderVerdict({
   return (
     <section
       className="overflow-hidden rounded-xl"
-      aria-label="What Meridian found"
+      aria-label="What we found"
       style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }}
     >
       <div className="px-4 py-4 sm:px-5">
@@ -538,14 +544,14 @@ export function FounderVerdict({
             style={{ background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline-light)' }}
           >
             <Lock size={13} className="mt-0.5 shrink-0" aria-hidden="true" style={{ color: 'var(--ink-3)' }} />
-            <span>{readOnlyReason}</span>
+            <span className="min-w-0 break-words">{readOnlyReason}</span>
           </div>
         )}
 
         {campaignNode ? (
           <MoneyHeadline campaign={campaignNode} breakeven={breakeven} />
         ) : (
-          <p className="text-[13.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{review.summary}</p>
+          <p className="break-words text-[13.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{review.summary}</p>
         )}
 
         <Breakdown evidence={evidence} breakeven={breakeven} />

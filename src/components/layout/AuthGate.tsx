@@ -41,14 +41,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!checked) {
     return (
       <div className={styles.shell}>
-        <div className={styles.panel} role="status" aria-live="polite" aria-label="Verifying workspace access">
+        <div className={styles.panel} role="status" aria-live="polite" aria-label="Checking your access">
           <MeridianMark compact />
           <div className={styles.indicator} aria-hidden="true">
             <LockKeyhole size={20} />
           </div>
-          <p className="text-[15px] font-bold" style={{ color: 'var(--ink)' }}>Securing your workspace</p>
+          <p className="text-[15px] font-bold" style={{ color: 'var(--ink)' }}>Signing you in</p>
           <p className="mx-auto mt-2 max-w-[290px] text-xs leading-5" style={{ color: 'var(--ink-3)' }}>
-            Verifying operator access before loading business and campaign data.
+            Checking you have access before we load your campaigns.
           </p>
           <div className={styles.progress} aria-hidden="true" />
         </div>

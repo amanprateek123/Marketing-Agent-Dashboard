@@ -11,22 +11,22 @@ interface IntelligenceCenterNavProps {
 const VIEWS = [
   {
     key: 'recommendations' as const,
-    label: 'Recommendations',
-    description: 'Review what Meridian wants to change',
+    label: 'Suggested changes',
+    description: 'Changes the system wants to make to your ads — approve or skip them',
     path: 'proposed-actions',
     Icon: Sparkles,
   },
   {
     key: 'patterns' as const,
-    label: 'Winning patterns',
-    description: 'Reuse evidence from past performance',
+    label: 'What works',
+    description: 'Ad ideas that have done well before, to use again',
     path: 'learnings',
     Icon: BookOpenCheck,
   },
   {
     key: 'quality' as const,
-    label: 'Decision quality',
-    description: 'Check actions, outcomes and safeguards',
+    label: 'Did it help?',
+    description: 'Whether past changes made results better or worse',
     path: 'intelligence',
     Icon: ChartNoAxesCombined,
   },
@@ -34,7 +34,7 @@ const VIEWS = [
 
 export function IntelligenceCenterNav({ tenantId, active }: IntelligenceCenterNavProps) {
   return (
-    <nav aria-label="Intelligence center" className="mb-8">
+    <nav aria-label="Insights" className="mb-8">
       <div
         className="grid grid-cols-1 gap-2 rounded-2xl p-2 sm:grid-cols-3"
         style={{
@@ -71,9 +71,9 @@ export function IntelligenceCenterNav({ tenantId, active }: IntelligenceCenterNa
                 <Icon size={16} />
               </span>
               <span className="min-w-0">
-                <span className="flex items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2">
                   <span
-                    className="text-sm font-semibold"
+                    className="truncate text-sm font-semibold"
                     style={{ color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}
                   >
                     {label}

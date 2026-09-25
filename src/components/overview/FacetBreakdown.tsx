@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { formatCurrency, formatPercent, formatSignedCurrency } from '@/lib/utils'
+import { formatPercent, formatSignedCurrency } from '@/lib/utils'
+import { formatInr } from '@/lib/plain-language'
 import type { FacetRollup } from '@/types'
 
 type Tab = 'objective' | 'product' | 'funnel' | 'budget' | 'language'
@@ -31,18 +32,18 @@ export function FacetBreakdown({
   const [tab, setTab] = useState<Tab>('objective')
 
   const data: Record<Tab, { rows: FacetRollup[]; empty: string }> = {
-    objective: { rows: facets.byObjective, empty: 'No objectives found.' },
-    product: { rows: facets.byProduct, empty: 'No product names could be parsed.' },
-    funnel: { rows: facets.byFunnel, empty: 'No funnel stages found in campaign names.' },
-    budget: { rows: facets.byBudgetModel, empty: 'No ABO/CBO markers found.' },
-    language: { rows: facets.byLanguage, empty: 'No language markers found.' },
+    objective: { rows: facets.byObjective, empty: 'No campaign goals to show for this period.' },
+    product: { rows: facets.byProduct, empty: 'We could not tell which product each campaign is for from its name.' },
+    funnel: { rows: facets.byFunnel, empty: 'Campaign names do not say which buying stage they target.' },
+    budget: { rows: facets.byBudgetModel, empty: 'Campaign names do not say how the budget is set.' },
+    language: { rows: facets.byLanguage, empty: 'Campaign names do not say which language the ads are in.' },
   }
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'objective', label: 'Goal' },
     { key: 'product', label: 'Product' },
-    { key: 'funnel', label: 'Funnel stage' },
-    { key: 'budget', label: 'Budget model' },
+    { key: 'funnel', label: 'Buying stage' },
+    { key: 'budget', label: 'Budget setup' },
     { key: 'language', label: 'Language' },
   ]
 
@@ -58,8 +59,8 @@ export function FacetBreakdown({
         <h2 className="section-title">What&rsquo;s working, grouped</h2>
         <p className="explain mt-1">
           {tab === 'objective'
-            ? 'Grouped by what each campaign was told to optimise. Return only means something for sales goals.'
-            : 'Parsed from your campaign names — the pattern is usually clearer here than campaign by campaign.'}
+            ? 'Grouped by each campaign\'s goal. Return on ad spend only matters for sales goals.'
+            : 'Read from your campaign names — patterns are often easier to spot here than campaign by campaign.'}
         </p>
         <div className="flex items-center gap-2 mt-3 flex-wrap">
           {TABS.map((t) => (
@@ -95,7 +96,7 @@ export function FacetBreakdown({
                 style={{ borderTop: '1px solid var(--hairline-light)' }}
               >
                 <div className="flex items-baseline justify-between gap-3 mb-2">
-                  <span className="font-semibold truncate" style={{ color: 'var(--ink)' }}>
+                  <span className="min-w-0 truncate font-semibold" style={{ color: 'var(--ink)' }} title={r.label}>
                     {r.label}
                   </span>
                   <span
@@ -122,7 +123,7 @@ export function FacetBreakdown({
 
                 <div className="flex items-center gap-3 flex-wrap explain">
                   <span>
-                    {formatCurrency(Math.round(r.spend))} spent
+                    {formatInr(r.spend)} spent
                     {' · '}
                     {formatPercent(r.spendShare)} of budget
                   </span>

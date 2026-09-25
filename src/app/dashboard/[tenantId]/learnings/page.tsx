@@ -18,7 +18,9 @@ import {
 } from 'lucide-react'
 import { HookStyleChip } from '@/components/badges'
 import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
-import { cn, formatCurrency, formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, errorDetail, formatInr, formatRelative, humanise } from '@/lib/plain-language'
 import type { Company, CaseStudy, WinningExemplar, CausalInsight, AudienceScoreEntry } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
@@ -45,7 +47,7 @@ function TagList({
   return (
     <div className="flex flex-wrap gap-1.5">
       {list.map((item, i) => (
-        <span key={i} className={chipClass[color]}>
+        <span key={i} className={cn(chipClass[color], 'max-w-full break-words whitespace-normal')}>
           {item}
         </span>
       ))}
@@ -75,8 +77,8 @@ function AudienceIndexRows({ scores }: { scores: Array<{ audience: string; score
     <div className="flex flex-col gap-3">
       {scores.map(({ audience, score, n }) => (
         <div key={audience} className="flex items-center justify-between gap-3">
-          <span className="min-w-0 flex-1 truncate text-sm capitalize" style={{ color: 'var(--ink-2)' }}>
-            {audience.replace(/_/g, ' ')}
+          <span className="min-w-0 flex-1 truncate text-sm" style={{ color: 'var(--ink-2)' }} title={humanise(audience)}>
+            {humanise(audience)}
           </span>
           <div className="flex w-[55%] max-w-[240px] items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--muted)' }}>
@@ -94,14 +96,14 @@ function AudienceIndexRows({ scores }: { scores: Array<{ audience: string; score
             {n !== null && (
               <span
                 className="mono text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0"
-                title={`${n} campaigns/ad sets behind this score`}
+                title={`Based on ${n} campaigns or ad groups`}
                 style={
                   n >= 5
                     ? { background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info-border)' }
                     : { background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }
                 }
               >
-                n={n}
+                {n} {n === 1 ? 'campaign' : 'campaigns'}
               </span>
             )}
           </div>
@@ -120,7 +122,7 @@ function InsightList({ items, bullet }: { items: string[] | string; bullet?: str
           <span className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }}>
             {bullet ?? '•'}
           </span>
-          {item}
+          <span className="min-w-0 break-words">{item}</span>
         </li>
       ))}
     </ul>
@@ -139,10 +141,10 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
       >
         <div className="flex items-center gap-4 flex-wrap min-w-0">
           <div className="min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: 'var(--ink)' }}>
+            <p className="text-sm font-semibold truncate" style={{ color: 'var(--ink)' }} title={study.campaignName}>
               {study.campaignName}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{study.product}</p>
+            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-3)' }} title={study.product}>{study.product}</p>
           </div>
           {study.dateRange && (
             <span className="mono text-xs shrink-0" style={{ color: 'var(--ink-3)' }}>
@@ -150,13 +152,13 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             </span>
           )}
           {study.totalSpend !== undefined && (
-            <span className="mono text-xs font-semibold shrink-0" style={{ color: 'var(--ink-2)' }}>
-              {formatCurrency(study.totalSpend)} spent
+            <span className="text-xs font-semibold shrink-0 tabular-nums" style={{ color: 'var(--ink-2)' }}>
+              {formatInr(study.totalSpend)} spent
             </span>
           )}
           {study.totalConversions !== undefined && (
-            <span className="mono text-xs shrink-0" style={{ color: 'var(--ink-3)' }}>
-              {study.totalConversions} conv.
+            <span className="text-xs shrink-0 tabular-nums" style={{ color: 'var(--ink-3)' }}>
+              {study.totalConversions.toLocaleString('en-IN')} {study.totalConversions === 1 ? 'sale' : 'sales'}
             </span>
           )}
         </div>
@@ -171,24 +173,24 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
         <div className="px-5 pb-5 flex flex-col gap-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
           {study.context && (
             <div className="mt-4">
-              <p className="micro-label mb-1">Model-inferred context</p>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.context}</p>
+              <p className="micro-label mb-1">Background (AI summary)</p>
+              <p className="text-sm break-words leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.context}</p>
             </div>
           )}
 
           <p className="text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-            Narrative hypotheses are model-generated from imported metrics. Spend, conversions and CPA are system-computed; the narrative is not causal proof.
+            The write-up is the AI&apos;s reading of the numbers. Spend, sales and cost per sale are measured; the explanation is a best guess, not proof.
           </p>
 
           {study.whatWorked && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-1.5">
                 <CheckCircle size={13} style={{ color: 'var(--good)' }} />
-                <p className="micro-label" style={{ color: 'var(--good)' }}>Model-inferred strengths</p>
+                <p className="micro-label" style={{ color: 'var(--good)' }}>What seemed to work</p>
               </div>
               {study.whatWorked.hooks && study.whatWorked.hooks.length > 0 && (
                 <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Hooks</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Opening lines</p>
                   <TagList items={study.whatWorked.hooks} color="green" />
                 </div>
               )}
@@ -200,16 +202,16 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               )}
               {study.whatWorked.formats && study.whatWorked.formats.length > 0 && (
                 <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Formats</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Ad formats</p>
                   <TagList items={study.whatWorked.formats} color="amber" />
                 </div>
               )}
               <div className="flex gap-3 flex-wrap mt-1">
                 {study.whatWorked.bestCPA !== undefined && (
                   <div className="card-inset px-3 py-2">
-                    <p className="micro-label">Best CPA</p>
-                    <p className="mono text-xs font-semibold" style={{ color: 'var(--ink)' }}>
-                      {formatCurrency(study.whatWorked.bestCPA)}
+                    <p className="micro-label">Lowest cost per sale</p>
+                    <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
+                      {formatInr(study.whatWorked.bestCPA)}
                     </p>
                   </div>
                 )}
@@ -224,11 +226,11 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5">
                   <AlertCircle size={13} style={{ color: 'var(--bad)' }} />
-                  <p className="micro-label" style={{ color: 'var(--bad)' }}>Model-inferred weaknesses</p>
+                  <p className="micro-label" style={{ color: 'var(--bad)' }}>What seemed not to work</p>
                 </div>
                 {study.whatFailed.hooks && study.whatFailed.hooks.length > 0 && (
                   <div>
-                    <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Hooks</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>Opening lines</p>
                     <TagList items={study.whatFailed.hooks} color="red" />
                   </div>
                 )}
@@ -239,7 +241,7 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
                   </div>
                 )}
                 {study.whatFailed.reason && (
-                  <p className="text-xs italic" style={{ color: 'var(--ink-3)' }}>
+                  <p className="text-xs italic break-words" style={{ color: 'var(--ink-3)' }}>
                     {study.whatFailed.reason}
                   </p>
                 )}
@@ -250,9 +252,9 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
             <div className="rounded-xl p-3" style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
               <div className="mb-1 flex items-center gap-1.5">
                 <Sparkles size={13} style={{ color: 'var(--accent-strong)' }} />
-                <p className="text-xs font-semibold" style={{ color: 'var(--accent-strong)' }}>Model-inferred lesson</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent-strong)' }}>Lesson for next time (AI summary)</p>
               </div>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.lesson}</p>
+              <p className="text-sm break-words leading-relaxed" style={{ color: 'var(--ink-2)' }}>{study.lesson}</p>
             </div>
           )}
         </div>
@@ -265,8 +267,8 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) {
   const [segmentFilter, setSegmentFilter] = useState<string>('all')
 
-  // audienceSegment is optional on backend entries — undefined crashed the
-  // chip .replace() calls. Bucket missing values under 'unknown'.
+  // audienceSegment is optional on backend entries. Bucket missing values under 'unknown'
+  // (shown as "Unknown audience").
   const segmentOf = (e: WinningExemplar) => e.audienceSegment || 'unknown'
   const segments = Array.from(new Set(exemplars.map(segmentOf))).sort()
   const filtered = segmentFilter === 'all'
@@ -297,14 +299,14 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
               <button
                 key={s}
                 onClick={() => setSegmentFilter(s)}
-                className="text-[11px] px-2 py-1 rounded-full font-medium capitalize transition-colors"
+                className="text-[11px] px-2 py-1 rounded-full font-medium transition-colors"
                 style={
                   active
                     ? { background: 'var(--accent)', color: '#fff' }
                     : { background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }
                 }
               >
-                {s.replace(/_/g, ' ')} ({count})
+                {s === 'unknown' ? 'Unknown audience' : humanise(s)} ({count})
               </button>
             )
           })}
@@ -315,13 +317,13 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
         <table className="data-table">
           <thead>
             <tr>
-              <th>Hook</th>
+              <th>Opening line</th>
               <th>Style</th>
               <th>Audience</th>
               {hasProduct && <th>Product</th>}
-              <th className="num">CTR</th>
-              <th className="num">n</th>
-              <th className="num">Captured</th>
+              <th className="num">Click rate</th>
+              <th className="num">People reached</th>
+              <th className="num">Saved</th>
             </tr>
           </thead>
           <tbody>
@@ -336,8 +338,8 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                   <HookStyleChip style={e.hookStyle} />
                 </td>
                 <td>
-                  <span className="text-[11px] capitalize" style={{ color: 'var(--ink-3)' }}>
-                    {segmentOf(e).replace(/_/g, ' ')}
+                  <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                    {segmentOf(e) === 'unknown' ? 'Unknown audience' : humanise(segmentOf(e))}
                   </span>
                 </td>
                 {hasProduct && (
@@ -351,17 +353,17 @@ function WinningExemplarsTable({ exemplars }: { exemplars: WinningExemplar[] }) 
                   {e.ctr.toFixed(2)}%
                 </td>
                 <td className="num mono text-xs" style={{ color: 'var(--ink-3)' }}>
-                  {e.sampleSize.toLocaleString()}
+                  {e.sampleSize.toLocaleString('en-IN')}
                 </td>
-                <td className="num mono text-[11px]" style={{ color: 'var(--ink-3)' }}>
-                  {formatRelativeTime(e.extractedAt)}
+                <td className="num text-[11px] whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
+                  {formatRelative(e.extractedAt)}
                 </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
                 <td colSpan={hasProduct ? 7 : 6} className="px-3 py-8 text-center text-xs italic" style={{ color: 'var(--ink-3)' }}>
-                  No exemplars match the current filter.
+                  No examples for this audience.
                 </td>
               </tr>
             )}
@@ -403,7 +405,7 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
   if (audiences.length === 0 || hookStyles.length === 0) {
     return (
       <p className="text-xs italic px-3 py-6 text-center" style={{ color: 'var(--ink-3)' }}>
-        No saturation data yet.
+        No data on worn-out opening lines yet.
       </p>
     )
   }
@@ -414,15 +416,15 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
         <thead>
           <tr>
             <th className="px-2 py-1.5 text-left micro-label">
-              Audience ↓ / Hook →
+              Audience ↓ / Opening style →
             </th>
             {hookStyles.map((h) => (
               <th
                 key={h}
-                className="px-2 py-1.5 text-center text-[10px] font-medium capitalize"
+                className="px-2 py-1.5 text-center text-[10px] font-medium"
                 style={{ color: 'var(--ink-3)', minWidth: 80 }}
               >
-                {h.replace(/_/g, ' ')}
+                {humanise(h)}
               </th>
             ))}
           </tr>
@@ -431,10 +433,10 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
           {audiences.map((a) => (
             <tr key={a}>
               <td
-                className="px-2 py-1.5 text-xs font-semibold capitalize whitespace-nowrap"
+                className="px-2 py-1.5 text-xs font-semibold whitespace-nowrap"
                 style={{ color: 'var(--ink-2)' }}
               >
-                {a.replace(/_/g, ' ')}
+                {humanise(a)}
               </td>
               {hookStyles.map((h) => {
                 const cell = data[a]?.[h]
@@ -460,7 +462,7 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
                   <td
                     key={h}
                     className="mono text-center text-[11px] tabular-nums font-bold"
-                    title={`${a}/${h}: ${cell.pct.toFixed(0)}% saturation, updated ${formatRelativeTime(cell.updatedAt)}`}
+                    title={`${humanise(a)} · ${humanise(h)}: ${cell.pct.toFixed(0)}% worn out, updated ${formatRelative(cell.updatedAt)}`}
                     style={{
                       background: c.bg,
                       color: c.fg,
@@ -477,21 +479,21 @@ function HookSaturationHeatmap({ data }: { data: HookSaturationMap }) {
           ))}
         </tbody>
       </table>
-      <div className="flex items-center gap-3 mt-3 text-[11px]" style={{ color: 'var(--ink-3)' }}>
+      <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px]" style={{ color: 'var(--ink-3)' }}>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--good-bg)', border: '1px solid var(--good-border)' }} />
-          &lt;60% modeled exposure
+          Under 60% — still fresh
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }} />
-          60–80% elevated
+          60–80% — wearing out
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)' }} />
-          &gt;80% high
+          Over 80% — worn out
         </div>
         <span className="ml-auto" style={{ color: 'var(--ink-3)' }}>
-          Faded cells = stale data
+          Faded = older data
         </span>
       </div>
     </div>
@@ -512,8 +514,8 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
           <article key={i} className="card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
-                <span className="chip chip-accent mb-2">Model hypothesis</span>
-                <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--ink)' }}>
+                <span className="chip chip-accent mb-2">AI best guess</span>
+                <p className="text-sm font-semibold break-words leading-snug" style={{ color: 'var(--ink)' }}>
                   {insight.finding}
                 </p>
                 {insight.productName && (
@@ -524,26 +526,26 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
               </div>
               <span
                 className={cn(confClass, 'mono shrink-0')}
-                title={`${(conf * 100).toFixed(0)}% confidence based on ${insight.dataPoints} data points`}
+                title={`${(conf * 100).toFixed(0)}% sure, based on ${insight.dataPoints} results`}
               >
-                {(conf * 100).toFixed(0)}% conf · n={insight.dataPoints}
+                {(conf * 100).toFixed(0)}% sure · {insight.dataPoints} results
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <p className="micro-label mb-1">
-                  Isolated variable
+                  What was different
                 </p>
-                <p className="text-xs font-medium" style={{ color: 'var(--accent)' }}>{insight.isolatedVariable}</p>
+                <p className="text-xs font-medium break-words" style={{ color: 'var(--accent)' }}>{humanise(insight.isolatedVariable)}</p>
               </div>
               <div>
                 <p className="micro-label mb-1">
-                  Controlled for
+                  Kept the same
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {(insight.controlledFor ?? []).length === 0 ? (
-                    <span className="text-[11px] italic" style={{ color: 'var(--ink-3)' }}>none</span>
+                    <span className="text-[11px] italic" style={{ color: 'var(--ink-3)' }}>Nothing</span>
                   ) : (
                     (insight.controlledFor ?? []).map((c) => (
                       <span
@@ -551,7 +553,7 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
                         className="text-[10px] px-1.5 py-0.5 rounded"
                         style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}
                       >
-                        {c.replace(/_/g, ' ')}
+                        {humanise(c)}
                       </span>
                     ))
                   )}
@@ -559,13 +561,13 @@ function CausalInsightsTimeline({ insights }: { insights: CausalInsight[] }) {
               </div>
               <div>
                 <p className="micro-label mb-1">
-                  Root cause
+                  Likely reason
                 </p>
-                <p className="text-xs" style={{ color: 'var(--ink-2)' }}>{insight.rootCause}</p>
+                <p className="text-xs break-words" style={{ color: 'var(--ink-2)' }}>{insight.rootCause}</p>
               </div>
             </div>
             <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-              Inferred from matched historical observations—not randomized causal proof.
+              Worked out by comparing similar past ads — a strong hint, not proof.
             </p>
           </article>
         )
@@ -582,6 +584,8 @@ export default function LearningsPage({ params }: PageProps) {
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Raw failure text, shown only inside the collapsed Details block.
+  const [errorRaw, setErrorRaw] = useState<string>('')
   const [importPhase, setImportPhase] = useState<'idle' | 'importing' | 'completed' | 'failed'>('idle')
   const [importProgress, setImportProgress] = useState<{
     status: string
@@ -592,19 +596,20 @@ export default function LearningsPage({ params }: PageProps) {
     caseStudyCount: number
   } | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [importErrorRaw, setImportErrorRaw] = useState<string>('')
   const [search, setSearch] = useState('')
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const studiesPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function fetchCompany() {
     const res = await fetch(`${API_BASE}/companies/${tenantId}`)
-    if (!res.ok) throw new Error('Could not load Meridian learning memory.')
+    if (!res.ok) throw new Error(`Could not load learnings (HTTP ${res.status}).`)
     setCompany(await res.json())
   }
 
   async function fetchCaseStudies() {
     const res = await fetch(`${API_BASE}/companies/${tenantId}/case-studies`)
-    if (!res.ok) throw new Error('Could not load campaign evidence.')
+    if (!res.ok) throw new Error(`Could not load past campaigns (HTTP ${res.status}).`)
     setCaseStudies(await res.json())
   }
 
@@ -612,9 +617,11 @@ export default function LearningsPage({ params }: PageProps) {
     try {
       setLoading(true)
       setError(null)
+      setErrorRaw('')
       await Promise.all([fetchCompany(), fetchCaseStudies()])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load learnings')
+      setError(PLAIN_ERROR)
+      setErrorRaw(errorDetail(err))
     } finally {
       setLoading(false)
     }
@@ -638,6 +645,7 @@ export default function LearningsPage({ params }: PageProps) {
     setImportPhase('importing')
     setImportProgress(null)
     setImportError(null)
+    setImportErrorRaw('')
     try {
       const res = await fetch(`${API_BASE}/companies/${tenantId}/import-learnings`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -666,7 +674,8 @@ export default function LearningsPage({ params }: PageProps) {
             if (statusPollRef.current) clearInterval(statusPollRef.current)
             if (studiesPollRef.current) clearInterval(studiesPollRef.current)
             setImportPhase('failed')
-            setImportError('Import failed on the server.')
+            setImportError("We couldn't finish refreshing. Try again.")
+            setImportErrorRaw('The import reported a failure on the server.')
           }
         } catch { /* keep polling */ }
       }, 3000)
@@ -680,7 +689,8 @@ export default function LearningsPage({ params }: PageProps) {
       }, 5000)
     } catch (err) {
       setImportPhase('failed')
-      setImportError(err instanceof Error ? err.message : 'Import failed')
+      setImportError("We couldn't start refreshing. Try again.")
+      setImportErrorRaw(errorDetail(err))
     }
   }
 
@@ -688,7 +698,7 @@ export default function LearningsPage({ params }: PageProps) {
     return (
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <IntelligenceCenterNav tenantId={tenantId} active="patterns" />
-        <div role="status" aria-label="Loading winning patterns">
+        <div role="status" aria-label="Loading what works">
           <div className="skeleton h-4 w-32 rounded" />
           <div className="skeleton mt-3 h-9 w-full max-w-lg rounded-lg" />
           <div className="skeleton mt-3 h-4 w-full max-w-2xl rounded" />
@@ -704,7 +714,7 @@ export default function LearningsPage({ params }: PageProps) {
             <div className="skeleton h-52 rounded-2xl" />
             <div className="skeleton h-52 rounded-2xl" />
           </div>
-          <span className="sr-only">Loading winning patterns…</span>
+          <span className="sr-only">Loading what works…</span>
         </div>
       </div>
     )
@@ -752,13 +762,13 @@ export default function LearningsPage({ params }: PageProps) {
       {/* Header */}
       <div className="mb-7">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-          <div>
-            <p className="micro-label mb-2">Intelligence center · Winning patterns</p>
-            <h1 className="page-title">Turn past performance into the next advantage</h1>
+          <div className="min-w-0">
+            <p className="micro-label mb-2">Insights · What works</p>
+            <h1 className="page-title">What has worked in your past ads</h1>
             <p className="page-subtitle">
-              Meridian organizes measured examples and model-extracted patterns into reusable learning memory.
+              Opening lines, formats and audiences that did well (or badly) before, so the next campaign can reuse the good ones.
               {updatedAt && (
-                <span className="ml-1">· Updated {formatRelativeTime(updatedAt)}</span>
+                <span className="ml-1">· Updated {formatRelative(updatedAt)}</span>
               )}
             </p>
           </div>
@@ -779,29 +789,29 @@ export default function LearningsPage({ params }: PageProps) {
             {importPhase === 'importing'
               ? 'Refreshing…'
               : importPhase === 'completed'
-              ? 'Evidence refreshed'
+              ? 'Up to date'
               : importPhase === 'failed'
-              ? 'Retry'
-              : 'Refresh evidence'}
+              ? 'Try again'
+              : 'Re-read past campaigns'}
           </button>
         </div>
 
         {/* Progress bar */}
         {(importPhase === 'importing' || importPhase === 'completed') && importProgress && (
           <div className="card mt-4 p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span
-                className="font-medium capitalize"
+                className="font-medium"
                 style={{ color: importProgress.status === 'completed' ? 'var(--good)' : 'var(--accent)' }}
               >
-                {importProgress.status === 'completed' ? 'Evidence refresh complete' :
-                 importProgress.status === 'failed' ? 'Refresh failed' :
-                 `${importProgress.status}…`}
+                {importProgress.status === 'completed' ? 'Finished reading past campaigns' :
+                 importProgress.status === 'failed' ? "Couldn't finish" :
+                 `${humanise(importProgress.status)}…`}
               </span>
-              <span className="mono" style={{ color: 'var(--ink-3)' }}>
-                {importProgress.completedBatches}/{importProgress.totalBatches} batches
+              <span className="tabular-nums" style={{ color: 'var(--ink-3)' }}>
+                {importProgress.completedBatches} of {importProgress.totalBatches} steps
                 {importProgress.totalCampaigns > 0 && ` · ${importProgress.totalCampaigns} campaigns`}
-                {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} case studies`}
+                {importProgress.caseStudyCount > 0 && ` · ${importProgress.caseStudyCount} write-ups`}
               </span>
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--muted)' }}>
@@ -816,18 +826,23 @@ export default function LearningsPage({ params }: PageProps) {
           </div>
         )}
         {importPhase === 'failed' && importError && (
-          <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{importError}</p>
+          <>
+            <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>{importError}</p>
+            {importErrorRaw && (
+              <Details className="mt-2" title="Technical details" items={[{ label: 'Error', value: importErrorRaw }]} />
+            )}
+          </>
         )}
       </div>
 
-      <section aria-label="Learning memory summary" className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-label="Summary" className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { label: 'Reusable patterns', value: reusablePatternCount, hint: 'Model-extracted hooks, formats and operating signals' },
-          { label: 'Products covered', value: productCoverage, hint: 'With legacy audience records awaiting basis normalization' },
-          { label: 'Creative examples', value: exemplarCount, hint: 'High-CTR examples captured' },
-          { label: 'Model hypotheses', value: hypothesisCount, hint: 'Inferences awaiting stronger proof' },
+          { label: 'Ideas to reuse', value: reusablePatternCount, hint: 'Opening lines, formats, budget and timing tips' },
+          { label: 'Products covered', value: productCoverage, hint: 'Products with audience notes (older data)' },
+          { label: 'Top ads saved', value: exemplarCount, hint: 'Ads people clicked on the most' },
+          { label: 'Best guesses', value: hypothesisCount, hint: 'AI explanations still waiting for more proof' },
         ].map((metric) => (
-          <div key={metric.label} className="card p-4 sm:p-5">
+          <div key={metric.label} className="card min-w-0 p-4 sm:p-5">
             <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>{metric.label}</p>
             <p className="mt-1.5 text-[28px] font-bold leading-none tabular-nums" style={{ color: 'var(--ink)' }}>
               {metric.value}
@@ -843,11 +858,14 @@ export default function LearningsPage({ params }: PageProps) {
           style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
           <AlertCircle size={16} className="shrink-0" />
-          <span className="flex-1">{error}</span>
+          <span className="min-w-0 flex-1 break-words">{error}</span>
           <button onClick={fetchData} className="btn btn-ghost shrink-0">
             <RefreshCw size={14} /> Retry
           </button>
         </div>
+      )}
+      {error && errorRaw && (
+        <Details className="mb-6" title="Technical details" items={[{ label: 'Error', value: errorRaw }]} />
       )}
 
       {/* ===== SECTION A: PATTERN MEMORY ===== */}
@@ -857,17 +875,17 @@ export default function LearningsPage({ params }: PageProps) {
             <BrainCircuit size={17} />
           </span>
           <div>
-            <h2 className="section-title">Pattern memory</h2>
-            <p className="explain mt-0.5">Signals Meridian can reuse when planning the next campaign.</p>
+            <h2 className="section-title">Patterns from past ads</h2>
+            <p className="explain mt-0.5">What the system will lean on (or avoid) when it plans your next campaign.</p>
           </div>
         </div>
 
         {!hasPatternData ? (
           <div className="card py-10 text-center">
             <BrainCircuit size={26} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
-            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>No pattern evidence yet</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>No patterns yet</p>
             <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
-              Refresh evidence to analyze historical campaign performance.
+              Press &ldquo;Re-read past campaigns&rdquo; to look through how your earlier ads did.
             </p>
           </div>
         ) : (
@@ -877,10 +895,10 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.winningHooks && creative.winningHooks.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--good)' }}>
-                  Model-extracted positive hook patterns
+                  Opening lines that worked
                 </h3>
                 <TagList items={creative.winningHooks} color="green" />
-                <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>Hypothesis-grade until supported by the per-ad examples below.</p>
+                <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>AI&apos;s reading — trust it more once the top ads below back it up.</p>
               </div>
             )}
 
@@ -888,7 +906,7 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.losingHooks && creative.losingHooks.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--bad)' }}>
-                  Model-extracted weak hook patterns
+                  Opening lines that did not work
                 </h3>
                 <TagList items={creative.losingHooks} color="red" />
               </div>
@@ -898,7 +916,7 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.winningFormats && creative.winningFormats.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--warn)' }}>
-                  Model-extracted positive format patterns
+                  Ad formats that worked
                 </h3>
                 <TagList items={creative.winningFormats} color="amber" />
               </div>
@@ -908,7 +926,7 @@ export default function LearningsPage({ params }: PageProps) {
             {creative?.losingFormats && creative.losingFormats.length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--ink-3)' }}>
-                  Model-extracted weak format patterns
+                  Ad formats that did not work
                 </h3>
                 <TagList items={creative.losingFormats} color="zinc" />
               </div>
@@ -918,11 +936,11 @@ export default function LearningsPage({ params }: PageProps) {
             {campaign?.audienceScores && Object.keys(campaign.audienceScores).length > 0 && (
               <div className="card p-5">
                 <h3 className="micro-label mb-3" style={{ color: 'var(--accent)' }}>
-                  Legacy AI audience index
+                  Audience scores (older, AI-estimated)
                 </h3>
                 <AudienceIndexRows scores={normalizeLegacyAudienceIndex(campaign.audienceScores)} />
                 <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-                  Model-authored 0–1 hypothesis score. It is not ROAS, observed performance, or launch-decision evidence.
+                  A 0–100 score the AI gave each audience. It is a guess, not measured results or return on ad spend.
                 </p>
               </div>
             )}
@@ -934,7 +952,7 @@ export default function LearningsPage({ params }: PageProps) {
                 {campaign?.budgetInsights && campaign.budgetInsights.length > 0 && (
                   <div className="mb-3">
                     <h3 className="micro-label mb-2">
-                      Model-extracted budget hypotheses
+                      Budget tips (AI&apos;s reading)
                     </h3>
                     <InsightList items={campaign.budgetInsights} />
                   </div>
@@ -942,7 +960,7 @@ export default function LearningsPage({ params }: PageProps) {
                 {campaign?.timingInsights && campaign.timingInsights.length > 0 && (
                   <div>
                     <h3 className="micro-label mb-2">
-                      Model-extracted timing hypotheses
+                      Timing tips (AI&apos;s reading)
                     </h3>
                     <InsightList items={campaign.timingInsights} bullet="⏱" />
                   </div>
@@ -959,15 +977,15 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <Trophy size={15} style={{ color: 'var(--good)' }} />
             <h2 className="section-title">
-              High-CTR creative examples
+              Ads people clicked most
             </h2>
-            <span className="chip chip-neutral mono">
+            <span className="chip chip-neutral tabular-nums">
               {creative.winningExemplars.length}
             </span>
           </div>
           <div className="card p-5">
             <p className="mb-4 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-              Ranked by observed click-through rate. Engagement strength does not by itself prove revenue impact.
+              Sorted by click rate. Lots of clicks does not always mean lots of sales.
             </p>
             <WinningExemplarsTable exemplars={creative.winningExemplars} />
           </div>
@@ -980,12 +998,12 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <LayoutGrid size={15} style={{ color: 'var(--warn)' }} />
             <h2 className="section-title">
-              Modeled hook saturation
+              Which opening styles are wearing out
             </h2>
           </div>
           <div className="card p-5">
             <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-              Estimated exposure concentration by audience and hook style. Use as a refresh signal, not a measured outcome.
+              An estimate of how much each audience has already seen each opening style. High numbers mean it is time for fresh ads.
             </p>
             <HookSaturationHeatmap data={creative.audienceHookSaturation} />
           </div>
@@ -998,9 +1016,9 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <GitBranch size={15} style={{ color: 'var(--accent)' }} />
             <h2 className="section-title">
-              Controlled pattern hypotheses
+              Why some ads did better (AI best guesses)
             </h2>
-            <span className="chip chip-neutral mono">
+            <span className="chip chip-neutral tabular-nums">
               {company.learnings.causalInsights.length}
             </span>
           </div>
@@ -1013,10 +1031,10 @@ export default function LearningsPage({ params }: PageProps) {
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             <h2 className="section-title">
-              Campaign evidence library
+              Past campaign write-ups
             </h2>
             {caseStudies.length > 0 && (
-              <span className="chip chip-neutral mono">
+              <span className="chip chip-neutral tabular-nums">
                 {caseStudies.length}
               </span>
             )}
@@ -1038,12 +1056,12 @@ export default function LearningsPage({ params }: PageProps) {
           <div className="card py-12 text-center">
             <BookOpen size={28} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
             <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>
-              {search ? 'No campaign evidence matches your search' : 'No campaign evidence yet'}
+              {search ? 'No campaign matches your search' : 'No write-ups yet'}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>
               {search
                 ? 'Try a different search term'
-                : 'Evidence summaries are created automatically as campaigns complete'}
+                : 'A write-up is added automatically when each campaign finishes'}
             </p>
           </div>
         ) : (

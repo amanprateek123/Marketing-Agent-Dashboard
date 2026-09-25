@@ -1,14 +1,15 @@
 import Link from 'next/link'
 import { Sparkles } from 'lucide-react'
+import { humanise } from '@/lib/plain-language'
 import type { DashboardInsight } from '@/types'
 
 const STRENGTH_STYLE: Record<
   DashboardInsight['strength'],
   { chip: string; label: string; opacity: number }
 > = {
-  strong: { chip: 'chip chip-good', label: 'Higher model support', opacity: 1 },
-  moderate: { chip: 'chip chip-warn', label: 'Moderate model support', opacity: 0.95 },
-  weak: { chip: 'chip chip-neutral', label: 'Early hypothesis', opacity: 0.8 },
+  strong: { chip: 'chip chip-good', label: 'Strong pattern', opacity: 1 },
+  moderate: { chip: 'chip chip-warn', label: 'Likely pattern', opacity: 0.95 },
+  weak: { chip: 'chip chip-neutral', label: 'Early hunch', opacity: 0.8 },
 }
 
 /**
@@ -34,10 +35,10 @@ export function InsightList({
         className="px-5 py-4 flex items-center gap-2.5"
         style={{ borderBottom: '1px solid var(--hairline)' }}
       >
-        <Sparkles size={16} style={{ color: 'var(--accent)' }} />
-        <div>
-          <h2 className="section-title">AI hypotheses from prior campaigns</h2>
-          <p className="explain mt-0.5">Model-generated patterns—not causal proof</p>
+        <Sparkles size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+        <div className="min-w-0">
+          <h2 className="section-title">Patterns from past campaigns</h2>
+          <p className="explain mt-0.5">Spotted by the AI — worth testing, not proven</p>
         </div>
       </div>
 
@@ -67,6 +68,7 @@ export function InsightList({
                     the learnings page. */}
                 <p
                   title={ins.finding}
+                  className="break-words"
                   style={{
                     color: 'var(--ink)',
                     fontSize: 13.5,
@@ -84,12 +86,12 @@ export function InsightList({
                     {s.label}
                   </span>
                   <span className="explain">
-                    {(ins.confidence * 100).toFixed(0)}% model confidence · {ins.dataPoints}{' '}
-                    record{ins.dataPoints === 1 ? '' : 's'}
+                    {(ins.confidence * 100).toFixed(0)}% sure · based on {ins.dataPoints}{' '}
+                    result{ins.dataPoints === 1 ? '' : 's'}
                   </span>
                   {ins.category && (
                     <span className="explain" style={{ marginLeft: 'auto' }}>
-                      {ins.category.replace(/_/g, ' ')}
+                      {humanise(ins.category)}
                     </span>
                   )}
                 </div>

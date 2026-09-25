@@ -38,6 +38,15 @@ import {
 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CampaignQueries } from '@/components/intelligence/CampaignQueries'
+import { Details, type DetailsItem } from '@/components/plain/Details'
+import {
+  errorDetail,
+  formatInr,
+  formatRelative,
+  humanise,
+  plainStatus,
+  toneChip,
+} from '@/lib/plain-language'
 import {
   confirmCampaignCopilotSession,
   getCampaignCopilotSession,
@@ -64,6 +73,8 @@ interface PlanCardItem {
   label: string
   value: string
   detail?: string
+  /** Internal Meta ids behind this card — shown only inside a collapsed Details block. */
+  refs?: DetailsItem[]
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
 }
 
@@ -80,17 +91,6 @@ const STARTER_PROMPTS = [
   'Recommend the best goal, audience and budget for me',
 ]
 
-const OBJECTIVE_LABELS: Record<string, string> = {
-  sales_purchase: 'Sales · purchases',
-  leads: 'Lead generation',
-  traffic: 'Website traffic',
-  engagement: 'Engagement',
-  awareness_reach: 'Awareness · reach',
-  awareness: 'Awareness',
-  reach: 'Reach',
-  app_promotion: 'App promotion',
-}
-
 const FIELD_LABELS: Record<string, string> = {
   productName: 'Product',
   product: 'Product',
@@ -99,17 +99,17 @@ const FIELD_LABELS: Record<string, string> = {
   pageId: 'Facebook Page',
   accountId: 'Meta ad account',
   objective: 'Campaign goal',
-  optimizationGoal: 'Delivery optimization',
+  optimizationGoal: 'What Meta should aim for',
   dailyBudget: 'Daily budget',
   budget: 'Daily budget',
-  audienceType: 'Audience approach',
+  audienceType: 'Type of audience',
   audienceName: 'Audience',
   targetSegment: 'Target customer',
   geoLocations: 'Locations',
   language: 'Language',
-  creativeFormat: 'Creative format',
-  conversionEvent: 'Conversion event',
-  conversionValue: 'Conversion value',
+  creativeFormat: 'Ad style',
+  conversionEvent: 'What counts as a result',
+  conversionValue: 'Value of each result',
   pixelId: 'Meta Pixel',
   customConversionId: 'Custom conversion',
   appPlatform: 'App platform',
@@ -170,11 +170,12 @@ function forgetStoredSessionId(key: string): void {
   }
 }
 
+/**
+ * A code ('lookalike_1pct', 'coldAudience') becomes plain words; free text a person or the
+ * assistant wrote ('Nadi Astrology buyers') is shown as written, keeping its capitals.
+ */
 function humanize(value: string): string {
-  return value
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .replace(/^./, (letter) => letter.toUpperCase())
+  return /\s/.test(value.trim()) ? value : humanise(value)
 }
 
 function fieldLabel(value: string): string {
@@ -183,10 +184,17 @@ function fieldLabel(value: string): string {
 
 function objectiveLabel(value?: string | null): string {
   if (!value) return ''
-  return OBJECTIVE_LABELS[value] ?? humanize(value)
+  return plainStatus('objective', value).label
 }
 
+/** A Meta goal / conversion event code in plain words ('OFFSITE_CONVERSIONS' → 'Sales on your website'). */
+function metaGoalLabel(value: string): string {
+  return plainStatus('metaGoal', value).label
+}
+
+/** Rupees in en-IN ('₹1,42,000'); any other currency keeps its own symbol. */
 function formatMoney(value: number, currency = 'INR'): string {
+  if (!currency || currency.toUpperCase() === 'INR') return formatInr(value)
   try {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -194,7 +202,7 @@ function formatMoney(value: number, currency = 'INR'): string {
       maximumFractionDigits: 0,
     }).format(value)
   } catch {
-    return `₹${Math.round(value).toLocaleString('en-IN')}`
+    return formatInr(value)
   }
 }
 
@@ -359,7 +367,7 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
       label: 'Product',
       value: plan.productName || 'New product',
       detail: [
-        plan.productMode === 'new' ? 'Will be added to Meridian' : 'Existing product',
+        plan.productMode === 'new' ? 'New product — will be added to your list' : 'One of your products',
         typeof price === 'number' ? formatMoney(price, currency ?? 'INR') : '',
       ].filter(Boolean).join(' · '),
       icon: Package,
@@ -372,8 +380,8 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
       label: 'Goal',
       value: objectiveLabel(plan.objective),
       detail: [
-        plan.optimizationGoal ? `Optimize for ${humanize(plan.optimizationGoal).toLowerCase()}` : '',
-        plan.funnelStage ? `${humanize(plan.funnelStage)}-audience stage` : '',
+        plan.optimizationGoal ? `Meta aims for: ${metaGoalLabel(plan.optimizationGoal).toLowerCase()}` : '',
+        plan.funnelStage ? `${humanize(plan.funnelStage)} audience` : '',
       ].filter(Boolean).join(' · ') || undefined,
       icon: Target,
     })
@@ -388,12 +396,12 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
     cards.push({
       key: 'budget',
       label: 'Daily budget',
-      value: `${formatMoney(dailyBudget)}/day`,
+      value: formatInr(dailyBudget, { perDay: true }),
       detail: [
-        `${formatMoney(dailyBudget * 7)}/7 days`,
+        `${formatInr(dailyBudget * 7)} over 7 days`,
         changed
-          ? `Safety-adjusted from ${formatMoney(plan.requestedDailyBudget as number)}/day`
-          : 'No Meta ad spend until approval',
+          ? `Lowered to stay within your spending limit (you asked for ${formatInr(plan.requestedDailyBudget as number, { perDay: true })})`
+          : 'Nothing is spent until you approve',
       ].join(' · '),
       icon: IndianRupee,
     })
@@ -404,12 +412,12 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
     cards.push({
       key: 'audience',
       label: 'Audience',
-      value: humanize(audience),
+      value: audience === plan.audienceType ? plainStatus('audienceKind', audience).label : humanize(audience),
       detail: [
         plan.audienceName && plan.targetSegment ? plan.targetSegment : '',
-        plan.audienceType ? humanize(plan.audienceType) : '',
-        plan.metaAudienceId ? `Audience ID ${plan.metaAudienceId}` : '',
+        plan.audienceType ? plainStatus('audienceKind', plan.audienceType).label : '',
       ].filter(Boolean).join(' · '),
+      refs: plan.metaAudienceId ? [{ label: 'Meta audience', value: plan.metaAudienceId }] : undefined,
       icon: UsersRound,
     })
   }
@@ -419,7 +427,7 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
       key: 'market',
       label: 'Market',
       value: plan.geoLocations?.length ? plan.geoLocations.join(', ') : 'Locations to be decided',
-      detail: plan.language ? `${humanize(plan.language)} creative` : undefined,
+      detail: plan.language ? `Ads in ${humanize(plan.language)}` : undefined,
       icon: MapPin,
     })
   }
@@ -438,8 +446,9 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
     cards.push({
       key: 'page',
       label: 'Facebook Page',
-      value: effectivePageId,
-      detail: 'Identity used for the ad',
+      value: 'Page chosen',
+      detail: 'The ads will appear as posts from this Page',
+      refs: [{ label: 'Facebook Page', value: effectivePageId }],
       icon: FileCheck2,
     })
   }
@@ -458,19 +467,22 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
     const conversionValue = plan.conversionValue ?? tracking?.conversionValue
     cards.push({
       key: 'tracking',
-      label: 'Conversion tracking',
+      label: 'What counts as a result',
       value: conversionEvent
-        ? humanize(conversionEvent)
-        : 'Configured conversion',
+        ? metaGoalLabel(conversionEvent)
+        : 'Set up',
       detail: [
-        tracking?.pixelId ? `Pixel ${tracking.pixelId}` : '',
-        tracking?.customConversionId
-          ? `Custom conversion ${tracking.customConversionId}`
-          : '',
+        tracking?.pixelId ? 'Tracked on your website' : '',
         typeof conversionValue === 'number'
-          ? `Value ${formatMoney(conversionValue, currency)}`
+          ? `Each one is worth ${formatMoney(conversionValue, currency)}`
           : '',
       ].filter(Boolean).join(' · ') || undefined,
+      refs: [
+        ...(tracking?.pixelId ? [{ label: 'Meta Pixel', value: tracking.pixelId }] : []),
+        ...(tracking?.customConversionId
+          ? [{ label: 'Custom conversion', value: tracking.customConversionId }]
+          : []),
+      ],
       icon: Target,
     })
   }
@@ -482,14 +494,12 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
   ) {
     cards.push({
       key: 'app',
-      label: 'App delivery',
-      value: plan.appPlatform ?? 'App platform',
-      detail: [
-        plan.newProduct?.metaAppId
-          ? `Meta app ${plan.newProduct.metaAppId}`
-          : '',
-        plan.newProduct?.metaAppStoreUrl ?? '',
-      ].filter(Boolean).join(' · ') || undefined,
+      label: 'App',
+      value: plan.appPlatform ? plainStatus('appPlatform', plan.appPlatform).label : 'App to be confirmed',
+      detail: plan.newProduct?.metaAppStoreUrl || undefined,
+      refs: plan.newProduct?.metaAppId
+        ? [{ label: 'Meta app', value: plan.newProduct.metaAppId }]
+        : undefined,
       icon: Package,
     })
   }
@@ -497,7 +507,7 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
   if (plan.creativeFormat || plan.angle || plan.keyMessage) {
     cards.push({
       key: 'creative',
-      label: 'Creative direction',
+      label: 'Ad style',
       value: plan.creativeFormat ? humanize(plan.creativeFormat) : plan.angle || 'To be decided',
       detail: [plan.angle, plan.keyMessage].filter(Boolean).join(' · '),
       icon: ImageIcon,
@@ -508,7 +518,9 @@ function makePlanCards(plan?: CampaignCopilotPlan | null): PlanCardItem[] {
     cards.push({
       key: 'account',
       label: 'Ad account',
-      value: plan.accountId,
+      value: 'Ad account chosen',
+      detail: 'The Meta account the ads will be billed to',
+      refs: [{ label: 'Meta ad account', value: plan.accountId }],
       icon: FileCheck2,
     })
   }
@@ -530,7 +542,7 @@ function makeRecommendations(
       return {
         key: item.field ?? `recommendation-${index}`,
         label: item.label ?? item.title ?? fieldLabel(item.field ?? 'Recommendation'),
-        value: displayValue(value) || item.reason || item.rationale || 'Suggested by Meridian',
+        value: displayValue(value) || item.reason || item.rationale || 'Suggested by the assistant',
         reason: item.reason ?? item.rationale,
       }
     })
@@ -543,10 +555,10 @@ function makeRecommendations(
     items.push({
       key: 'budget',
       label: 'Suggested budget',
-      value: `${formatMoney(recommendations.budget.dailyBudget)}/day`,
+      value: formatInr(recommendations.budget.dailyBudget, { perDay: true }),
       reason: [
         recommendations.budget.rationale,
-        typeof max === 'number' ? `Safety limit ${formatMoney(max)}/day` : '',
+        typeof max === 'number' ? `Your spending limit is ${formatInr(max, { perDay: true })}` : '',
       ].filter(Boolean).join(' · '),
     })
   }
@@ -557,7 +569,7 @@ function makeRecommendations(
       items.push({
         key: 'audience',
         label: 'Suggested audience',
-        value: humanize(value),
+        value: value === audience.type ? plainStatus('audienceKind', value).label : humanize(value),
         reason: audience.rationale ?? undefined,
       })
     }
@@ -572,7 +584,7 @@ function makeRecommendations(
   if (recommendations.creativeFormat) {
     items.push({
       key: 'creative',
-      label: 'Suggested creative',
+      label: 'Suggested ad style',
       value: humanize(recommendations.creativeFormat),
     })
   }
@@ -594,32 +606,25 @@ function missingFieldText(item: string | CampaignCopilotMissingField): string {
 
 function relativeUpdate(date?: string): string {
   if (!date) return 'just now'
-  const time = new Date(date).getTime()
-  if (!Number.isFinite(time)) return 'just now'
-  const seconds = Math.max(0, Math.round((Date.now() - time) / 1000))
-  if (seconds < 15) return 'just now'
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  return new Date(date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const text = formatRelative(date)
+  return text === '—' ? 'just now' : text
 }
 
-function statusDetails(status?: string): { label: string; chip: string; pulse?: boolean } {
-  switch (status) {
-    case 'ready':
-      return { label: 'Ready to prepare', chip: 'chip-good' }
-    case 'build_queued':
-      return { label: 'Build queued', chip: 'chip-accent', pulse: true }
-    case 'building':
-      return { label: 'Preparing campaign', chip: 'chip-accent', pulse: true }
-    case 'pending_approval':
-      return { label: 'Ready for approval', chip: 'chip-good' }
-    case 'failed':
-      return { label: 'Build needs attention', chip: 'chip-bad' }
-    case 'cancelled':
-      return { label: 'Conversation cancelled', chip: 'chip-neutral' }
-    default:
-      return { label: 'Planning together', chip: 'chip-info', pulse: true }
+/** The session status in the shared vocabulary (copilotSession); an unknown one reads as planning. */
+function statusDetails(status?: string): {
+  label: string
+  meaning: string
+  chip: string
+  pulse?: boolean
+} {
+  const known = ['ready', 'build_queued', 'building', 'pending_approval', 'failed', 'cancelled']
+  const code = status && known.includes(status) ? status : 'collecting'
+  const plain = plainStatus('copilotSession', code)
+  return {
+    label: plain.label,
+    meaning: plain.meaning,
+    chip: toneChip(plain.tone),
+    pulse: code === 'collecting' || code === 'build_queued' || code === 'building',
   }
 }
 
@@ -633,8 +638,8 @@ const JOURNEY_STEPS = [
     detail: 'Budget, audience and creative',
   },
   {
-    label: 'Pass safety checks',
-    detail: 'Tracking and spend controls',
+    label: 'Check it is safe',
+    detail: 'Tracking and spending limits',
   },
   {
     label: 'Prepare for approval',
@@ -704,7 +709,7 @@ function ChatMessage({ message }: { message: CampaignCopilotMessage }) {
   if (isSystem) {
     return (
       <div className="flex justify-center py-1">
-        <span className="chip chip-neutral max-w-[90%] text-center">{message.content}</span>
+        <span className="chip chip-neutral max-w-[90%] whitespace-normal break-words text-center">{message.content}</span>
       </div>
     )
   }
@@ -719,7 +724,7 @@ function ChatMessage({ message }: { message: CampaignCopilotMessage }) {
           <Bot size={15} style={{ color: 'var(--accent)' }} />
         </div>
       )}
-      <div className={`max-w-[82%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`min-w-0 max-w-[82%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         <div
           className="px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words"
           style={
@@ -762,10 +767,10 @@ function ChatMessage({ message }: { message: CampaignCopilotMessage }) {
 function BuildingProgress({ session }: { session: CampaignCopilotSession }) {
   const queued = session.status === 'build_queued'
   const steps = [
-    { label: 'Brief confirmed', state: 'done' },
-    { label: 'Build job queued', state: queued ? 'active' : 'done' },
-    { label: 'Creative and campaign build', state: queued ? 'waiting' : 'active' },
-    { label: 'Save for your approval', state: 'waiting' },
+    { label: 'Plan agreed', state: 'done' },
+    { label: 'Waiting to start', state: queued ? 'active' : 'done' },
+    { label: 'Making the ads and campaign', state: queued ? 'waiting' : 'active' },
+    { label: 'Saved for your approval', state: 'waiting' },
   ]
 
   return (
@@ -774,11 +779,11 @@ function BuildingProgress({ session }: { session: CampaignCopilotSession }) {
       style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
       aria-live="polite"
     >
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Loader2 size={15} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <p className="text-sm font-semibold" style={{ color: 'var(--accent-strong)' }}>
-            {queued ? 'Your campaign is in the build queue' : 'Meridian is preparing your campaign'}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Loader2 size={15} className="animate-spin shrink-0" style={{ color: 'var(--accent)' }} />
+          <p className="min-w-0 text-sm font-semibold" style={{ color: 'var(--accent-strong)' }}>
+            {queued ? 'Your campaign is waiting its turn to be made' : 'Your campaign is being made'}
           </p>
         </div>
         <span className="text-[11px] font-medium" style={{ color: 'var(--ink-3)' }}>
@@ -797,6 +802,7 @@ function BuildingProgress({ session }: { session: CampaignCopilotSession }) {
             )}
             <span
               className="text-[11px] truncate"
+              title={step.label}
               style={{ color: step.state === 'waiting' ? 'var(--ink-3)' : 'var(--ink-2)' }}
             >
               {step.label}
@@ -819,7 +825,7 @@ function PlanCard({ item }: { item: PlanCardItem }) {
         border: `1px solid ${primary ? 'var(--accent-border)' : 'var(--hairline-light)'}`,
       }}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
           style={{
@@ -829,7 +835,7 @@ function PlanCard({ item }: { item: PlanCardItem }) {
         >
           <Icon size={14} style={{ color: 'var(--accent)' }} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="micro-label">{item.label}</p>
           <p
             className={`text-sm font-semibold mt-0.5 ${item.key === 'landing' ? 'break-all' : 'break-words'}`}
@@ -841,6 +847,9 @@ function PlanCard({ item }: { item: PlanCardItem }) {
             <p className="text-[11px] leading-relaxed mt-1 break-words" style={{ color: 'var(--ink-3)' }}>
               {item.detail}
             </p>
+          )}
+          {item.refs && item.refs.length > 0 && (
+            <Details className="mt-2" items={item.refs} />
           )}
         </div>
       </div>
@@ -860,6 +869,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
   const [mode, setMode] = useState<'planner' | 'queries'>('planner')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [error, setError] = useState('')
+  /** The raw message behind `error`, for the collapsed Details only. */
+  const [errorRaw, setErrorRaw] = useState('')
   const [pollError, setPollError] = useState('')
   const threadEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -894,8 +905,12 @@ export default function CampaignCopilotPage({ params }: PageProps) {
   const campaignId = session?.build?.campaignId ?? session?.campaignId
   const statusMeta = readinessOutOfSync
     ? {
-        label: status === 'ready' ? 'Details need review' : 'Finalizing plan',
+        label: status === 'ready' ? 'Details need a check' : 'Finishing the plan',
+        meaning: status === 'ready'
+          ? 'One last check needs redoing before the campaign can be prepared.'
+          : 'All details are in; the assistant is doing a final check.',
         chip: 'chip-warn',
+        pulse: false,
       }
     : statusDetails(session?.status)
   const canChat = !sending && !confirming && !isBuilding && !isTerminal
@@ -937,7 +952,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
             // Keep the durable session id on transient network/server errors;
             // removing it here would turn a temporary restore failure into a
             // permanently orphaned build from the browser's point of view.
-            setError('The previous conversation could not be restored right now. Reload to retry, or start a new conversation below.')
+            setError("We couldn't reopen your last conversation. Reload the page to try again, or start a new one below.")
+            setErrorRaw(message)
           }
         }
       })
@@ -968,7 +984,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
         setSession((current) => normalizeSession(payload, current))
         setPollError('')
       } catch {
-        if (!cancelled) setPollError('Could not refresh build progress. Retrying automatically…')
+        if (!cancelled) setPollError("We couldn't check on your campaign just now. Trying again automatically…")
       }
     }
 
@@ -987,6 +1003,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
     submittingRef.current = true
     setSending(true)
     setError('')
+    setErrorRaw('')
     setPollError('')
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -1034,7 +1051,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
       remember(normalizeSession(payload, optimistic))
       pendingTurnRef.current = null
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Campaign Copilot could not reply. Please try again.')
+      setError("The assistant couldn't reply. Try again.")
+      setErrorRaw(errorDetail(caught))
       setSession(previousSession)
       setInput(message)
     } finally {
@@ -1048,6 +1066,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
     if (!id || !readyToConfirm || confirming) return
     setConfirming(true)
     setError('')
+    setErrorRaw('')
     try {
       const payload = await confirmCampaignCopilotSession(tenantId, id)
       remember(normalizeSession(payload, session))
@@ -1062,9 +1081,10 @@ export default function CampaignCopilotPage({ params }: PageProps) {
           // Keep the plan already on screen; the next chat turn can refresh it.
         }
         setConfirmOpen(false)
-        setError('The plan changed before confirmation. I refreshed it—please review the latest details before preparing.')
+        setError('The plan changed while you were confirming. We have loaded the latest version — please check it before preparing.')
       } else {
-        setError(message || 'The campaign build could not be started.')
+        setError("We couldn't start making the campaign. Try again.")
+        setErrorRaw(message)
       }
     } finally {
       setConfirming(false)
@@ -1081,6 +1101,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
     setSession(null)
     setInput('')
     setError('')
+    setErrorRaw('')
     setPollError('')
     setConfirmOpen(false)
     textareaRef.current?.focus()
@@ -1096,7 +1117,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
     : isComplete
       ? 'This campaign is ready for your approval'
       : status === 'failed'
-        ? 'Ask Copilot to retry or describe what should change…'
+        ? 'Ask the assistant to try again, or say what should change…'
         : detailsComplete
           ? 'Ask why, request a change, or prepare the campaign…'
           : 'Describe the product and outcome you want…'
@@ -1115,9 +1136,9 @@ export default function CampaignCopilotPage({ params }: PageProps) {
             <Loader2 size={17} className="animate-spin" style={{ color: 'var(--accent)' }} />
           </div>
           <div>
-            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Opening your campaign workspace</p>
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Opening your campaign planner</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>
-              Restoring the latest strategy and conversation…
+              Loading your last plan and conversation…
             </p>
           </div>
         </div>
@@ -1129,31 +1150,31 @@ export default function CampaignCopilotPage({ params }: PageProps) {
     <div className="min-h-screen">
       <div className="px-4 sm:px-6 lg:px-8 py-6 max-w-[1600px] mx-auto">
         <header className="mb-5 flex items-start justify-between gap-5 flex-wrap animate-fade-up">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="micro-label">AI campaign workspace</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="micro-label">Campaign assistant</span>
               <span className="chip chip-accent">
-                <Sparkles size={10} /> Guided by Meridian
+                <Sparkles size={10} /> You approve before anything goes live
               </span>
             </div>
-            <h1 className="page-title">
+            <h1 className="page-title break-words">
               {mode === 'planner'
-                ? 'Turn a growth goal into a launch-ready campaign'
-                : 'Ask anything about the ads you are already running'}
+                ? 'Plan a new campaign by chatting'
+                : 'Ask about the ads you are already running'}
             </h1>
             <p className="page-subtitle max-w-3xl">
               {mode === 'planner'
-                ? 'Start with one sentence. Meridian shapes the strategy, fills the gaps with you, and prepares everything for a safe human-approved launch.'
-                : 'Questions about any campaign, running or paused. Answers come only from figures recorded in your ad account — and you can see exactly which campaign is being read.'}
+                ? 'Say what you want to sell and what you want from it. The assistant suggests a goal, budget, audience and ad style, asks for anything missing, and gets the campaign ready. Nothing goes live or spends money until you approve.'
+                : 'Ask about any campaign, running or paused. Answers use only the figures in your ad account, and show which campaign they came from.'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Planner builds something new; Queries explains what already ran.
                 They share this workspace but no state — switching never
                 disturbs a plan in progress. */}
             <div
               role="tablist"
-              aria-label="Copilot mode"
+              aria-label="What do you want to do"
               className="flex items-center gap-0.5 rounded-lg p-0.5"
               style={{ background: 'var(--muted)' }}
             >
@@ -1210,9 +1231,12 @@ export default function CampaignCopilotPage({ params }: PageProps) {
               style={{ color: error ? 'var(--bad)' : 'var(--warn)' }}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm" style={{ color: error ? 'var(--bad)' : 'var(--warn)' }}>
+              <p className="text-sm break-words" style={{ color: error ? 'var(--bad)' : 'var(--warn)' }}>
                 {error || pollError}
               </p>
+              {error && errorRaw && (
+                <Details className="mt-2" items={[{ label: 'Error', value: errorRaw }]} />
+              )}
             </div>
             {isBuilding && pollError && (
               <button
@@ -1238,7 +1262,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(370px,0.82fr)] gap-5 items-start">
           <section
             className="card overflow-hidden flex flex-col min-h-[650px] xl:h-[calc(100vh-260px)] xl:min-h-[650px] xl:max-h-[860px] animate-fade-up"
-            aria-label="Campaign Copilot chat"
+            aria-label="Chat with the campaign assistant"
           >
             <div
               className="px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3"
@@ -1252,13 +1276,13 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                   <BrainCircuit size={18} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Meridian Campaign Copilot</p>
-                  <p className="text-[11px] truncate" style={{ color: 'var(--ink-3)' }}>
-                    Your strategy partner—not another complex Meta form
+                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--ink)' }}>Campaign assistant</p>
+                  <p className="text-[11px] truncate" style={{ color: 'var(--ink-3)' }} title="Plan a campaign in plain words — no Meta forms to fill in">
+                    Plan a campaign in plain words — no Meta forms to fill in
                   </p>
                 </div>
               </div>
-              <span className={`chip ${statusMeta.chip} shrink-0`}>
+              <span className={`chip ${statusMeta.chip} shrink-0`} title={statusMeta.meaning || undefined}>
                 {statusMeta.pulse && <span className="beacon" style={{ width: 5, height: 5 }} />}
                 {statusMeta.label}
               </span>
@@ -1285,7 +1309,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                       What do you want to grow?
                     </h2>
                     <p className="text-sm leading-relaxed mt-2 mx-auto max-w-md" style={{ color: 'var(--ink-3)' }}>
-                      Share the product and outcome in your own words. Meridian will recommend the goal, budget, audience and creative direction—and explain every choice.
+                      Tell us the product and what you want from it, in your own words. The assistant will suggest the goal, budget, audience and ad style — and explain each choice.
                     </p>
                     <div className="grid sm:grid-cols-3 gap-2.5 mt-6 text-left">
                       {STARTER_PROMPTS.map((prompt) => (
@@ -1372,7 +1396,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                   rows={1}
                   maxLength={4000}
                   placeholder={placeholder}
-                  aria-label="Message Campaign Copilot"
+                  aria-label="Message the campaign assistant"
                   className="flex-1 resize-none bg-transparent px-2.5 py-2 text-sm leading-relaxed min-h-[40px] max-h-[140px] disabled:cursor-not-allowed"
                   style={{ color: 'var(--ink)', outline: 'none', boxShadow: 'none', border: 0 }}
                 />
@@ -1386,12 +1410,12 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                   {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                 </button>
               </div>
-              <div className="flex items-center justify-between gap-3 mt-2 px-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 px-1">
                 <p className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>
                   Enter to send · Shift + Enter for a new line
                 </p>
                 <p className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>
-                  Preparing is safe · Meta launch always needs your approval
+                  Preparing costs nothing · going live always needs your approval
                 </p>
               </div>
             </form>
@@ -1403,17 +1427,17 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                 className="px-4 py-3.5 flex items-center justify-between gap-3"
                 style={{ background: 'var(--surface-warm)', borderBottom: '1px solid var(--hairline)' }}
               >
-                <div className="flex items-center gap-2">
-                  <FileCheck2 size={16} style={{ color: 'var(--accent)' }} />
-                  <div>
-                    <h2 className="section-title">Campaign blueprint</h2>
+                <div className="flex min-w-0 items-center gap-2">
+                  <FileCheck2 size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
+                  <div className="min-w-0">
+                    <h2 className="section-title">Your campaign plan</h2>
                     <p className="text-[10.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                      Strategy updates as you chat
+                      Updates as you chat
                     </p>
                   </div>
                 </div>
                 {session && (
-                  <span className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>
+                  <span className="text-[10.5px] shrink-0" style={{ color: 'var(--ink-4)' }}>
                     Updated {relativeUpdate(session.updatedAt)}
                   </span>
                 )}
@@ -1441,17 +1465,17 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold" style={{ color: 'var(--ink)' }}>
                         {detailsComplete
-                          ? 'The strategy has the required details'
+                          ? 'The plan has everything it needs'
                           : missingFields.length > 0
                             ? `${missingFields.length} decision${missingFields.length === 1 ? '' : 's'} left to make`
-                            : 'Meridian is shaping your strategy'}
+                            : 'The assistant is putting your plan together'}
                       </p>
                       <p className="text-[11px] leading-relaxed mt-0.5" style={{ color: 'var(--ink-3)' }}>
                         {detailsComplete
-                          ? 'Ask why, request any change, or continue to campaign preparation.'
+                          ? 'Ask why, ask for any change, or go ahead and prepare the campaign.'
                           : missingFields.length > 0
                             ? `Next: ${missingFields.slice(0, 2).map(missingFieldText).join(' and ')}${missingFields.length > 2 ? `, plus ${missingFields.length - 2} more` : ''}.`
-                            : 'Keep chatting—only the information needed for a safe launch will be requested.'}
+                            : 'Keep chatting — you will only be asked for what is needed to launch safely.'}
                       </p>
                     </div>
                   </div>
@@ -1466,10 +1490,10 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                       <FileCheck2 size={19} style={{ color: 'var(--ink-4)' }} />
                     </div>
                     <p className="text-sm font-semibold mt-3" style={{ color: 'var(--ink-2)' }}>
-                      Your strategy will take shape here
+                      Your plan will appear here
                     </p>
                     <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-                      Goal, budget, audience, creative and tracking choices will update as you chat.
+                      The goal, budget, audience, ad style and how results are counted fill in as you chat.
                     </p>
                   </div>
                 ) : (
@@ -1481,14 +1505,14 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                 {session && (
                   <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
                     <div className="flex items-center justify-between gap-2 mb-2.5">
-                      <p className="micro-label">Launch readiness</p>
+                      <p className="micro-label">Ready to launch?</p>
                       <span className={`chip ${detailsComplete ? 'chip-good' : 'chip-warn'}`}>
                         {detailsComplete ? <Check size={10} /> : <Clock3 size={10} />}
                         {detailsComplete
                           ? 'Complete'
                           : missingFields.length > 0
-                            ? `${missingFields.length} needed`
-                            : 'Needs review'}
+                            ? `${missingFields.length} still needed`
+                            : 'Needs a check'}
                       </span>
                     </div>
 
@@ -1500,8 +1524,8 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                         <AlertCircle size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} />
                         <span className="text-xs leading-relaxed" style={{ color: 'var(--ink-2)' }}>
                           {status === 'ready'
-                            ? 'One final safety check needs to be refreshed. Ask Meridian to review the plan before preparing it.'
-                            : 'The details are complete. Meridian is finishing the final validation before preparation.'}
+                            ? 'One last safety check needs redoing. Ask the assistant to review the plan before preparing it.'
+                            : 'All the details are in. The assistant is doing a final check before preparing.'}
                         </span>
                       </div>
                     )}
@@ -1515,7 +1539,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                             style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
                           >
                             <Circle size={10} className="shrink-0" style={{ color: 'var(--warn)' }} />
-                            <span className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>
+                            <span className="min-w-0 break-words text-xs font-medium" style={{ color: 'var(--ink-2)' }}>
                               {missingFieldText(field)}
                             </span>
                           </div>
@@ -1535,7 +1559,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                           className="text-xs"
                           style={{ color: detailsComplete ? 'var(--good)' : 'var(--warn)' }}
                         >
-                          {detailsComplete ? 'Required details collected' : 'I’ll list missing details as we plan'}
+                          {detailsComplete ? 'All the details are in' : 'Anything missing will be listed here as you plan'}
                         </span>
                       </div>
                     )}
@@ -1545,7 +1569,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                         {blockers.map((blocker, index) => (
                           <div key={index} className="flex items-start gap-2 text-xs" style={{ color: 'var(--bad)' }}>
                             <AlertCircle size={12} className="shrink-0 mt-0.5" />
-                            <span>{typeof blocker === 'string' ? blocker : missingFieldText(blocker)}</span>
+                            <span className="min-w-0 break-words">{typeof blocker === 'string' ? blocker : missingFieldText(blocker)}</span>
                           </div>
                         ))}
                       </div>
@@ -1558,7 +1582,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                     <div className="flex items-center gap-2 mb-2.5">
                       <Sparkles size={14} style={{ color: 'var(--accent)' }} />
                       <div>
-                        <p className="micro-label">Meridian&apos;s strategy choices</p>
+                        <p className="micro-label">What the assistant suggests</p>
                         <p className="text-[10.5px]" style={{ color: 'var(--ink-4)' }}>
                           Recommendations you can question or change
                         </p>
@@ -1572,9 +1596,9 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                           style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}
                         >
                           <p className="text-[11px] font-semibold" style={{ color: 'var(--accent-strong)' }}>{item.label}</p>
-                          <p className="text-sm font-semibold mt-0.5" style={{ color: 'var(--ink)' }}>{item.value}</p>
+                          <p className="text-sm font-semibold mt-0.5 break-words" style={{ color: 'var(--ink)' }}>{item.value}</p>
                           {item.reason && (
-                            <p className="text-[11px] leading-relaxed mt-1" style={{ color: 'var(--ink-3)' }}>{item.reason}</p>
+                            <p className="text-[11px] leading-relaxed mt-1 break-words" style={{ color: 'var(--ink-3)' }}>{item.reason}</p>
                           )}
                         </div>
                       ))}
@@ -1586,7 +1610,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                   <div className="mt-4 space-y-1.5">
                     {warnings.map((warning, index) => (
                       <p key={index} className="text-[11px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-                        <AlertCircle size={11} className="shrink-0 mt-0.5" /> {warning}
+                        <AlertCircle size={11} className="shrink-0 mt-0.5" /> <span className="min-w-0 break-words">{warning}</span>
                       </p>
                     ))}
                   </div>
@@ -1605,7 +1629,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                     Prepare campaign
                   </button>
                   <p className="text-[10.5px] text-center mt-2" style={{ color: 'var(--ink-3)' }}>
-                    Builds the creative and campaign draft. Meta spend remains ₹0 until you approve.
+                    Makes the ads and a draft campaign. Nothing is spent until you approve.
                   </p>
                 </div>
               )}
@@ -1626,7 +1650,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold" style={{ color: 'var(--good)' }}>Campaign is ready for your decision</p>
                     <p className="text-xs leading-relaxed mt-1" style={{ color: 'var(--ink-2)' }}>
-                      Meridian prepared the strategy and creative. It is saved for launch review, and no Meta ad spend has started.
+                      The plan and ads are ready and saved for you to review. Nothing has been spent yet.
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       <Link href={`/dashboard/${tenantId}/approvals`} className="btn btn-accent">
@@ -1637,7 +1661,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
                           href={`/dashboard/${tenantId}/campaigns/${campaignId}`}
                           className="btn btn-ghost"
                         >
-                          Campaign details
+                          See the campaign
                         </Link>
                       )}
                     </div>
@@ -1650,11 +1674,14 @@ export default function CampaignCopilotPage({ params }: PageProps) {
               <section className="rounded-xl p-4" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)' }}>
                 <div className="flex items-start gap-3">
                   <AlertCircle size={18} className="shrink-0 mt-0.5" style={{ color: 'var(--bad)' }} />
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>Campaign build did not finish</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>We couldn&apos;t finish making this campaign</p>
                     <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
-                      Send a correction in the chat, or ask Copilot to retry. It will revalidate the plan and current safety limits before preparing it again.
+                      Tell the assistant what to change, or ask it to try again. It re-checks the plan and your spending limits before starting over.
                     </p>
+                    {session?.error && (
+                      <Details className="mt-2" items={[{ label: 'Error', value: session.error }]} />
+                    )}
                   </div>
                 </div>
               </section>
@@ -1668,7 +1695,7 @@ export default function CampaignCopilotPage({ params }: PageProps) {
       <ConfirmModal
         open={confirmOpen}
         title="Prepare this campaign?"
-        description="Meridian will use the agreed plan to generate the creative package and save a campaign as pending approval. It will not launch on Meta or start ad spend yet."
+        description="The assistant will make the ads from the agreed plan and save the campaign for your approval. It will not go live on Meta or spend any money yet."
         confirmLabel="Prepare campaign"
         cancelLabel="Keep editing"
         loading={confirming}

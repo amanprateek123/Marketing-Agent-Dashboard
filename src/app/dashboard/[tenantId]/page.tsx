@@ -21,10 +21,7 @@ import {
   Sparkles,
   Target,
 } from 'lucide-react'
-import {
-  formatCurrency,
-  formatRelativeTime,
-} from '@/lib/utils'
+import { formatInr, formatRelative, PLAIN_ERROR } from '@/lib/plain-language'
 import { getDashboardOverview } from '@/lib/api'
 import { ActivityGrid } from '@/components/overview/ActivityGrid'
 import { AlertFeed } from '@/components/overview/AlertFeed'
@@ -56,7 +53,7 @@ export default function HomePage({ params }: PageProps) {
     try {
       setData(await getDashboardOverview(tenantId, windowDays))
     } catch {
-      setError("We couldn't refresh the latest Meta and Meridian data.")
+      setError(PLAIN_ERROR)
     } finally {
       setLoading(false)
     }
@@ -105,9 +102,9 @@ export default function HomePage({ params }: PageProps) {
           </span>
           <div className="flex-1">
             <p className="font-semibold" style={{ color: 'var(--ink)' }}>
-              The latest growth view could not be loaded
+              We couldn&rsquo;t load your overview
             </p>
-            <p className="explain mt-1">{error ?? 'No dashboard data was returned.'}</p>
+            <p className="explain mt-1">{error ?? PLAIN_ERROR}</p>
           </div>
           <button type="button" onClick={() => void load()} className="btn btn-ghost">
             <RefreshCw size={14} aria-hidden="true" /> Retry
@@ -133,10 +130,10 @@ export default function HomePage({ params }: PageProps) {
 
   const heroMetric = allGoalsHaveNoSpend
     ? 'Ready'
-    : formatCurrency(Math.round(portfolio.totalSpendAllObjectives))
+    : formatInr(portfolio.totalSpendAllObjectives)
   const heroMetricLabel = allGoalsHaveNoSpend
     ? 'to plan your next growth campaign'
-    : 'ad spend monitored'
+    : 'spent on ads that we are keeping an eye on'
 
   return (
     <main className="min-h-screen">
@@ -145,17 +142,17 @@ export default function HomePage({ params }: PageProps) {
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="chip chip-accent">
-                <Bot size={12} aria-hidden="true" /> Growth Command Center
+                <Bot size={12} aria-hidden="true" /> Overview
               </span>
               <span className={metaConnected ? 'chip chip-good' : 'chip chip-warn'}>
                 <span className={metaConnected ? 'beacon' : 'beacon beacon-bad'} aria-hidden="true" />
-                {metaConnected ? 'Meta connected' : 'Meta needs connection'}
+                {metaConnected ? 'Meta connected' : 'Meta not connected'}
               </span>
             </div>
-            <h1 className="page-title">{data.companyName || 'Your business'} growth, in one view</h1>
+            <h1 className="page-title break-words">{data.companyName || 'Your business'} at a glance</h1>
             <p className="page-subtitle">
               {data.industry ? `${data.industry} · ` : ''}
-              View generated {formatRelativeTime(data.generatedAt)}
+              Updated {formatRelative(data.generatedAt)}
             </p>
           </div>
 
@@ -182,7 +179,7 @@ export default function HomePage({ params }: PageProps) {
               ))}
             </div>
             <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent">
-              <Sparkles size={14} aria-hidden="true" /> Plan with Copilot
+              <Sparkles size={14} aria-hidden="true" /> Plan a campaign
             </Link>
             <button
               type="button"
@@ -227,8 +224,8 @@ export default function HomePage({ params }: PageProps) {
           >
             <AlertTriangle size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
             <div className="flex-1">
-              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Connect Meta to activate the growth loop</p>
-              <p className="explain mt-0.5">Meridian needs account, Page and measurement access before it can sync evidence or prepare launches.</p>
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Connect your Meta ad account to get started</p>
+              <p className="explain mt-0.5">We need access to your ad account, Facebook Page and sales tracking before we can read results or set up campaigns.</p>
             </div>
             <Link href={`/dashboard/${tenantId}/settings`} className="btn btn-ghost">
               <Settings size={14} aria-hidden="true" /> Open settings
@@ -244,12 +241,12 @@ export default function HomePage({ params }: PageProps) {
           >
             <Database size={18} style={{ color: 'var(--warn)' }} className="shrink-0" aria-hidden="true" />
             <div className="flex-1">
-              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Daily evidence is incomplete</p>
+              <p className="font-semibold" style={{ color: 'var(--ink)' }}>Some daily numbers are missing</p>
               <p className="explain mt-0.5">
-                This view covers {win.coverage.campaignsWithRows} of {win.coverage.eligibleCampaigns} campaigns expected to have delivered in this window. Totals exclude {win.coverage.campaignsWithoutRows} campaign{win.coverage.campaignsWithoutRows === 1 ? '' : 's'} without daily rows.
+                We have day-by-day numbers for {win.coverage.campaignsWithRows} of the {win.coverage.eligibleCampaigns} campaigns that ran in this period. The totals leave out {win.coverage.campaignsWithoutRows} campaign{win.coverage.campaignsWithoutRows === 1 ? '' : 's'} with no daily numbers yet.
               </p>
             </div>
-            <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">Review sync coverage</Link>
+            <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">See which campaigns</Link>
           </section>
         )}
 
@@ -266,10 +263,10 @@ export default function HomePage({ params }: PageProps) {
           <div className="relative grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.5fr)]">
             <div className="px-5 py-6 sm:px-7 sm:py-7 lg:px-8">
               <div className="mb-5 flex flex-wrap items-center gap-2">
-                <p className="micro-label">Account-wide growth oversight · {win.label.toLowerCase()}</p>
+                <p className="micro-label">Your whole ad account · {win.label.toLowerCase()}</p>
                 {!completeReturnEvidence && salesHaveSpend && (
                   <Link href={`/dashboard/${tenantId}/campaigns`} className="chip chip-warn">
-                    Revenue coverage {returnEvidence.knownCampaigns}/{returnEvidence.campaignsWithSpend}
+                    Sales known for {returnEvidence.knownCampaigns} of {returnEvidence.campaignsWithSpend} campaigns
                     <ArrowRight size={12} aria-hidden="true" />
                   </Link>
                 )}
@@ -289,24 +286,24 @@ export default function HomePage({ params }: PageProps) {
               </h2>
               <p className="mt-4 max-w-3xl text-sm leading-6 sm:text-base" style={{ color: 'var(--ink-2)' }}>
                 {allGoalsHaveNoSpend
-                  ? 'Start with a business goal. Copilot can shape the audience, budget, creative and measurement plan for review.'
-                  : `Meridian is monitoring ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} across sales and objective-specific growth goals. Results from campaigns launched by Meridian are isolated on the Impact page.`}
+                  ? 'Start with a business goal. The campaign planner will suggest the audience, budget and ads for you to review.'
+                  : `We are keeping an eye on ${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'}, for sales and for other goals. What the campaigns we launched for you have earned is on the results page.`}
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <Link href={`/dashboard/${tenantId}/tool-impact`} className="btn btn-primary">
-                  Open Meridian impact <ArrowRight size={14} aria-hidden="true" />
+                  See what our campaigns earned <ArrowRight size={14} aria-hidden="true" />
                 </Link>
                 {!completeReturnEvidence && salesHaveSpend ? (
                   <Link href={`/dashboard/${tenantId}/campaigns`} className="btn btn-ghost">
-                    Review revenue coverage
+                    See which campaigns lack sales numbers
                   </Link>
                 ) : (
-                  <p className="explain max-w-xl">
+                  <p className="explain min-w-0 max-w-xl">
                     {win.metricsSource === 'timeseries'
-                      ? `Measured from true daily campaign data for this ${win.days}-day window.`
+                      ? `Based on day-by-day campaign numbers for the last ${win.days} days.`
                       : partialCoverage
-                        ? `${win.coverage.campaignsWithRows} of ${win.coverage.eligibleCampaigns} expected campaigns have daily rows.`
-                        : `Daily data is not synced, so this view uses the available campaign totals.`}
+                        ? `${win.coverage.campaignsWithRows} of ${win.coverage.eligibleCampaigns} campaigns have day-by-day numbers.`
+                        : `Day-by-day numbers are not in yet, so this uses each campaign's overall totals.`}
                   </p>
                 )}
               </div>
@@ -317,18 +314,18 @@ export default function HomePage({ params }: PageProps) {
               style={{ borderColor: 'var(--hairline)', background: 'rgba(255,255,255,0.68)' }}
             >
               <div>
-                <p className="micro-label">Workspace status</p>
+                <p className="micro-label">Right now</p>
                 <div className="mt-5 space-y-5">
                   <HeroSignal
                     icon={Gauge}
                     value={portfolio.campaignCount}
-                    label={`campaign${portfolio.campaignCount === 1 ? '' : 's'} monitored · ${win.label.toLowerCase()}`}
+                    label={`campaign${portfolio.campaignCount === 1 ? '' : 's'} we are watching · ${win.label.toLowerCase()}`}
                   />
-                  <HeroSignal icon={Sparkles} value={activity.creatives.ready} label="creative assets ready now" />
+                  <HeroSignal icon={Sparkles} value={activity.creatives.ready} label="ads ready to use" />
                   <HeroSignal
                     icon={Target}
                     value={openProposals}
-                    label={`growth decision${openProposals === 1 ? '' : 's'} awaiting review`}
+                    label={`suggestion${openProposals === 1 ? '' : 's'} waiting for your review`}
                   />
                 </div>
               </div>
@@ -337,41 +334,41 @@ export default function HomePage({ params }: PageProps) {
                 className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
                 style={{ color: 'var(--accent-strong)' }}
               >
-                See AI activity <ArrowRight size={14} aria-hidden="true" />
+                See what the AI is working on <ArrowRight size={14} aria-hidden="true" />
               </Link>
             </div>
           </div>
         </section>
 
-        <section aria-label="Growth outcome metrics" className="stagger mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section aria-label="Key results" className="stagger mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {hasKnownReturn ? (
             <>
               <OutcomeMetric
-                label={partialCoverage ? 'Covered investment · all goals' : 'Account investment · all goals'}
-                value={formatCurrency(Math.round(portfolio.totalSpendAllObjectives))}
+                label={partialCoverage ? 'Ad spend (campaigns with numbers)' : 'Total ad spend'}
+                value={formatInr(portfolio.totalSpendAllObjectives)}
                 detail={portfolio.nonRevenueSpend > 0
-                  ? `${formatCurrency(Math.round(portfolio.spend))} sales · ${formatCurrency(Math.round(portfolio.nonRevenueSpend))} other goals`
+                  ? `${formatInr(portfolio.spend)} on sales · ${formatInr(portfolio.nonRevenueSpend)} on other goals`
                   : `${portfolio.campaignCount} campaign${portfolio.campaignCount === 1 ? '' : 's'} in view`}
                 icon={Gauge}
               />
               <OutcomeMetric
-                label={resolvedMetaReturn ? 'Meta-attributed action value' : 'Verified recorded action value'}
-                value={formatCurrency(Math.round(returnEvidence.knownRevenue))}
-                detail={`Covers ${returnEvidence.knownCampaigns}/${returnEvidence.campaignsWithSpend} sales campaigns`}
+                label={resolvedMetaReturn ? 'Sales value Meta credits to your ads' : 'Sales value we could confirm'}
+                value={formatInr(returnEvidence.knownRevenue)}
+                detail={`From ${returnEvidence.knownCampaigns} of ${returnEvidence.campaignsWithSpend} sales campaigns`}
                 icon={ArrowUpRight}
                 tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
               />
               <OutcomeMetric
-                label="Verified-evidence raw ROAS"
+                label="Return on ad spend"
                 value={`${returnEvidence.knownRoas.toFixed(2)}x`}
-                detail="Campaign-scoped recorded action value ÷ covered sales spend"
+                detail="Sales value for every ₹1 spent on these sales campaigns"
                 icon={Activity}
                 tone={completeReturnEvidence ? (rawReturnAboveSpend ? 'good' : 'bad') : 'neutral'}
               />
               <OutcomeMetric
-                label="Known action-value gap"
-                value={`${rawValueGap >= 0 ? '+' : '−'}${formatCurrency(Math.round(Math.abs(rawValueGap)))}`}
-                detail={completeReturnEvidence ? 'Recorded action value minus sales spend; not contribution profit' : 'Verified campaigns only; unresolved rows remain withheld'}
+                label="Sales value minus spend"
+                value={`${rawValueGap >= 0 ? '+' : '−'}${formatInr(Math.abs(rawValueGap))}`}
+                detail={completeReturnEvidence ? 'Before product costs, so this is not profit' : 'Only campaigns we could confirm; the rest are left out'}
                 icon={Gauge}
                 tone={completeReturnEvidence ? (rawValueGap >= 0 ? 'good' : 'bad') : 'neutral'}
               />
@@ -379,27 +376,27 @@ export default function HomePage({ params }: PageProps) {
           ) : (
             <>
               <OutcomeMetric
-                label={partialCoverage ? 'Covered sales spend' : 'Sales spend monitored'}
-                value={formatCurrency(Math.round(portfolio.spend))}
+                label={partialCoverage ? 'Sales spend (campaigns with numbers)' : 'Spent on sales campaigns'}
+                value={formatInr(portfolio.spend)}
                 detail={`${returnEvidence.campaignsWithSpend} sales campaign${returnEvidence.campaignsWithSpend === 1 ? '' : 's'} with spend`}
                 icon={Gauge}
               />
               <OutcomeMetric
-                label="Other growth goals"
-                value={formatCurrency(Math.round(portfolio.nonRevenueSpend))}
+                label="Spent on other goals"
+                value={formatInr(portfolio.nonRevenueSpend)}
                 detail={`${portfolio.nonRevenueCampaigns} awareness, reach, traffic or engagement campaign${portfolio.nonRevenueCampaigns === 1 ? '' : 's'}`}
                 icon={Target}
               />
               <OutcomeMetric
-                label="Campaigns monitored"
+                label="Campaigns we are watching"
                 value={portfolio.campaignCount.toLocaleString('en-IN')}
-                detail={`Delivery evidence for the ${win.label.toLowerCase()} reporting window`}
+                detail={`Ran during the ${win.label.toLowerCase()}`}
                 icon={Activity}
               />
               <OutcomeMetric
-                label="Revenue-ready campaigns"
+                label="Campaigns with sales numbers"
                 value={`${returnEvidence.knownCampaigns} / ${returnEvidence.campaignsWithSpend}`}
-                detail="Product mapping and a fresh Meta sync are required before raw ROAS is shown"
+                detail="Link each campaign to a product and refresh from Meta to see return on ad spend"
                 icon={Database}
                 tone="warn"
               />
@@ -423,8 +420,8 @@ export default function HomePage({ params }: PageProps) {
               style={{ borderBottom: '1px solid var(--hairline)' }}
             >
               <AlertTriangle size={17} style={{ color: criticalCount > 0 ? 'var(--bad)' : 'var(--ink-3)' }} aria-hidden="true" />
-              <div>
-                <p className="micro-label">Next best action</p>
+              <div className="min-w-0">
+                <p className="micro-label">Needs your attention</p>
                 <h2 id="attention-title" className="section-title">What needs a decision</h2>
               </div>
               <span className={`ml-auto ${criticalCount > 0 ? 'chip chip-bad' : 'chip chip-good'}`}>
@@ -439,17 +436,17 @@ export default function HomePage({ params }: PageProps) {
         <section aria-labelledby="system-pulse-title">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="micro-label mb-1">Operations</p>
-              <h2 id="system-pulse-title" className="section-title">System pulse</h2>
+              <p className="micro-label mb-1">Behind the scenes</p>
+              <h2 id="system-pulse-title" className="section-title">How things are running</h2>
             </div>
-            <p className="explain">Connections, production, review queues and evidence freshness</p>
+            <p className="explain">Connections, ads being made, things waiting for review, and how fresh the numbers are</p>
           </div>
           <ActivityGrid activity={activity} tenantId={tenantId} />
         </section>
 
         <footer className="mt-8 flex flex-col gap-2 border-t pt-4 text-xs sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--hairline)', color: 'var(--ink-4)' }}>
-          <span>Reporting window: {win.label} · Generated {formatRelativeTime(data.generatedAt)}</span>
-          <span>Account lifetime: {formatCurrency(Math.round(lifetime.spend))} spend · open Campaigns for basis-aware return evidence</span>
+          <span>Showing the {win.label.toLowerCase()} · Updated {formatRelative(data.generatedAt)}</span>
+          <span>All-time ad spend: {formatInr(lifetime.spend)} · see Campaigns for sales by campaign</span>
         </footer>
       </div>
     </main>
@@ -458,8 +455,8 @@ export default function HomePage({ params }: PageProps) {
 
 function CommandCenterSkeleton() {
   return (
-    <main aria-busy="true" aria-label="Loading growth command center" className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-      <span className="sr-only" role="status">Loading the latest growth evidence</span>
+    <main aria-busy="true" aria-label="Loading your overview" className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <span className="sr-only" role="status">Loading your latest numbers</span>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <div className="skeleton mb-3 h-6 w-44" />
@@ -509,13 +506,13 @@ function OutcomeMetric({
   return (
     <article className="card card-metric min-w-0 px-5 py-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="micro-label">{label}</p>
+        <p className="micro-label min-w-0 break-words">{label}</p>
         <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ color, background }}>
           <Icon size={15} aria-hidden="true" />
         </span>
       </div>
-      <p className="display-num text-3xl" style={{ color }}>{value}</p>
-      <p className="explain mt-2">{detail}</p>
+      <p className="display-num break-words text-3xl" style={{ color }}>{value}</p>
+      <p className="explain mt-2 break-words">{detail}</p>
     </article>
   )
 }
@@ -529,7 +526,7 @@ function HeroSignal({ icon: Icon, value, label }: { icon: typeof Activity; value
       >
         <Icon size={16} aria-hidden="true" />
       </span>
-      <div>
+      <div className="min-w-0">
         <span className="display-num text-xl" style={{ color: 'var(--ink)' }}>{value.toLocaleString('en-IN')}</span>
         <p className="explain">{label}</p>
       </div>
@@ -542,41 +539,41 @@ function TrustPanel({ data, tenantId }: { data: DashboardOverview; tenantId: str
   const trustRows = [
     {
       icon: ShieldCheck,
-      label: 'Human review',
-      value: `${activity.queue.pendingApprovalCampaigns} campaign${activity.queue.pendingApprovalCampaigns === 1 ? '' : 's'} awaiting approval`,
+      label: 'Your approval',
+      value: `${activity.queue.pendingApprovalCampaigns} campaign${activity.queue.pendingApprovalCampaigns === 1 ? '' : 's'} waiting for your go-ahead`,
       href: `/dashboard/${tenantId}/approvals`,
       healthy: true,
     },
     {
       icon: RefreshCw,
-      label: 'Evidence freshness',
+      label: 'How fresh the numbers are',
       value: activity.sync.campaignsWithoutFreshness > 0
-        ? `${activity.sync.campaignsWithoutFreshness}/${activity.sync.activeCampaignCount} active campaigns lack a metrics timestamp`
+        ? `${activity.sync.campaignsWithoutFreshness} of ${activity.sync.activeCampaignCount} running campaigns have no numbers yet`
         : activity.sync.lastSyncAt
-          ? `${activity.sync.staleCampaignCount === 0 ? 'All timestamped active campaigns are within threshold' : `${activity.sync.staleCampaignCount} stale`} · latest evidence ${formatRelativeTime(activity.sync.lastSyncAt)}`
-          : 'No active campaign metrics timestamp',
+          ? `${activity.sync.staleCampaignCount === 0 ? 'All running campaigns are up to date' : `${activity.sync.staleCampaignCount} campaign${activity.sync.staleCampaignCount === 1 ? '' : 's'} out of date`} · last refreshed ${formatRelative(activity.sync.lastSyncAt)}`
+          : 'No numbers in yet for running campaigns',
       href: `/dashboard/${tenantId}/campaigns`,
       healthy: activity.sync.campaignsWithoutFreshness === 0 && activity.sync.staleCampaignCount === 0 && Boolean(activity.sync.lastSyncAt),
     },
     {
       icon: Gauge,
-      label: 'Economics basis',
+      label: 'Product costs',
       value: economics.isEstimated
-        ? 'Margin is assumed; raw command-center proof excludes contribution'
+        ? 'Your profit margin is a guess, so the figures above leave out profit'
         : economics.hasMixedMargins
-          ? 'Product margins are stored; contribution is withheld from this demo'
-          : `${economics.productName ?? 'Primary product'} economics stored; raw proof shown above`,
+          ? 'Product margins are saved; profit is not shown here yet'
+          : `${economics.productName ?? 'Main product'} costs are saved; figures above are before costs`,
       href: `/dashboard/${tenantId}/settings`,
       healthy: !economics.isEstimated,
     },
     {
       icon: Clock3,
-      label: 'Reporting evidence',
+      label: 'Where the numbers come from',
       value: data.window.metricsSource === 'timeseries'
-        ? `True daily evidence · ${data.window.label.toLowerCase()}`
+        ? `Day-by-day numbers · ${data.window.label.toLowerCase()}`
         : data.window.metricsSource === 'partial-timeseries'
-          ? `Partial daily evidence · ${data.window.coverage.campaignsWithRows}/${data.window.coverage.eligibleCampaigns} campaigns covered`
-          : `Campaign lifetime fallback · ${data.window.label.toLowerCase()}`,
+          ? `Day-by-day numbers for ${data.window.coverage.campaignsWithRows} of ${data.window.coverage.eligibleCampaigns} campaigns`
+          : `Each campaign's overall totals · ${data.window.label.toLowerCase()}`,
       href: `/dashboard/${tenantId}/tool-impact`,
       healthy: data.window.metricsSource === 'timeseries',
     },
@@ -585,7 +582,7 @@ function TrustPanel({ data, tenantId }: { data: DashboardOverview; tenantId: str
   return (
     <aside className="card overflow-hidden" aria-labelledby="trust-panel-title">
       <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
-        <p className="micro-label mb-1.5">Proof &amp; safety</p>
+        <p className="micro-label mb-1.5">Can you trust these numbers?</p>
         <h2 id="trust-panel-title" className="section-title">Trust the number before acting</h2>
       </div>
       <div>
@@ -606,7 +603,7 @@ function TrustPanel({ data, tenantId }: { data: DashboardOverview; tenantId: str
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{row.label}</p>
-                <p className="explain mt-0.5">{row.value}</p>
+                <p className="explain mt-0.5 break-words">{row.value}</p>
               </div>
               <ArrowRight size={14} className="mt-1 shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--ink-4)' }} aria-hidden="true" />
             </Link>

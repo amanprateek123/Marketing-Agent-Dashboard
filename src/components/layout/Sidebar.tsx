@@ -57,17 +57,17 @@ function navGroups(
     {
       label: 'Grow',
       items: [
-        { href: root, label: 'Command center', hint: 'Growth, risk and opportunity at a glance', icon: Home },
+        { href: root, label: 'Overview', hint: 'Your spend, results and what needs a decision', icon: Home },
         {
           href: `${root}/campaign-copilot`,
-          label: 'Campaign Copilot',
-          hint: 'Turn a business goal into a launch-ready plan',
+          label: 'Plan a campaign',
+          hint: 'Describe a goal and get a ready-to-launch plan',
           icon: MessageCircleMore,
         },
         {
           href: `${root}/tool-impact`,
-          label: 'Meridian impact',
-          hint: 'Measured results from campaigns Meridian owns',
+          label: 'Results we delivered',
+          hint: 'What the campaigns we launched for you have earned',
           icon: Zap,
         },
       ],
@@ -77,64 +77,64 @@ function navGroups(
       items: [
         {
           href: `${root}/approvals`,
-          label: 'Approval center',
-          hint: 'Review safeguards and approve launches',
+          label: 'Approvals',
+          hint: 'Check and approve campaigns before they go live',
           icon: Inbox,
           badge: pendingCount,
         },
         {
           href: `${root}/campaigns`,
           label: 'Live campaigns',
-          hint: 'Follow delivery and campaign health',
+          hint: 'How each running campaign is doing',
           icon: Megaphone,
         },
         {
           href: `${root}/creatives`,
-          label: 'Creative studio',
-          hint: 'Create, review and reuse campaign assets',
+          label: 'Ads',
+          hint: 'Make, review and reuse your ads',
           icon: ImageIcon,
         },
         {
           href: `${root}/gallery`,
-          label: 'Asset gallery',
-          hint: 'Organize approved source material',
+          label: 'Photos & logos',
+          hint: 'Your approved photos, logos and brand material',
           icon: LayoutGrid,
         },
       ],
     },
     {
-      label: 'Intelligence',
+      label: 'Insights',
       items: [
         {
           href: `${root}/brain`,
           label: 'Brain',
-          hint: 'The marketing head: decisions, pipeline and approvals',
+          hint: 'The AI marketing lead: its plans, decisions and questions for you',
           icon: BrainCircuit,
           badge: openGateCount,
         },
         {
           href: `${root}/proposed-actions`,
-          label: 'AI recommendations',
-          hint: 'Review the next best growth actions',
+          label: 'Suggested changes',
+          hint: 'Budget, pause and ad changes the AI suggests',
           icon: Brain,
           badge: proposedCount,
         },
         {
           href: `${root}/learnings`,
           label: 'Winning patterns',
-          hint: 'See what audiences and creatives are teaching us',
+          hint: 'Which audiences and ads work best, and why',
           icon: BookOpen,
         },
         {
           href: `${root}/intelligence`,
-          label: 'Intelligence quality',
-          hint: 'Measure how reliably Meridian is deciding',
+          label: 'Suggestion accuracy',
+          hint: 'Whether the AI\'s past suggestions turned out right',
           icon: Sparkles,
         },
         {
           href: `${root}/runs`,
-          label: 'Activity & audit',
-          hint: 'Trace every automated step and decision',
+          label: 'Activity',
+          hint: 'Everything the AI has done, step by step',
           icon: Activity,
         },
       ],
@@ -152,14 +152,14 @@ function MeridianBrand({ tenantId, onNavigate }: { tenantId: string; onNavigate?
       href={`/dashboard/${tenantId}`}
       className={styles.brand}
       onClick={onNavigate}
-      aria-label="Meridian command center"
+      aria-label="Meridian overview"
     >
       <span className={styles.brandMark} aria-hidden="true">
         <MeridianGlyph size={22} />
       </span>
       <span className={styles.brandCopy}>
         <span className={styles.wordmark}>Meridian</span>
-        <span className={styles.productLabel}>AI Growth OS</span>
+        <span className={styles.productLabel}>AI marketing assistant</span>
       </span>
     </Link>
   )
@@ -191,8 +191,8 @@ function SidebarContent({
   const status = reachable === null
     ? { label: 'Checking data', className: styles.statusConnecting }
     : reachable
-      ? { label: 'Workspace data online', className: styles.statusOnline }
-      : { label: 'Data connection interrupted', className: styles.statusOffline }
+      ? { label: 'Connected', className: styles.statusOnline }
+      : { label: 'Connection lost', className: styles.statusOffline }
 
   return (
     <>
@@ -268,7 +268,7 @@ function SidebarContent({
             </span>
             <span className={styles.workspaceCopy}>
               <span className={styles.workspaceLabel}>Workspace</span>
-              <span className={styles.workspaceName}>{tenantId}</span>
+              <span className={styles.workspaceName} title={tenantId}>{tenantId}</span>
             </span>
             <Settings size={16} aria-hidden="true" />
           </Link>
@@ -403,9 +403,9 @@ export function Sidebar({ tenantId }: SidebarProps) {
             )}
             role="status"
             aria-label={
-              reachable === null ? 'Checking data' : reachable ? 'Workspace data online' : 'Data connection interrupted'
+              reachable === null ? 'Checking data' : reachable ? 'Connected' : 'Connection lost'
             }
-            title={reachable === null ? 'Checking data' : reachable ? 'Workspace data online' : 'Data connection interrupted'}
+            title={reachable === null ? 'Checking data' : reachable ? 'Connected' : 'Connection lost'}
           />
           <button
             ref={menuButtonRef}
