@@ -20,6 +20,8 @@ import { HookStyleChip } from '@/components/badges'
 import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
 import { cn } from '@/lib/utils'
 import { Details } from '@/components/plain/Details'
+import { ProvenIdeas } from '@/components/brain/ProvenIdeas'
+import { LearnedResults } from '@/components/brain/LearnedResults'
 import { PLAIN_ERROR, errorDetail, formatInr, formatRelative, humanise } from '@/lib/plain-language'
 import type { Company, CaseStudy, WinningExemplar, CausalInsight, AudienceScoreEntry } from '@/types'
 
@@ -834,6 +836,17 @@ export default function LearningsPage({ params }: PageProps) {
           </>
         )}
       </div>
+
+      {/* What the Brain has proven with its own tests — accepted learnings and confirmed tests,
+          grouped by idea — and its recent verdicts. The older imported learnings follow below. */}
+      <section aria-label="Proven by the Brain" className="mb-8 flex min-w-0 flex-col gap-4">
+        <ProvenIdeas
+          tenantId={tenantId}
+          title="Proven by your own ads"
+          description="Ideas the Brain has confirmed with real results. New ads start from these, and the ones that failed are not retried."
+        />
+        <LearnedResults tenantId={tenantId} />
+      </section>
 
       <section aria-label="Summary" className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
