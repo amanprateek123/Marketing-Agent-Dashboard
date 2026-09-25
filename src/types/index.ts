@@ -539,6 +539,23 @@ export interface CreativeImage {
   /** Soft-delete, reversible — hidden from its Gallery sheet until restored. Never affects campaign launch. */
   rejected?: boolean
   /**
+   * Every imageUrl this variant previously carried, oldest first.
+   *
+   * Rewrite, Retry and Edit all replace `imageUrl` on the SAME entry, so before this existed the
+   * replaced image was simply gone: no history, no undo, and nothing on screen to say a result
+   * had been discarded. A rewrite someone dislikes is exactly when the old one is wanted back.
+   */
+  previousImageUrls?: string[]
+  /**
+   * MEASURED pixel dimensions, written by the backend's resizer whenever it downloads an asset.
+   *
+   * `aspectRatio` records what was REQUESTED and generators do not always honour it — gpt-image
+   * has no native 4:5 and snaps those to 1024x1024, and its "9:16" is really 1024x1536. Anything
+   * choosing or labelling an asset by shape must read these, never the tag. Absent until measured.
+   */
+  width?: number
+  height?: number
+  /**
    * Set when this entry is a placement size the backend derived by canvas-
    * extending another asset (value = that asset's imageUrl) rather than a
    * separately generated creative. Present => render it as a size OF its

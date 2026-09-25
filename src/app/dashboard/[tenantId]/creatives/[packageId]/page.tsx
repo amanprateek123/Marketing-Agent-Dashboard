@@ -939,13 +939,57 @@ export default function CreativeDetailPage({ params }: PageProps) {
                                     {({ '1:1': 'Square', '4:5': 'Portrait', '9:16': 'Tall', '16:9': 'Wide' } as Record<string, string>)[size.aspectRatio ?? ''] ?? size.aspectRatio ?? '—'}
                                   </span>
                                   <span className="text-[9.5px]" style={{ color: 'var(--ink-3)' }}>
-                                    {size.extendedFrom ? 'Resized' : size.uploadedSizeOf ? 'Uploaded' : 'Original'}
+                                    {/* Measured pixels when we have them: `aspectRatio` records
+                                        what was REQUESTED and generators do not always honour it
+                                        (gpt-image snaps 4:5 to 1024x1024), so the tag alone can
+                                        claim a shape the file does not have. */}
+                                    {size.width && size.height
+                                      ? `${size.width}×${size.height}`
+                                      : (size.extendedFrom ? 'Resized' : size.uploadedSizeOf ? 'Uploaded' : 'Original')}
                                   </span>
                                 </div>
                               </a>
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Previous versions of THIS image.
+
+                        Rewrite, Retry and Edit all overwrite the variant in place, so what was
+                        there before used to vanish with nothing on screen to say it had ever
+                        existed. These are the discarded results, oldest first — kept so a rewrite
+                        someone dislikes is recoverable rather than a one-way door. They are
+                        deliberately separate from the sizes strip above: a size is another CUT of
+                        the current image, these are the image it replaced. */}
+                    {(img?.previousImageUrls?.length ?? 0) > 0 && (
+                      <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+                        <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--ink-2)' }}>
+                          Replaced by a rewrite
+                          <span className="font-normal ml-1" style={{ color: 'var(--ink-3)' }}>
+                            ({img!.previousImageUrls!.length} earlier {img!.previousImageUrls!.length === 1 ? 'version' : 'versions'}, oldest first)
+                          </span>
+                        </p>
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                          {img!.previousImageUrls!.map((url, pi) => (
+                            <a
+                              key={`${url}-${pi}`}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open the replaced image"
+                              className="rounded-lg overflow-hidden block"
+                              style={{ border: '1px solid var(--hairline-light)', background: 'var(--paper)' }}
+                            >
+                              <div className="flex items-center justify-center" style={{ height: 78, background: 'var(--surface-warm)' }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={url} alt={`Replaced version ${pi + 1}`} className="max-w-full max-h-full object-contain" style={{ opacity: 0.85 }} />
+                              </div>
+                              <div className="px-2 py-1 text-[9.5px]" style={{ color: 'var(--ink-3)' }}>v{pi + 1}</div>
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
