@@ -16,6 +16,7 @@ import { DebateLog } from '@/components/ui/DebateLog'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { IdeaCard } from './IdeaCard'
 import { IdeaDetailPanel } from './IdeaDetailPanel'
+import { humanise } from '@/lib/plain-language'
 import type {
   IntelligenceBrief,
   PipelineRun,
@@ -116,8 +117,8 @@ export function StrategyTab({
       <div className="px-6 pt-6 pb-3">
         <div className="flex items-center gap-3">
           <Sparkles size={16} style={{ color: 'var(--accent)' }} />
-          <h2 className="section-title">Strategy</h2>
-          <span className="mono text-sm" style={{ color: 'var(--ink-3)' }}>{ideasCount} idea{ideasCount !== 1 ? 's' : ''}</span>
+          <h2 className="section-title">Ideas</h2>
+          <span className="text-sm" style={{ color: 'var(--ink-3)' }}>{ideasCount} idea{ideasCount !== 1 ? 's' : ''}</span>
           <div className="flex-1 h-px" style={{ background: 'var(--hairline-light)' }} />
         </div>
       </div>
@@ -126,8 +127,8 @@ export function StrategyTab({
         <div className="px-6 pb-6">
           <div className="rounded-xl p-10 text-center" style={{ background: 'var(--surface-warm)', border: '1px dashed var(--hairline)' }}>
             <Lightbulb size={28} className="mx-auto mb-3" style={{ color: 'var(--ink-4)' }} />
-            <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>No intelligence briefs available yet.</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Briefs will appear once the intelligence phase completes.</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>No ideas yet.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Ideas show up here once the research is finished.</p>
           </div>
         </div>
       ) : (
@@ -142,13 +143,13 @@ export function StrategyTab({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-2">
-                    <span className="micro-label" style={{ color: 'var(--accent)' }}>AI Decision</span>
+                    <span className="micro-label" style={{ color: 'var(--accent)' }}>Why we picked this</span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ background: 'var(--surface)', border: '1px solid var(--accent-border)', color: 'var(--accent-strong)' }}>
-                      <Star size={8} fill="currentColor" /> {winnerBrief.topic}
+                      <Star size={8} fill="currentColor" /> <span className="min-w-0 break-words">{winnerBrief.topic}</span>
                     </span>
                     {winnerBrief.finalScore !== undefined && (
-                      <span className="display-num text-sm font-semibold" style={{ color: winnerBrief.finalScore >= 8 ? 'var(--good)' : winnerBrief.finalScore >= 6 ? 'var(--warn)' : 'var(--bad)' }}>
-                        {winnerBrief.finalScore.toFixed(1)}
+                      <span title="Score out of 10" className="display-num text-sm font-semibold" style={{ color: winnerBrief.finalScore >= 8 ? 'var(--good)' : winnerBrief.finalScore >= 6 ? 'var(--warn)' : 'var(--bad)' }}>
+                        {winnerBrief.finalScore.toFixed(1)}/10
                       </span>
                     )}
                   </div>
@@ -161,7 +162,7 @@ export function StrategyTab({
                       className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold transition-all"
                       style={{ color: 'var(--accent)' }}
                     >
-                      {showDebate ? 'Hide debate' : `View debate — ${creativeBrief.debateLog.length} rounds`}
+                      {showDebate ? 'Hide how it was decided' : `See how it was decided — ${creativeBrief.debateLog.length} ${creativeBrief.debateLog.length === 1 ? 'exchange' : 'exchanges'}`}
                       <ChevronDown size={12} className="transition-transform duration-200" style={{ transform: showDebate ? 'rotate(180deg)' : 'rotate(0)' }} />
                     </button>
                   )}
@@ -186,9 +187,9 @@ export function StrategyTab({
                   className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg cursor-pointer outline-none"
                   style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', color: 'var(--ink-2)' }}
                 >
-                  <option value="score">By Score</option>
-                  <option value="platform">By Platform</option>
-                  <option value="source">By Source</option>
+                  <option value="score">Best first</option>
+                  <option value="platform">By where it runs</option>
+                  <option value="source">By where the idea came from</option>
                 </select>
               </div>
 
@@ -206,7 +207,7 @@ export function StrategyTab({
                 <>
                   <div className="w-px h-4" style={{ background: 'var(--hairline)' }} />
                   {sources.map((s) => (
-                    <FilterPill key={s} label={s.replace(/_/g, ' ')} active={filterSource === s} onClick={() => setFilterSource(filterSource === s ? 'all' : s)} />
+                    <FilterPill key={s} label={humanise(s)} active={filterSource === s} onClick={() => setFilterSource(filterSource === s ? 'all' : s)} />
                   ))}
                 </>
               )}
@@ -217,7 +218,7 @@ export function StrategyTab({
                 </button>
               )}
 
-              <span className="mono text-[11px] ml-auto" style={{ color: 'var(--ink-3)' }}>{filteredBriefs.length}/{briefs.length}</span>
+              <span className="text-[11px] ml-auto" style={{ color: 'var(--ink-3)' }}>Showing {filteredBriefs.length} of {briefs.length}</span>
             </div>
           )}
 
@@ -239,13 +240,13 @@ export function StrategyTab({
           {/* Productions list */}
           {Object.keys(siblingCampaigns).length > 0 && (
             <div className="rounded-xl p-4" style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
-              <p className="micro-label mb-3" style={{ color: 'var(--accent-strong)' }}>Productions from this run</p>
+              <p className="micro-label mb-3" style={{ color: 'var(--accent-strong)' }}>Other ideas turned into ads</p>
               <div className="flex flex-col gap-2">
                 {Object.entries(siblingCampaigns).map(([briefId, camp]) => {
                   const matchedBrief = briefs.find((b) => b.briefId === briefId)
                   return (
                     <div key={briefId} className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium truncate flex-1" style={{ color: 'var(--ink-2)' }}>{matchedBrief?.topic || briefId}</span>
+                      <span className="text-xs font-medium truncate flex-1 min-w-0" style={{ color: 'var(--ink-2)' }} title={matchedBrief?.topic}>{matchedBrief?.topic || 'An idea from this round'}</span>
                       <Link href={`/dashboard/${tenantId}/campaigns/${camp._id}`} className="flex items-center gap-1 text-xs font-semibold shrink-0 no-underline hover:underline" style={{ color: 'var(--accent)' }}>
                         View <ArrowRight size={11} />
                       </Link>
@@ -278,9 +279,9 @@ export function StrategyTab({
 
       <ConfirmModal
         open={!!confirmProduceBrief}
-        title="Produce this idea?"
-        description={`This will start an AI pipeline to generate creative assets and build a campaign for "${briefs.find((b) => b.briefId === confirmProduceBrief)?.topic ?? 'this idea'}".`}
-        confirmLabel="Start Production" cancelLabel="Cancel" loading={!!producingBrief}
+        title="Make ads for this idea?"
+        description={`We'll make ads and set up a campaign for "${briefs.find((b) => b.briefId === confirmProduceBrief)?.topic ?? 'this idea'}". Nothing goes live until you approve it.`}
+        confirmLabel="Make the ads" cancelLabel="Cancel" loading={!!producingBrief}
         onConfirm={() => { if (confirmProduceBrief) { onProduce(confirmProduceBrief); setConfirmProduceBrief(null) } }}
         onCancel={() => setConfirmProduceBrief(null)}
       />

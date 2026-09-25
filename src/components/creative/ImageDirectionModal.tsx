@@ -94,7 +94,7 @@ export function ImageDirectionModal({
             What should we do with this image?
           </h3>
           <p className="text-sm leading-relaxed mb-5" style={{ color: 'var(--ink-2)' }}>
-            <span className="mono text-[12.5px]">{label}</span> — pick one so the pipeline knows
+            <span className="text-[12.5px] font-medium break-all">{label}</span> — pick one so we know
             whether to place it, learn from it, or copy its look.
           </p>
 
@@ -129,7 +129,7 @@ export function ImageDirectionModal({
           </div>
 
           <p className="text-[11.5px] mt-4" style={{ color: 'var(--ink-4)' }}>
-            Closing this removes the image — the pipeline cannot use one without a direction.
+            Closing this removes the image — we can&apos;t use it without knowing what it&apos;s for.
           </p>
         </div>
       </div>

@@ -9,6 +9,17 @@ import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rew
 import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution, GalleryAssetLocations } from '@/lib/api'
 import type { CreativeImage, CreativePackage, CustomBriefRun } from '@/types'
 import { creativePackageStatus } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, errorDetail, humanise, plainStatus, toneChip } from '@/lib/plain-language'
+
+/** creativePackageStatus() decides which state this is; this only words it from the shared vocabulary. */
+const PACKAGE_STATE_CODE: Record<string, string> = {
+  'Producing…': 'pending',
+  Ready: 'completed',
+  Failed: 'failed',
+  'All rejected': 'all_rejected',
+  'No assets': 'no_assets',
+}
 
 interface PageProps {
   params: Promise<{ tenantId: string; packageId: string }>
@@ -103,7 +114,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       const p = await getCreativePackage(tenantId, packageId)
       setPkg(p)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load creative')
+      setError(errorDetail(e) || 'Could not load')
     } finally {
       setLoading(false)
     }
@@ -191,7 +202,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       )
     } catch {
       setImageBusy(b => ({ ...b, [variantIndex]: null }))
-      flash('Failed to start regeneration')
+      flash("We couldn't start that. Try again.")
     }
   }
 
@@ -220,7 +231,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       )
     } catch {
       setImageBusy(b => ({ ...b, [variantIndex]: null }))
-      flash('Failed to start regeneration')
+      flash("We couldn't start that. Try again.")
     }
   }
 
@@ -266,7 +277,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       // 409 is the logged-out ChatGPT session — a real, recurring state that must read as an
       // instruction, not a failure to retry.
       flash(msg.includes('409')
-        ? 'Image editing is paused — the pipeline needs to be logged in again.'
+        ? 'Image editing is paused for now — someone on the team needs to reconnect it. Try again later.'
         : opts.failure)
     }
   }
@@ -297,7 +308,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       setEditDrafts(d => ({ ...d, [variantIndex]: '' }))
     } catch {
       setImageBusy(b => ({ ...b, [variantIndex]: null }))
-      flash('Failed to start edit')
+      flash("We couldn't start the edit. Try again.")
     }
   }
 
@@ -327,7 +338,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       // added: 0 is a legitimate outcome — every ratio was already there.
       flash(res.added > 0 ? `Added ${res.added} size${res.added === 1 ? '' : 's'}` : 'All 4 sizes already exist')
     } catch {
-      flash('Failed to generate sizes')
+      flash("We couldn't make the other sizes. Try again.")
     } finally {
       setSizeBusy(b => ({ ...b, [variantIndex]: false }))
     }
@@ -350,7 +361,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       const res = await resizeCustomBriefPackage(tenantId, packageId)
       setPipelineResize({
         state: 'running',
-        note: `Reframing into ${res.sizes.length} sizes — this takes a few minutes.`,
+        note: `Making ${res.sizes.length} sizes — this takes a few minutes.`,
       })
       // Poll on the house cadence. Each tick reloads the package, so sizes appear as they land
       // rather than all at the end.
@@ -370,10 +381,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
       setPipelineResize({
         state: 'idle',
         note: msg.includes('404')
-          ? 'This creative was not made by the Slack pipeline, so it has no base to reframe.'
+          ? 'This creative wasn’t made by the creative team, so there is no original to resize from.'
           : 'Could not start the resize.',
       })
-      flash('Could not start the pipeline resize')
+      flash('Could not start making the other sizes')
     }
   }
 
@@ -386,7 +397,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       pollUntil(p => p.video?.videoUrl !== before, () => setVideoBusy(null))
     } catch {
       setVideoBusy(null)
-      flash('Failed to start regeneration')
+      flash("We couldn't start that. Try again.")
     }
   }
 
@@ -399,7 +410,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       pollUntil(p => p.video?.videoUrl !== before, () => setVideoBusy(null))
     } catch {
       setVideoBusy(null)
-      flash('Failed to start regeneration')
+      flash("We couldn't start that. Try again.")
     }
   }
 
@@ -413,7 +424,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       await rejectAsset(tenantId, packageId, 'image', variantIndex)
       await load()
     } catch {
-      flash('Failed to reject image')
+      flash("We couldn't reject the image. Try again.")
     } finally {
       setImageBusy(b => ({ ...b, [variantIndex]: null }))
     }
@@ -425,7 +436,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       await restoreAsset(tenantId, packageId, 'image', variantIndex)
       await load()
     } catch {
-      flash('Failed to restore image')
+      flash("We couldn't bring the image back. Try again.")
     } finally {
       setImageBusy(b => ({ ...b, [variantIndex]: null }))
     }
@@ -437,7 +448,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       await rejectAsset(tenantId, packageId, 'video', 0)
       await load()
     } catch {
-      flash('Failed to reject video')
+      flash("We couldn't reject the video. Try again.")
     } finally {
       setVideoBusy(null)
     }
@@ -449,7 +460,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       await restoreAsset(tenantId, packageId, 'video', 0)
       await load()
     } catch {
-      flash('Failed to restore video')
+      flash("We couldn't bring the video back. Try again.")
     } finally {
       setVideoBusy(null)
     }
@@ -466,7 +477,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       setSceneDrafts({})
       await load()
     } catch {
-      flash('Failed to plan scenes')
+      flash("We couldn't plan the scenes. Try again.")
     } finally {
       setScenePlanLoading(false)
     }
@@ -479,7 +490,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       pollUntil(p => (p.videoScenes ?? []).every(s => s.status !== 'pending'), () => setSceneGenerating(false))
     } catch {
       setSceneGenerating(false)
-      flash('Failed to start scene generation')
+      flash("We couldn't start making the scenes. Try again.")
     }
   }
 
@@ -493,7 +504,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       )
     } catch {
       setSceneRegenerating(null)
-      flash('Failed to regenerate scene')
+      flash("We couldn't remake that scene. Try again.")
     }
   }
 
@@ -505,7 +516,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       pollUntil(p => !!p.video?.videoUrl && p.video.videoUrl !== before, () => setSceneMerging(false))
     } catch {
       setSceneMerging(false)
-      flash('Failed to start merge')
+      flash("We couldn't join the scenes. Try again.")
     }
   }
 
@@ -518,7 +529,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
       pollUntil(p => !!p.videoWithVoiceoverUrl && p.videoWithVoiceoverUrl !== before, () => setVoiceoverBusy(false))
     } catch {
       setVoiceoverBusy(false)
-      flash('Failed to start voiceover generation')
+      flash("We couldn't start the voiceover. Try again.")
     }
   }
 
@@ -527,11 +538,11 @@ export default function CreativeDetailPage({ params }: PageProps) {
     if (!url) return
     try {
       await updateCreativePackage(tenantId, packageId, { variantIndex, imageUrl: url })
-      flash('Image URL updated')
+      flash('Image link saved')
       setImageUrlDrafts(d => ({ ...d, [variantIndex]: '' }))
       load()
     } catch {
-      flash('Failed to update image URL')
+      flash("We couldn't save that image link. Try again.")
     }
   }
 
@@ -540,11 +551,11 @@ export default function CreativeDetailPage({ params }: PageProps) {
     if (!url) return
     try {
       await updateCreativePackage(tenantId, packageId, { videoUrl: url })
-      flash('Video URL updated')
+      flash('Video link saved')
       setVideoUrlDraft('')
       load()
     } catch {
-      flash('Failed to update video URL')
+      flash("We couldn't save that video link. Try again.")
     }
   }
 
@@ -569,10 +580,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
     setSavingSelected(true)
     try {
       await updateCreativePackage(tenantId, packageId, { selectedCopyIndex: variantIndex })
-      flash('Primary variant updated')
+      flash('Main version updated')
       await load()
     } catch {
-      flash('Failed to update primary variant')
+      flash("We couldn't change the main version. Try again.")
     } finally {
       setSavingSelected(false)
     }
@@ -589,9 +600,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
   if (error || !pkg) {
     return (
       <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-3xl mx-auto">
-        <p style={{ color: 'var(--bad)' }}>{error || 'Creative not found'}</p>
+        <p style={{ color: 'var(--bad)' }}>{error ? PLAIN_ERROR : 'We couldn’t find this creative. It may have been removed.'}</p>
+        {error && <Details className="mt-3" reference={packageId} items={[{ label: 'Error', value: error }]} />}
         <Link href={`/dashboard/${tenantId}/creatives`} className="text-sm font-medium mt-2 inline-block" style={{ color: 'var(--accent-strong)' }}>
-          ← Back to Creative studio
+          ← Back to your creatives
         </Link>
       </div>
     )
@@ -602,25 +614,28 @@ export default function CreativeDetailPage({ params }: PageProps) {
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1280px] mx-auto stagger pb-20">
       <Link href={`/dashboard/${tenantId}/creatives`} className="inline-flex items-center gap-1.5 text-sm font-medium mb-5" style={{ color: 'var(--ink-3)' }}>
-        <ArrowLeft size={14} /> Creative studio
+        <ArrowLeft size={14} /> Your creatives
       </Link>
 
       <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
         <div className="max-w-3xl">
-          <p className="micro-label mb-2">{pkg.productName || 'Creative'}{pkg.targetLanguage ? ` · ${pkg.targetLanguage}` : ''}{isCarousel ? ' · Carousel' : ''}</p>
-          <h1 className="page-title">Creative workspace</h1>
-          <p className="page-subtitle">Review the message, refine the media, and prepare every placement before this creative reaches a campaign.</p>
+          <p className="micro-label mb-2">{pkg.productName || 'Creative'}{pkg.targetLanguage ? ` · ${humanise(pkg.targetLanguage)}` : ''}{isCarousel ? ' · Carousel' : ''}</p>
+          <h1 className="page-title">This creative</h1>
+          <p className="page-subtitle">Check the words, fix the pictures and get every size ready before this goes into a campaign.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Derived from usable assets, not `status` alone — a package whose
               every asset was rejected is not "Ready". */}
-          <span className={`chip ${creativePackageStatus(pkg).chip}`}>{creativePackageStatus(pkg).label}</span>
+          {(() => {
+            const plain = plainStatus('creativePackage', PACKAGE_STATE_CODE[creativePackageStatus(pkg).label] ?? pkg.status ?? '')
+            return <span className={`chip ${toneChip(plain.tone)}`} title={plain.meaning || undefined}>{plain.label}</span>
+          })()}
           <button onClick={() => load()} className="btn btn-ghost"><RefreshCw size={14} /> Refresh</button>
         </div>
       </div>
 
       {toast && (
-        <div className="rounded-xl px-4 py-2.5 mb-5 text-[13px]" style={{ background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }}>
+        <div className="rounded-xl px-4 py-2.5 mb-5 text-[13px] break-words" style={{ background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }}>
           {toast}
         </div>
       )}
@@ -629,15 +644,15 @@ export default function CreativeDetailPage({ params }: PageProps) {
           thread reply; here it would hang forever unless we show it and let you answer. */}
       {pipelineRun?.pending_question && (
         <div className="rounded-xl px-4 py-3 mb-5" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
-          <p className="text-[13px] font-semibold mb-2" style={{ color: 'var(--warn)' }}>
+          <p className="text-[13px] font-semibold mb-2 break-words" style={{ color: 'var(--warn)' }}>
             {pipelineRun.pending_question}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <input
               value={clarifyDraft}
               onChange={e => setClarifyDraft(e.target.value)}
-              className="input flex-1"
-              placeholder="Answer to continue the revision…"
+              className="input flex-1 min-w-0"
+              placeholder="Your answer, so we can carry on…"
             />
             <button
               className="btn btn-accent"
@@ -679,7 +694,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                   )}
                 </div>
                 <div className="p-2">
-                  <p className="text-[11.5px] font-semibold truncate" style={{ color: 'var(--ink)' }}>{card.headline}</p>
+                  <p className="text-[11.5px] font-semibold truncate" style={{ color: 'var(--ink)' }} title={card.headline}>{card.headline}</p>
                   {card.description && <p className="text-[10.5px] truncate" style={{ color: 'var(--ink-3)' }}>{card.description}</p>}
                 </div>
               </div>
@@ -691,7 +706,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
           {/* ── Copy variants + images ── */}
           <section className="card p-6 mb-6">
             <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-              <p className="micro-label" style={{ margin: 0 }}>Copy variants ({pkg.copyVariants?.length ?? 0})</p>
+              <p className="micro-label" style={{ margin: 0 }}>Versions ({pkg.copyVariants?.length ?? 0})</p>
               {/* True crops from the Slack pipeline, distinct from the per-variant canvas-extend
                   below. Always offered: whether this package has a pipeline base is a question only
                   the pipeline can answer, and it says so with a 404 rather than us guessing here. */}
@@ -703,8 +718,8 @@ export default function CreativeDetailPage({ params }: PageProps) {
                   style={{ fontSize: '11.5px', padding: '4px 10px' }}
                 >
                   {pipelineResize.state === 'idle'
-                    ? <><LayoutGrid size={12} /> Generate all sizes</>
-                    : <><Loader2 size={12} className="animate-spin" /> Reframing…</>}
+                    ? <><LayoutGrid size={12} /> Make all sizes</>
+                    : <><Loader2 size={12} className="animate-spin" /> Making sizes…</>}
                 </button>
                 {pipelineResize.note && (
                   <p className="text-[11px] mt-1.5 max-w-[280px]" style={{ color: 'var(--ink-4)' }}>
@@ -728,27 +743,27 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 const sizeBreakdown = [
                   sizes.filter(s => s.extendedFrom).length,
                   sizes.filter(s => s.uploadedSizeOf).length,
-                ].map((n, idx) => (n ? `${n} ${idx === 0 ? 'auto-resized' : 'uploaded'}` : '')).filter(Boolean).join(', ')
+                ].map((n, idx) => (n ? `${n} ${idx === 0 ? 'resized for you' : 'uploaded'}` : '')).filter(Boolean).join(', ')
                 const busy = imageBusy[i] ?? null
                 return (
                   <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: isPrimary ? '2px solid var(--accent)' : '1px solid var(--hairline-light)' }}>
                     <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="chip chip-neutral">{variant.hookStyle || `Variant ${i + 1}`}</span>
-                        {isPrimary && <span className="chip chip-good">Primary</span>}
+                        <span className="chip chip-neutral">{variant.hookStyle ? humanise(variant.hookStyle) : `Version ${i + 1}`}</span>
+                        {isPrimary && <span className="chip chip-good" title="The version used first in campaigns">Main version</span>}
                       </div>
                       {!isPrimary && (
                         <button onClick={() => handleSetPrimary(i)} disabled={savingSelected} className="btn btn-ghost" style={{ fontSize: '11.5px', padding: '4px 10px' }}>
-                          <CheckCircle2 size={12} /> Set as primary
+                          <CheckCircle2 size={12} /> Make this the main version
                         </button>
                       )}
                     </div>
 
-                    <div className="grid md:grid-cols-[1fr_180px] gap-4">
-                      <div>
-                        <p className="text-[13px] font-semibold mb-1" style={{ color: 'var(--ink)' }}>{variant.headline}</p>
-                        <p className="text-[12.5px] leading-relaxed mb-2 whitespace-pre-wrap" style={{ color: 'var(--ink-2)' }}>{variant.primaryText}</p>
-                        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>CTA: {variant.cta}</p>
+                    <div className="grid md:grid-cols-[minmax(0,1fr)_180px] gap-4">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold mb-1 break-words" style={{ color: 'var(--ink)' }}>{variant.headline}</p>
+                        <p className="text-[12.5px] leading-relaxed mb-2 whitespace-pre-wrap break-words" style={{ color: 'var(--ink-2)' }}>{variant.primaryText}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Button: {variant.cta}</p>
                       </div>
 
                       <div>
@@ -768,7 +783,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                         {assetLocations[`image-${i}`] && (
                           <Link
                             href={`/dashboard/${tenantId}/gallery/${assetLocations[`image-${i}`].topicId}`}
-                            className="text-[10.5px] block mb-2"
+                            className="text-[10.5px] block mb-2 break-words"
                             style={{ color: 'var(--accent-strong)' }}
                           >
                             In gallery: {assetLocations[`image-${i}`].topicName} / {assetLocations[`image-${i}`].sheetName}
@@ -805,13 +820,13 @@ export default function CreativeDetailPage({ params }: PageProps) {
                         </div>
                         <div className="flex gap-1.5 mb-2">
                           <button onClick={() => handleRegenImage(i)} disabled={!!busy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
-                            <RefreshCw size={11} /> Retry
+                            <RefreshCw size={11} /> Try again
                           </button>
                           <button onClick={() => handleRewriteImage(i)} disabled={!!busy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
                             <Wand2 size={11} /> Rewrite
                           </button>
                           {!img?.rejected && (
-                            <button onClick={() => handleRejectImage(i)} disabled={!!busy} className="btn btn-ghost" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
+                            <button onClick={() => handleRejectImage(i)} disabled={!!busy} className="btn btn-ghost" aria-label="Reject this image" title="Reject this image" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
                               <XCircle size={11} />
                             </button>
                           )}
@@ -823,10 +838,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           disabled={!!busy || !!sizeBusy[i] || !img?.imageUrl}
                           className="btn btn-ghost w-full mb-2"
                           style={{ fontSize: '11px', padding: '5px 8px' }}
-                          title="Add the missing 9:16 / 4:5 / 1:1 / 16:9 versions by extending the canvas — nothing is cropped, no AI cost"
+                          title="Adds the missing tall, portrait, square and wide versions by widening the background — nothing is cut off, and it costs nothing"
                         >
                           {sizeBusy[i] ? <Loader2 size={11} className="animate-spin" /> : <Crop size={11} />}
-                          {sizeBusy[i] ? 'Resizing…' : 'Resize for placements'}
+                          {sizeBusy[i] ? 'Resizing…' : 'Fit to every placement'}
                         </button>
                         <div className="flex gap-1 mb-2">
                           <input
@@ -834,7 +849,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                             onChange={e => setEditDrafts(d => ({ ...d, [i]: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') handleEditImage(i) }}
                             disabled={!!busy}
-                            className="input"
+                            className="input min-w-0"
                             style={{ fontSize: '11px', padding: '4px 8px' }}
                             placeholder="Tweak this image (e.g. change heading to..., make background blue)"
                           />
@@ -845,7 +860,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                         {!!img?.editInstructions?.length && (
                           <div className="mb-2">
                             <p
-                              className="text-[10.5px]"
+                              className="text-[10.5px] break-words"
                               style={{
                                 color: 'var(--ink-3)',
                                 ...(expandedEditNote[i] ? {} : {
@@ -871,9 +886,9 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           <input
                             value={imageUrlDrafts[i] ?? ''}
                             onChange={e => setImageUrlDrafts(d => ({ ...d, [i]: e.target.value }))}
-                            className="input"
+                            className="input min-w-0"
                             style={{ fontSize: '11px', padding: '4px 8px' }}
-                            placeholder="Paste image URL"
+                            placeholder="Paste a link to an image"
                           />
                           <button onClick={() => handleSaveImageUrl(i)} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px' }}>Save</button>
                         </div>
@@ -921,7 +936,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                                 </div>
                                 <div className="px-2 py-1.5 flex items-center justify-between gap-1">
                                   <span className="text-[10.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-                                    {size.aspectRatio ?? '—'}
+                                    {({ '1:1': 'Square', '4:5': 'Portrait', '9:16': 'Tall', '16:9': 'Wide' } as Record<string, string>)[size.aspectRatio ?? ''] ?? size.aspectRatio ?? '—'}
                                   </span>
                                   <span className="text-[9.5px]" style={{ color: 'var(--ink-3)' }}>
                                     {size.extendedFrom ? 'Resized' : size.uploadedSizeOf ? 'Uploaded' : 'Original'}
@@ -943,9 +958,9 @@ export default function CreativeDetailPage({ params }: PageProps) {
           <section className="card p-6">
             <p className="micro-label mb-4">Video</p>
             {!pkg.video?.videoPrompt && !pkg.video?.videoUrl && (
-              <p className="text-[13px] mb-4" style={{ color: 'var(--ink-3)' }}>No AI-generated video for this creative yet (image-only or meme format) — but you can still import an externally-made video below.</p>
+              <p className="text-[13px] mb-4" style={{ color: 'var(--ink-3)' }}>No video for this creative yet (it may be an image-only format) — but you can add one you made elsewhere below.</p>
             )}
-            <div className="grid md:grid-cols-[240px_1fr] gap-4">
+            <div className="grid md:grid-cols-[240px_minmax(0,1fr)] gap-4">
               <div>
                 <div className="relative rounded-lg overflow-hidden mb-2" style={{ aspectRatio: '9/16', background: 'var(--surface-warm)' }}>
                   {pkg.video?.videoUrl ? (
@@ -965,7 +980,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 {assetLocations['video-0'] && (
                   <Link
                     href={`/dashboard/${tenantId}/gallery/${assetLocations['video-0'].topicId}`}
-                    className="text-[10.5px] block mb-1.5"
+                    className="text-[10.5px] block mb-1.5 break-words"
                     style={{ color: 'var(--accent-strong)' }}
                   >
                     In gallery: {assetLocations['video-0'].topicName} / {assetLocations['video-0'].sheetName}
@@ -1002,48 +1017,48 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 </div>
                 <div className="flex gap-1.5">
                   <button onClick={handleRegenVideo} disabled={!!videoBusy || !pkg.video?.videoPrompt} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
-                    <RefreshCw size={11} /> Retry
+                    <RefreshCw size={11} /> Try again
                   </button>
                   <button onClick={handleRewriteVideo} disabled={!!videoBusy} className="btn btn-ghost flex-1" style={{ fontSize: '11px', padding: '5px 8px' }}>
                     <Wand2 size={11} /> Rewrite
                   </button>
                   {pkg.video?.videoUrl && !pkg.video?.rejected && (
-                    <button onClick={handleRejectVideo} disabled={!!videoBusy} className="btn btn-ghost" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
+                    <button onClick={handleRejectVideo} disabled={!!videoBusy} className="btn btn-ghost" aria-label="Reject this video" title="Reject this video" style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--bad)' }}>
                       <XCircle size={11} />
                     </button>
                   )}
                 </div>
               </div>
               <div>
-                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Video prompt</p>
-                <p className="text-[12px] leading-relaxed mb-3" style={{ color: 'var(--ink-2)' }}>{pkg.video?.videoPrompt || '—'}</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>How the video is described</p>
+                <p className="text-[12px] leading-relaxed mb-3 break-words" style={{ color: 'var(--ink-2)' }}>{pkg.video?.videoPrompt || '—'}</p>
 
-                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Import from external URL (e.g. Higgsfield)</p>
-                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Downloads the file and re-hosts it permanently on our own S3, then saves it as this creative&rsquo;s video.</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Add a video from a link (e.g. Higgsfield)</p>
+                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>We download the video, keep our own copy so the link never breaks, and use it as this creative&rsquo;s video.</p>
                 <div className="flex gap-1.5 mb-3">
                   <input
                     value={videoImportUrl}
                     onChange={e => setVideoImportUrl(e.target.value)}
                     disabled={videoImportBusy}
-                    className="input"
+                    className="input min-w-0"
                     style={{ fontSize: '12px' }}
-                    placeholder="https://... (publicly reachable video URL)"
+                    placeholder="https://… (a link anyone can open)"
                   />
                   <button onClick={handleImportVideo} disabled={videoImportBusy || !videoImportUrl.trim()} className="btn btn-primary" style={{ fontSize: '12px' }}>
                     {videoImportBusy ? <Loader2 size={12} className="animate-spin" /> : null}
-                    {videoImportBusy ? 'Importing…' : 'Import'}
+                    {videoImportBusy ? 'Adding…' : 'Add'}
                   </button>
                 </div>
 
-                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Manual override</p>
-                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Already have a permanent URL? Set it directly, no re-hosting.</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--ink-3)' }}>Use a link as it is</p>
+                <p className="text-[10.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Already have a link that won&rsquo;t expire? Use it directly.</p>
                 <div className="flex gap-1.5">
                   <input
                     value={videoUrlDraft}
                     onChange={e => setVideoUrlDraft(e.target.value)}
-                    className="input"
+                    className="input min-w-0"
                     style={{ fontSize: '12px' }}
-                    placeholder="Paste video URL"
+                    placeholder="Paste a link to a video"
                   />
                   <button onClick={handleSaveVideoUrl} className="btn btn-ghost" style={{ fontSize: '12px' }}>Save</button>
                 </div>
@@ -1053,14 +1068,14 @@ export default function CreativeDetailPage({ params }: PageProps) {
 
           {/* ── Generate via Higgsfield — scene by scene ── */}
           <section className="card p-6">
-            <p className="micro-label mb-1">Generate via Higgsfield — scene by scene</p>
+            <p className="micro-label mb-1">Make a video scene by scene (Higgsfield)</p>
             <p className="text-[10.5px] mb-4" style={{ color: 'var(--ink-4)' }}>
-              Plans the video as short independent scenes (cheapest viable chunk size per scene — no on-screen text, since that doesn&rsquo;t survive short renders), lets you review and regenerate individual scenes, then merges only the approved ones into one final video — instead of paying for one long generation and hoping it&rsquo;s right.
+              Plans the video as a few short scenes (without on-screen text, which doesn&rsquo;t come out well in short clips). You check each scene, remake any you don&rsquo;t like, then join them into one video — cheaper than making one long video and hoping it&rsquo;s right.
             </p>
 
             <div className="grid md:grid-cols-3 gap-3 mb-3">
               <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Model</span>
+                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Video maker</span>
                 <select
                   value={sceneJobType}
                   onChange={e => setSceneJobType(e.target.value as typeof sceneJobType)}
@@ -1073,7 +1088,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 </select>
               </label>
               <label className="block">
-                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Total duration (seconds)</span>
+                <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Total length (seconds)</span>
                 <input
                   type="number"
                   min={4}
@@ -1091,7 +1106,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 value={sceneTopic}
                 onChange={e => setSceneTopic(e.target.value)}
                 disabled={scenePlanLoading}
-                className="input"
+                className="input min-w-0"
                 style={{ fontSize: '12px' }}
                 placeholder="Topic — e.g. a mother tying a sacred thread on her son's wrist at sunrise"
               />
@@ -1119,8 +1134,8 @@ export default function CreativeDetailPage({ params }: PageProps) {
                     return (
                       <div key={scene.sceneIndex} className="p-3 rounded-lg" style={{ border: '1px solid var(--border)' }}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Scene {scene.sceneIndex + 1} · {scene.durationSeconds}s</p>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={statusStyle}>{scene.status}</span>
+                          <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Scene {scene.sceneIndex + 1} · {scene.durationSeconds} sec</p>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold" style={statusStyle}>{({ completed: 'Ready', failed: 'Failed', pending: 'Not made yet', generating: 'Being made', running: 'Being made' } as Record<string, string>)[scene.status] ?? humanise(scene.status)}</span>
                         </div>
                         {scene.videoUrl ? (
                           <video src={scene.videoUrl} controls className="w-full rounded-lg mb-2" style={{ aspectRatio: '9/16', maxHeight: 240, background: 'var(--surface-warm)' }} />
@@ -1138,7 +1153,12 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           className="input mb-2"
                           style={{ fontSize: '11px', minHeight: 60 }}
                         />
-                        {scene.error && <p className="text-[10px] mb-2" style={{ color: 'var(--bad)' }}>{scene.error}</p>}
+                        {scene.error && (
+                          <>
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--bad)' }}>This scene didn&rsquo;t come out. Try remaking it.</p>
+                            <Details className="mb-2" title="Why" items={[{ label: 'Error', value: scene.error }]} />
+                          </>
+                        )}
                         <button
                           onClick={() => handleRegenerateScene(scene.sceneIndex)}
                           disabled={busy}
@@ -1146,14 +1166,14 @@ export default function CreativeDetailPage({ params }: PageProps) {
                           style={{ fontSize: '11px' }}
                         >
                           <RefreshCw size={11} className={sceneRegenerating === scene.sceneIndex ? 'animate-spin' : ''} />
-                          {sceneRegenerating === scene.sceneIndex ? 'Regenerating…' : 'Regenerate this scene'}
+                          {sceneRegenerating === scene.sceneIndex ? 'Remaking…' : 'Remake this scene'}
                         </button>
                       </div>
                     )
                   })}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={handleGenerateScenes}
                     disabled={sceneGenerating || sceneRegenerating !== null}
@@ -1161,7 +1181,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                     style={{ fontSize: '12px' }}
                   >
                     {sceneGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                    {sceneGenerating ? 'Generating scenes…' : 'Generate all scenes'}
+                    {sceneGenerating ? 'Making the scenes…' : 'Make all scenes'}
                   </button>
                   <button
                     onClick={handleMergeScenes}
@@ -1170,7 +1190,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                     style={{ fontSize: '12px' }}
                   >
                     {sceneMerging ? <Loader2 size={12} className="animate-spin" /> : null}
-                    {sceneMerging ? 'Merging…' : 'Merge into final video'}
+                    {sceneMerging ? 'Joining…' : 'Join into one video'}
                   </button>
                 </div>
               </>
@@ -1181,10 +1201,10 @@ export default function CreativeDetailPage({ params }: PageProps) {
             <section className="card p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <Volume2 size={14} style={{ color: 'var(--ink-3)' }} />
-                <h3 className="text-[13px] font-semibold">Add voiceover (Cartesia — Hindi/English)</h3>
+                <h3 className="text-[13px] font-semibold">Add a voiceover (Hindi or English)</h3>
               </div>
               <p className="text-[11px] mb-3" style={{ color: 'var(--ink-4)' }}>
-                Narrates a COPY of the current video — the original video.videoUrl is never overwritten. Leave the script blank to let the backend write a Devanagari narration script sized to the video&apos;s length automatically.
+                Adds narration to a copy of this video — the original is never changed. Leave the script blank and we&apos;ll write one in Hindi (Devanagari) that fits the video&apos;s length.
               </p>
               <textarea
                 value={voiceoverScriptDraft}
@@ -1192,7 +1212,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                 disabled={voiceoverBusy}
                 className="input mb-3"
                 style={{ fontSize: '12px', minHeight: 90 }}
-                placeholder="Leave blank to auto-generate a Devanagari Hindi/English script sized to this video…"
+                placeholder="Leave blank and we’ll write a script that fits this video…"
               />
               <div className="flex items-center gap-3 flex-wrap">
                 <button
@@ -1211,7 +1231,7 @@ export default function CreativeDetailPage({ params }: PageProps) {
                     onChange={e => setVoiceoverKeepBg(e.target.checked)}
                     disabled={voiceoverBusy}
                   />
-                  Keep video&apos;s background audio (ducked under narration)
+                  Keep the video&apos;s own sound, quieter under the voice
                 </label>
               </div>
               {pkg.videoWithVoiceoverUrl && (

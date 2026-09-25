@@ -13,15 +13,15 @@ import {
   FormatBadge,
   HookStyleChip,
 } from '@/components/badges'
-import { formatCurrency } from '@/lib/utils'
+import { formatInr, humanise, plainStatus } from '@/lib/plain-language'
 import type { IntelligenceBrief, CreativePackage, CopyVariant, Campaign } from '@/types'
 
 const SOURCE_META: Record<string, { label: string; icon: string }> = {
-  scout_signal: { label: 'Scout Signal', icon: '📡' },
-  viral_trend: { label: 'Viral Trend', icon: '🔥' },
-  competitor_gap: { label: 'Competitor Gap', icon: '🎯' },
-  market_insight: { label: 'Market Insight', icon: '📊' },
-  meta_ads_gap: { label: 'Meta Ads Gap', icon: '🏪' },
+  scout_signal: { label: 'Trend spotted', icon: '📡' },
+  viral_trend: { label: 'Going viral', icon: '🔥' },
+  competitor_gap: { label: 'Competitor gap', icon: '🎯' },
+  market_insight: { label: 'Market insight', icon: '📊' },
+  meta_ads_gap: { label: 'Gap in ads', icon: '🏪' },
 }
 
 function LargeScore({ score }: { score?: number }) {
@@ -29,7 +29,7 @@ function LargeScore({ score }: { score?: number }) {
   const color = score >= 8 ? 'var(--good)' : score >= 6 ? 'var(--warn)' : 'var(--bad)'
   const pct = Math.min(100, (score / 10) * 100)
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4" title="Score out of 10">
       <div>
         <span className="display-num text-4xl" style={{ color }}>{score.toFixed(1)}</span>
         <span className="text-sm font-medium ml-0.5" style={{ color: 'var(--ink-3)' }}>/10</span>
@@ -115,20 +115,20 @@ export function IdeaDetailPanel({
             <div className="flex items-center gap-2 flex-wrap mb-3">
               {isWinner ? (
                 <span className="chip chip-accent">
-                  <Star size={9} fill="currentColor" /> Strategy Pick
+                  <Star size={9} fill="currentColor" /> Top pick
                 </span>
               ) : isProduced ? (
                 <span className="chip chip-good">
-                  <CheckCircle2 size={9} /> Produced
+                  <CheckCircle2 size={9} /> Ads made
                 </span>
               ) : (
-                <span className="chip chip-neutral">Draft</span>
+                <span className="chip chip-neutral">Idea only</span>
               )}
-              {activeCampaign && <StatusBadge status={activeCampaign.status} />}
-              {src && <span className="text-[10px] font-medium px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{src.icon} {src.label}</span>}
+              {activeCampaign && <StatusBadge status={activeCampaign.status} domain="campaignStatus" />}
+              {src ? <span className="text-[10px] font-medium px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{src.icon} {src.label}</span> : brief.ideaSource ? <span className="text-[10px] font-medium px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>{humanise(brief.ideaSource)}</span> : null}
             </div>
 
-            <h2 className="font-display text-xl leading-snug mb-4 pr-10" style={{ color: 'var(--ink)' }}>{brief.topic}</h2>
+            <h2 className="font-display text-xl leading-snug mb-4 pr-10 break-words" style={{ color: 'var(--ink)' }}>{brief.topic}</h2>
             <LargeScore score={brief.finalScore} />
           </div>
         </div>
@@ -141,8 +141,8 @@ export function IdeaDetailPanel({
             <div className="flex items-center gap-2 flex-wrap">
               <AudienceStageBadge stage={brief.audienceStage} />
               {brief.explorationArm && <ExplorationBadge />}
-              {brief.platform && <span className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{brief.platform}</span>}
-              {brief.format && <span className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{brief.format}</span>}
+              {brief.platform && <span className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: 'var(--muted)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{humanise(brief.platform)}</span>}
+              {brief.format && <span className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{humanise(brief.format)}</span>}
               {brief.urgencyScore != null && brief.urgencyScore >= 8 && (
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-lg" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>Urgent</span>
               )}
@@ -155,7 +155,7 @@ export function IdeaDetailPanel({
                 this brief (signal→outcome traceability). */}
             {brief.sourceSignals && brief.sourceSignals.length > 0 && (
               <section>
-                <SectionLabel label="Inspired By" />
+                <SectionLabel label="What sparked this idea" />
                 <div className="flex flex-col gap-1.5">
                   {brief.sourceSignals.map((s, i) => (
                     <div
@@ -163,11 +163,11 @@ export function IdeaDetailPanel({
                       className="flex items-center gap-2 rounded-lg px-3 py-2"
                       style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)' }}
                     >
-                      <span className="mono text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--surface)', color: 'var(--info)', border: '1px solid var(--info-border)' }}>
+                      <span title="Strength, out of 10" className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--surface)', color: 'var(--info)', border: '1px solid var(--info-border)' }}>
                         {Number(s.compositeScore).toFixed(1)}
                       </span>
                       <p className="text-xs leading-snug min-w-0 truncate" style={{ color: 'var(--ink)' }} title={s.topic}>{s.topic}</p>
-                      <span className="ml-auto text-[10px] capitalize shrink-0" style={{ color: 'var(--info)' }}>
+                      <span className="ml-auto text-[10px] capitalize truncate max-w-[40%]" style={{ color: 'var(--info)' }}>
                         {(s.platforms ?? []).join(', ')}
                       </span>
                     </div>
@@ -178,44 +178,44 @@ export function IdeaDetailPanel({
 
             {/* Strategy Brief */}
             <section>
-              <SectionLabel label="Strategy Brief" />
+              <SectionLabel label="The brief" />
               <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hairline)' }}>
                 {brief.angle && (
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
-                    <p className="micro-label mb-1">Angle</p>
+                    <p className="micro-label mb-1">Message angle</p>
                     <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{brief.angle}</p>
                   </div>
                 )}
                 {brief.hook && (
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--hairline-light)', background: 'var(--accent-bg)' }}>
-                    <p className="micro-label mb-1">Hook</p>
+                    <p className="micro-label mb-1">Opening line</p>
                     <p className="text-sm leading-relaxed italic" style={{ color: 'var(--accent-strong)' }}>&ldquo;{brief.hook}&rdquo;</p>
                   </div>
                 )}
                 {brief.keyMessage && (
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
-                    <p className="micro-label mb-1">Key Message</p>
+                    <p className="micro-label mb-1">Main message</p>
                     <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{brief.keyMessage}</p>
                   </div>
                 )}
                 {brief.conversionBridge && (
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--hairline-light)' }}>
-                    <p className="micro-label mb-1">Conversion Bridge</p>
+                    <p className="micro-label mb-1">Why people will act</p>
                     <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>{brief.conversionBridge}</p>
                   </div>
                 )}
-                <div className="grid grid-cols-3" style={{ background: 'var(--surface-warm)' }}>
-                  <div className="px-4 py-3" style={{ borderRight: '1px solid var(--hairline-light)' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3" style={{ background: 'var(--surface-warm)' }}>
+                  <div className="px-4 py-3 min-w-0" style={{ borderRight: '1px solid var(--hairline-light)' }}>
                     <p className="micro-label text-[9px] mb-0.5">Audience</p>
-                    <p className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{brief.audience || '—'}</p>
+                    <p className="text-xs font-medium break-words" style={{ color: 'var(--ink-2)' }}>{brief.audience || '—'}</p>
                   </div>
                   <div className="px-4 py-3" style={{ borderRight: '1px solid var(--hairline-light)' }}>
                     <p className="micro-label text-[9px] mb-0.5">Product</p>
-                    <p className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{brief.product || '—'}</p>
+                    <p className="text-xs font-medium break-words" style={{ color: 'var(--ink-2)' }}>{brief.product || '—'}</p>
                   </div>
                   <div className="px-4 py-3">
-                    <p className="micro-label text-[9px] mb-0.5">Budget</p>
-                    <p className="mono text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{brief.suggestedBudget ? formatCurrency(brief.suggestedBudget) : '—'}</p>
+                    <p className="micro-label text-[9px] mb-0.5">Suggested budget</p>
+                    <p className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>{brief.suggestedBudget ? formatInr(brief.suggestedBudget) : '—'}</p>
                   </div>
                 </div>
               </div>
@@ -224,18 +224,18 @@ export function IdeaDetailPanel({
             {/* Per-Ad-Set Performance — populated after Day 7/14/30 captures */}
             {brief.adSetPerformance && brief.adSetPerformance.length > 0 && (
               <section>
-                <SectionLabel label="Ad-Set Performance" />
-                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hairline)' }}>
+                <SectionLabel label="How each audience group did" />
+                <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--hairline)' }}>
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Ad Set</th>
-                        <th>Day</th>
-                        <th className="num">Spend</th>
-                        <th className="num">Conv.</th>
-                        <th className="num">CTR</th>
-                        <th className="num">CPA</th>
-                        <th className="num">ROAS</th>
+                        <th>Audience group</th>
+                        <th>Checked on</th>
+                        <th className="num">Spent</th>
+                        <th className="num">Sales</th>
+                        <th className="num" title="Click rate: the share of people who saw the ad and clicked it">Click rate</th>
+                        <th className="num" title="Cost per sale: how much was spent for each sale">Cost per sale</th>
+                        <th className="num" title="Return on ad spend: revenue for every ₹1 spent">Return</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -248,7 +248,7 @@ export function IdeaDetailPanel({
                               <div className="flex items-center gap-1 flex-wrap mt-1">
                                 {p.audienceType && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded capitalize" style={{ background: 'var(--muted)', color: 'var(--ink-3)' }}>
-                                    {p.audienceType.replace(/_/g, ' ')}
+                                    {plainStatus('audienceKind', p.audienceType).label}
                                   </span>
                                 )}
                                 {p.formats?.map((f) => <FormatBadge key={f} format={f} />)}
@@ -259,14 +259,14 @@ export function IdeaDetailPanel({
                               </div>
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className="mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>D{p.capturedAtDay}</span>
+                              <span className="text-[10px] whitespace-nowrap px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-2)' }}>Day {p.capturedAtDay}</span>
                             </td>
-                            <td className="num mono text-xs">{formatCurrency(p.spend)}</td>
+                            <td className="num mono text-xs">{formatInr(p.spend)}</td>
                             <td className="num mono text-xs font-medium" style={{ color: 'var(--ink)' }}>{p.conversions}</td>
                             <td className="num mono text-xs">{p.ctr.toFixed(2)}%</td>
-                            <td className="num mono text-xs">{formatCurrency(p.cpa)}</td>
+                            <td className="num mono text-xs">{formatInr(p.cpa)}</td>
                             <td className="num mono text-xs font-bold" style={{ color: roasColor }}>
-                              {p.roas.toFixed(2)}x
+                              ₹{p.roas.toFixed(2)} per ₹1
                             </td>
                           </tr>
                         )
@@ -280,9 +280,9 @@ export function IdeaDetailPanel({
             {/* Creative Output */}
             {creativePackage && copyVariants && copyVariants.length > 0 && (
               <section>
-                <SectionLabel label="Creative Output" />
+                <SectionLabel label="The ads" />
                 <div className="flex flex-col gap-3">
-                  <p className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Copy Variants ({copyVariants.length})</p>
+                  <p className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Ad text options ({copyVariants.length})</p>
                   {copyVariants.map((v, idx) => {
                     const isSel = idx === selectedCopyIndex
                     return (
@@ -291,8 +291,8 @@ export function IdeaDetailPanel({
                         border: isSel ? '1.5px solid var(--accent)' : '1px solid var(--hairline)',
                       }}>
                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                          {isSel && <span className="chip chip-accent">Selected</span>}
-                          {v.hookStyle && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-3)' }}>{v.hookStyle}</span>}
+                          {isSel && <span className="chip chip-accent">Chosen</span>}
+                          {v.hookStyle && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--ink-3)' }}>{humanise(v.hookStyle)}</span>}
                           {v.cta && <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{v.cta}</span>}
                         </div>
                         {v.headline && <p className="text-sm font-semibold mb-1" style={{ color: 'var(--ink)' }}>{v.headline}</p>}
@@ -303,18 +303,18 @@ export function IdeaDetailPanel({
 
                   {creativePackage.images?.[selectedCopyIndex ?? 0]?.imageUrl && (
                     <div>
-                      <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-3)' }}>Generated Image</p>
+                      <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-3)' }}>The picture</p>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={creativePackage.images[selectedCopyIndex ?? 0]!.imageUrl} alt="Creative" className="rounded-lg w-full" style={{ border: '1px solid var(--hairline)' }} />
+                      <img src={creativePackage.images[selectedCopyIndex ?? 0]!.imageUrl} alt="The ad picture" className="rounded-lg w-full max-w-full" style={{ border: '1px solid var(--hairline)' }} />
                     </div>
                   )}
                   {creativePackage.imagePrompt && !creativePackage.images?.[selectedCopyIndex ?? 0]?.imageUrl && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}><ImageIcon size={11} className="inline mr-1" />Image Prompt</p>
+                        <p className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}><ImageIcon size={11} className="inline mr-1" />How the picture is described</p>
                         <button onClick={() => navigator.clipboard.writeText(creativePackage.imagePrompt || '')} className="text-[10px] transition-colors" style={{ color: 'var(--ink-3)' }}><Copy size={10} className="inline mr-0.5" />Copy</button>
                       </div>
-                      <div className="card-inset rounded-lg p-3"><p className="mono text-xs leading-relaxed" style={{ color: 'var(--ink-2)' }}>{creativePackage.imagePrompt}</p></div>
+                      <div className="card-inset rounded-lg p-3"><p className="text-xs leading-relaxed break-words" style={{ color: 'var(--ink-2)' }}>{creativePackage.imagePrompt}</p></div>
                     </div>
                   )}
                   {creativePackage.video?.videoUrl && (
@@ -325,7 +325,7 @@ export function IdeaDetailPanel({
                   )}
                   {creativePackage.complianceNotes && (
                     <div className="rounded-lg p-3" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
-                      <p className="micro-label mb-1" style={{ color: 'var(--warn)' }}>Compliance</p>
+                      <p className="micro-label mb-1" style={{ color: 'var(--warn)' }}>Ad policy notes</p>
                       <p className="text-xs leading-relaxed" style={{ color: 'var(--warn)' }}>{creativePackage.complianceNotes}</p>
                     </div>
                   )}
@@ -338,30 +338,30 @@ export function IdeaDetailPanel({
               <section>
                 <SectionLabel label="Campaign" />
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hairline)' }}>
-                  <div className="grid grid-cols-3" style={{ background: 'var(--surface-warm)' }}>
-                    <div className="px-4 py-3" style={{ borderRight: '1px solid var(--hairline-light)' }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3" style={{ background: 'var(--surface-warm)' }}>
+                    <div className="px-4 py-3 min-w-0" style={{ borderRight: '1px solid var(--hairline-light)' }}>
                       <p className="micro-label text-[9px] mb-1">Status</p>
-                      <StatusBadge status={activeCampaign.status} />
+                      <StatusBadge status={activeCampaign.status} domain="campaignStatus" />
                     </div>
                     <div className="px-4 py-3" style={{ borderRight: '1px solid var(--hairline-light)' }}>
                       <p className="micro-label text-[9px] mb-1">Budget</p>
-                      <p className="display-num text-base" style={{ color: 'var(--ink)' }}>{activeCampaign.budget ? formatCurrency(activeCampaign.budget) : '—'}</p>
+                      <p className="display-num text-base" style={{ color: 'var(--ink)' }}>{activeCampaign.budget ? formatInr(activeCampaign.budget) : '—'}</p>
                     </div>
                     <div className="px-4 py-3">
                       <p className="micro-label text-[9px] mb-1">Objective</p>
-                      <p className="text-xs" style={{ color: 'var(--ink-2)' }}>{activeCampaign.objective || '—'}</p>
+                      <p className="text-xs" style={{ color: 'var(--ink-2)' }}>{plainStatus('objective', activeCampaign.objective).label}</p>
                     </div>
                   </div>
 
                   {isWinner && activeCampaign.status === 'pending_approval' && onApprove && onRejectOpen && (
                     <div className="p-4" style={{ borderTop: '1px solid var(--hairline)' }}>
-                      <p className="text-sm font-semibold text-center mb-3" style={{ color: 'var(--ink-2)' }}>Awaiting your approval</p>
+                      <p className="text-sm font-semibold text-center mb-3" style={{ color: 'var(--ink-2)' }}>Waiting for your approval</p>
                       <div className="flex gap-2">
                         <button onClick={onApprove} disabled={approveState !== 'idle'}
                           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-bold transition-all disabled:opacity-60"
                           style={{ background: 'var(--good)', color: '#fff' }}>
                           {approveState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <ThumbsUp size={14} />}
-                          {approveState === 'loading' ? 'Approving...' : approveState === 'success' ? 'Approved!' : 'Approve'}
+                          {approveState === 'loading' ? 'Approving…' : approveState === 'success' ? 'Approved' : 'Approve'}
                         </button>
                         <button onClick={onRejectOpen} className="btn btn-danger flex-1">
                           <XCircle size={14} /> Reject
@@ -369,15 +369,15 @@ export function IdeaDetailPanel({
                       </div>
                       {rejectOpen && (
                         <div className="mt-3 rounded-lg p-3" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)' }}>
-                          <p className="text-xs font-bold mb-1" style={{ color: 'var(--bad)' }}>Reason</p>
+                          <p className="text-xs font-bold mb-1" style={{ color: 'var(--bad)' }}>Why are you rejecting it?</p>
                           <textarea value={rejectReason} onChange={(e) => onRejectReasonChange?.(e.target.value)}
-                            placeholder="Describe why..." rows={2}
+                            placeholder="A sentence is enough…" rows={2}
                             className="w-full rounded-lg px-3 py-2 text-xs resize-none outline-none"
                             style={{ background: 'var(--surface)', border: '1px solid var(--bad-border)', color: 'var(--ink)' }} />
                           <div className="flex items-center gap-2 mt-2">
                             <button onClick={onReject} disabled={rejectState === 'loading' || !(rejectReason ?? '').trim()}
                               className="btn btn-danger px-3 py-1.5 text-xs">
-                              {rejectState === 'loading' ? 'Rejecting...' : 'Confirm'}
+                              {rejectState === 'loading' ? 'Rejecting…' : 'Reject'}
                             </button>
                             <button onClick={onRejectCancel} className="text-xs" style={{ color: 'var(--ink-3)' }}>Cancel</button>
                           </div>
@@ -390,7 +390,7 @@ export function IdeaDetailPanel({
                     <Link href={`/dashboard/${tenantId}/campaigns/${activeCampaign._id}`}
                       className="flex items-center justify-between px-4 py-3 text-xs font-semibold no-underline transition-colors"
                       style={{ borderTop: '1px solid var(--hairline)', color: 'var(--accent)' }}>
-                      View full campaign <ExternalLink size={12} />
+                      See the full campaign <ExternalLink size={12} />
                     </Link>
                   )}
                 </div>
@@ -406,20 +406,20 @@ export function IdeaDetailPanel({
               className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-[10px] text-sm font-bold transition-all disabled:opacity-60"
               style={{ background: 'var(--accent)', color: '#fff' }}>
               {producing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {producing ? 'Starting...' : 'Produce This Idea'}
+              {producing ? 'Starting…' : 'Make ads for this idea'}
             </button>
           )}
           {isProduced && activeCampaign?._id && (
             <Link href={`/dashboard/${tenantId}/campaigns/${activeCampaign._id}`}
               className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-[10px] text-sm font-bold no-underline"
               style={{ background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' }}>
-              View Campaign <ArrowRight size={14} />
+              See the campaign <ArrowRight size={14} />
             </Link>
           )}
           {isProduced && !activeCampaign && (
             <div className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-[10px] text-sm font-medium"
               style={{ background: 'var(--muted)', color: 'var(--ink-3)' }}>
-              <Loader2 size={14} className="animate-spin" /> Preparing...
+              Making the ads — this can take a few minutes. Check back soon.
             </div>
           )}
           <button onClick={onClose} className="btn btn-ghost px-4 py-3">Close</button>

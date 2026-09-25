@@ -4,6 +4,8 @@ import { useRef, useState } from 'react'
 import { Upload, Plus, Trash2, CheckCircle2, XCircle, Loader2, Link as LinkIcon, File as FileIcon, X, AlertTriangle, Crop } from 'lucide-react'
 import { uploadCreativeBulk, uploadCreativeFile } from '@/lib/api'
 import type { UploadCreativeResult } from '@/lib/api'
+import { Details } from '@/components/plain/Details'
+import { errorDetail } from '@/lib/plain-language'
 
 /**
  * Where one asset's bytes come from — a file off this machine (default) or a
@@ -121,6 +123,8 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
   const [uploading, setUploading] = useState(false)
   const [results, setResults] = useState<UploadCreativeResult[] | null>(null)
   const [error, setError] = useState('')
+  // The raw reason behind a failed submit, for <Details> only — the sentence above is what is read.
+  const [errorRaw, setErrorRaw] = useState('')
 
   function addRow() {
     setRows(r => [...r, emptyUploadRow()])
@@ -188,7 +192,7 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
       const { url } = await uploadCreativeFile(tenantId, file)
       patch({ fileUploading: false, sourceUrl: url })
     } catch (e) {
-      patch({ fileUploading: false, fileError: e instanceof Error ? e.message : 'Upload failed', fileName: '' })
+      patch({ fileUploading: false, fileError: errorDetail(e) || 'Upload failed', fileName: '' })
     }
   }
 
@@ -214,17 +218,18 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
     if (!product) { setError('Pick a product'); return }
     if (rows.some(r => r.fileUploading || r.sizes.some(s => s.fileUploading))) { setError('Wait for file uploads to finish'); return }
     if (rows.some(r => r.sizes.some(s => !s.sourceUrl.trim()))) {
-      setError('Every extra size needs a file or URL — remove the empty one if you did not mean to add it')
+      setError('Every extra size needs a file or link — remove the empty one if you did not mean to add it')
       return
     }
     const incomplete = rows.some(r => !r.sourceUrl.trim() || !r.headline.trim() || !r.primaryText.trim() || !r.cta.trim())
     if (incomplete) {
       setError(rows.some(r => r.sourceMode === 'upload' && !r.sourceUrl.trim())
-        ? 'Every row needs a creative file, headline, primary text, and CTA'
-        : 'Every row needs a source URL, headline, primary text, and CTA')
+        ? 'Every creative needs a file, a headline, the main text and a button label'
+        : 'Every creative needs a link, a headline, the main text and a button label')
       return
     }
     setError('')
+    setErrorRaw('')
     setUploading(true)
     setResults(null)
     try {
@@ -253,7 +258,8 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
       }
       onUploaded()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to upload creatives')
+      setError("We couldn't upload your creatives. Try again.")
+      setErrorRaw(errorDetail(e))
     } finally {
       setUploading(false)
     }
@@ -289,12 +295,12 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
           return (
             <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Row {i + 1}</span>
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>Creative {i + 1}</span>
                 <div className="flex items-center gap-2">
                   {result && (
                     result.status === 'completed'
                       ? <span className="chip chip-good"><CheckCircle2 size={11} /> Uploaded</span>
-                      : <span className="chip chip-bad" title={result.error}><XCircle size={11} /> Failed</span>
+                      : <span className="chip chip-bad"><XCircle size={11} /> Didn&apos;t upload</span>
                   )}
                   {rows.length > 1 && (
                     <button onClick={() => removeRow(i)} disabled={uploading} className="p-1 rounded-md" style={{ color: 'var(--bad)' }}>
@@ -304,16 +310,26 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
                 </div>
               </div>
               {result?.status === 'failed' && (
-                <p className="text-[11px] mb-2" style={{ color: 'var(--bad)' }}>{result.error}</p>
+                <p className="text-[11px] mb-2" style={{ color: 'var(--bad)' }}>We couldn&apos;t add this one. Check the file or link and try again.</p>
               )}
               {!!result?.sizeErrors?.length && (
                 <p className="text-[11px] mb-2 flex items-start gap-1" style={{ color: 'var(--warn, var(--bad))' }}>
                   <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                   <span>
                     The creative uploaded, but {result.sizeErrors.length} extra size
-                    {result.sizeErrors.length === 1 ? '' : 's'} did not: {result.sizeErrors.map(s => s.error).join('; ')}
+                    {result.sizeErrors.length === 1 ? '' : 's'} did not.
                   </span>
                 </p>
+              )}
+              {result && (result.status === 'failed' || !!result.sizeErrors?.length) && (
+                <Details
+                  className="mb-2"
+                  title="Why"
+                  items={[
+                    ...(result.error ? [{ label: 'Reason', value: result.error }] : []),
+                    ...(result.sizeErrors ?? []).map((s, k) => ({ label: `Extra size ${k + 1}`, value: s.error })),
+                  ]}
+                />
               )}
               <div className="grid md:grid-cols-[120px_1fr] gap-3 mb-3">
                 <label className="block">
@@ -410,7 +426,7 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
                   <input value={row.headline} onChange={e => updateRow(i, { headline: e.target.value })} className="input" disabled={uploading} />
                 </label>
                 <label className="block">
-                  <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>CTA</span>
+                  <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Button label</span>
                   <input value={row.cta} onChange={e => updateRow(i, { cta: e.target.value })} className="input" placeholder="e.g. Get My Report" disabled={uploading} />
                 </label>
               </div>
@@ -424,6 +440,7 @@ export function CreativeUploadForm({ tenantId, products, defaultProduct, fixedTo
       </div>
 
       {error && <p className="text-[13px] mb-3" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {errorRaw && <Details className="mb-3" items={[{ label: 'Error', value: errorRaw }]} />}
 
       <div className="flex items-center gap-2">
         <button onClick={addRow} disabled={uploading} className="btn btn-ghost">
@@ -487,7 +504,7 @@ function AssetSourceField({ label, source, accept, disabled, compact, onPatch, o
             className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold"
             style={source.sourceMode === 'url' ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)' } : { color: 'var(--ink-3)' }}
           >
-            <LinkIcon size={11} /> Paste URL
+            <LinkIcon size={11} /> Paste a link
           </button>
         </div>
       </div>
@@ -553,7 +570,12 @@ function AssetSourceField({ label, source, accept, disabled, compact, onPatch, o
             : ' — not one of the four placement ratios, so it stays untagged'}
         </p>
       )}
-      {source.fileError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{source.fileError}</p>}
+      {source.fileError && (
+        <>
+          <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>We couldn&apos;t upload this file. Try again.</p>
+          <Details title="Why" items={[{ label: 'Reason', value: source.fileError }]} />
+        </>
+      )}
     </div>
   )
 }

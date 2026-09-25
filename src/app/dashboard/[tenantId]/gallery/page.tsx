@@ -19,6 +19,8 @@ import {
 import { listGalleryTopics, createGalleryTopic, renameGalleryTopic, deleteGalleryTopic } from '@/lib/api'
 import type { GalleryTopicSummary } from '@/lib/api'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { Details } from '@/components/plain/Details'
+import { PLAIN_ERROR, errorDetail } from '@/lib/plain-language'
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
@@ -33,6 +35,8 @@ export default function GalleryTopicsPage({ params }: PageProps) {
   const [newTopicName, setNewTopicName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  // The raw reason behind `error` — shown only inside <Details>.
+  const [errorRaw, setErrorRaw] = useState('')
 
   // Inline rename — click the pencil on a card, edit in place, Enter/check to save.
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -46,9 +50,10 @@ export default function GalleryTopicsPage({ params }: PageProps) {
     try {
       const list = await listGalleryTopics(tenantId)
       setTopics(list)
-      setError('')
+      setError(''); setErrorRaw('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load gallery')
+      setError(PLAIN_ERROR)
+      setErrorRaw(errorDetail(e))
     } finally {
       setLoading(false)
     }
@@ -62,12 +67,12 @@ export default function GalleryTopicsPage({ params }: PageProps) {
     setCreating(true)
     try {
       await createGalleryTopic(tenantId, name)
-      setError('')
+      setError(''); setErrorRaw('')
       setNewTopicName('')
       setShowNewTopic(false)
       await load()
     } catch {
-      setError('Failed to create topic')
+      setError("We couldn't create the topic. Try again.")
     } finally {
       setCreating(false)
     }
@@ -86,11 +91,11 @@ export default function GalleryTopicsPage({ params }: PageProps) {
     setRenaming(true)
     try {
       await renameGalleryTopic(tenantId, topicId, name)
-      setError('')
+      setError(''); setErrorRaw('')
       setRenamingId(null)
       await load()
     } catch {
-      setError('Failed to rename topic')
+      setError("We couldn't rename the topic. Try again.")
     } finally {
       setRenaming(false)
     }
@@ -101,11 +106,11 @@ export default function GalleryTopicsPage({ params }: PageProps) {
     setDeleting(true)
     try {
       await deleteGalleryTopic(tenantId, deleteTarget._id)
-      setError('')
+      setError(''); setErrorRaw('')
       setDeleteTarget(null)
       await load()
     } catch {
-      setError('Failed to delete topic')
+      setError("We couldn't delete the topic. Try again.")
     } finally {
       setDeleting(false)
     }
@@ -131,13 +136,13 @@ export default function GalleryTopicsPage({ params }: PageProps) {
     <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto stagger">
       <div className="flex items-start justify-between gap-5 mb-6 flex-wrap">
         <div className="max-w-2xl">
-          <p className="micro-label mb-2">Creative Studio · Gallery</p>
-          <h1 className="page-title">Organize creative for reuse</h1>
-          <p className="page-subtitle">Group generated and uploaded assets by product, idea or campaign so reusable work is ready for the next launch.</p>
+          <p className="micro-label mb-2">Creatives · Gallery</p>
+          <h1 className="page-title">Organise your ads to use again</h1>
+          <p className="page-subtitle">Group the ads you&apos;ve made or uploaded by product, idea or campaign, so they&apos;re ready for your next launch.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Link href={`/dashboard/${tenantId}/creatives`} className="btn btn-ghost">
-            <Sparkles size={14} /> Creative Studio
+            <Sparkles size={14} /> Creatives
           </Link>
           <button type="button" onClick={() => setShowNewTopic(s => !s)} className="btn btn-primary" aria-expanded={showNewTopic}>
             <Plus size={14} /> New topic
@@ -149,7 +154,7 @@ export default function GalleryTopicsPage({ params }: PageProps) {
         {[
           { label: 'Topics', value: topics.length, icon: FolderOpen, color: 'var(--accent)', background: 'var(--accent-bg)' },
           { label: 'Sheets', value: totalSheets, icon: LayoutGrid, color: 'var(--info)', background: 'var(--info-bg)' },
-          { label: 'Assets organized', value: totalAssets, icon: ImageIcon, color: 'var(--good)', background: 'var(--good-bg)' },
+          { label: 'Images and videos', value: totalAssets, icon: ImageIcon, color: 'var(--good)', background: 'var(--good-bg)' },
         ].map(({ label, value, icon: Icon, color, background }) => (
           <div key={label} className="card p-3.5 sm:p-4 flex items-center gap-3 min-w-0">
             <div className="hidden sm:flex w-9 h-9 rounded-lg items-center justify-center shrink-0" style={{ color, background }}><Icon size={16} /></div>
@@ -189,19 +194,20 @@ export default function GalleryTopicsPage({ params }: PageProps) {
 
       {error && (
         <div className="rounded-xl px-4 py-3 mb-5 flex items-center justify-between gap-3 text-[13px]" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }} role="alert">
-          <span>{error}</span>
+          <span className="min-w-0 break-words">{error}</span>
           <button type="button" onClick={() => { setLoading(true); void load() }} className="btn btn-ghost shrink-0"><RefreshCw size={13} /> Retry</button>
         </div>
       )}
+      {error && errorRaw && <Details className="mb-5" items={[{ label: 'Error', value: errorRaw }]} />}
 
       {topics.length === 0 ? (
         <div className="card px-6 py-14 text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-bg)', color: 'var(--accent-strong)' }}><LayoutGrid size={22} /></div>
-          <h2 className="section-title">Build your first reusable collection</h2>
-          <p className="text-[13px] mt-2 mx-auto max-w-md" style={{ color: 'var(--ink-3)' }}>Generated creative arrives here automatically, or you can create a topic now to organize work before production begins.</p>
+          <h2 className="section-title">Start your first collection</h2>
+          <p className="text-[13px] mt-2 mx-auto max-w-md" style={{ color: 'var(--ink-3)' }}>Ads you make show up here by themselves. Or create a topic now to get organised before you start.</p>
           <div className="flex items-center justify-center gap-2 mt-5 flex-wrap">
             <button type="button" onClick={() => setShowNewTopic(true)} className="btn btn-primary"><Plus size={14} /> Create topic</button>
-            <Link href={`/dashboard/${tenantId}/creatives`} className="btn btn-ghost"><Sparkles size={14} /> Generate creative</Link>
+            <Link href={`/dashboard/${tenantId}/creatives`} className="btn btn-ghost"><Sparkles size={14} /> Make ads</Link>
           </div>
         </div>
       ) : (
@@ -237,7 +243,7 @@ export default function GalleryTopicsPage({ params }: PageProps) {
                         <div className="rounded-xl p-2.5 shrink-0" style={{ background: 'var(--accent-bg)' }}><FolderOpen size={17} style={{ color: 'var(--accent-strong)' }} /></div>
                         <div className="min-w-0">
                           <h2 className="text-[14px] font-semibold truncate" style={{ color: 'var(--ink)' }}>{topic.name}</h2>
-                          <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>Creative topic</p>
+                          <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>Topic</p>
                         </div>
                       </Link>
                       <div className="flex items-center gap-1 shrink-0">
@@ -248,7 +254,7 @@ export default function GalleryTopicsPage({ params }: PageProps) {
                     <Link href={`/dashboard/${tenantId}/gallery/${topic._id}`} className="mt-auto pt-6 block group">
                       <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--ink-3)' }}>
                         <span>{topic.sheetCount} sheet{topic.sheetCount === 1 ? '' : 's'}</span>
-                        <span className="flex items-center gap-1"><ImageIcon size={12} /> {topic.assetCount} asset{topic.assetCount === 1 ? '' : 's'}</span>
+                        <span className="flex items-center gap-1"><ImageIcon size={12} /> {topic.assetCount} {topic.assetCount === 1 ? 'image or video' : 'images and videos'}</span>
                       </div>
                       <div className="flex items-center justify-between mt-3 pt-3 text-[12px] font-semibold" style={{ borderTop: '1px solid var(--hairline-light)', color: 'var(--accent-strong)' }}>
                         Open topic <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
@@ -265,7 +271,7 @@ export default function GalleryTopicsPage({ params }: PageProps) {
       <ConfirmModal
         open={deleteTarget !== null}
         title={`Delete topic "${deleteTarget?.name ?? ''}"?`}
-        description="Removes this topic, all its sheets, and their asset pointers from the gallery. The underlying creatives are never touched — only how they were organized."
+        description="Removes this topic and its sheets from the Gallery. Your ads themselves are kept — only how they were organised goes."
         confirmLabel="Delete topic"
         variant="danger"
         loading={deleting}
