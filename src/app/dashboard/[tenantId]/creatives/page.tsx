@@ -180,12 +180,24 @@ export default function CreativesPage({ params }: PageProps) {
   const [engine, setEngine] = useState<'standard' | 'pipeline'>('standard')
   const [cbOptions, setCbOptions] = useState<CustomBriefOptions | null>(null)
   const [cbOptionsError, setCbOptionsError] = useState('')
+
+  // What the blank disclaimer entry means, in words, read from the served options rather than
+  // hardcoded — the pipeline owns the default and this label must not drift from it.
+  const defaultDisclaimerLabel = (() => {
+    const d = cbOptions?.disclaimers
+    if (!d) return 'no disclaimer'
+    return (d.astro.find(o => o.value === d.default_astro)?.label ?? d.default_astro).toLowerCase()
+  })()
   const [cbMethod, setCbMethod] = useState<CustomBriefMethod>('create')
   const [cbTrack, setCbTrack] = useState<CustomBriefTrack>('polished')
   // WHICH product the creative is for. Deliberately starts empty with no default: the pipeline
   // used to receive no product at all and fall back to its manifest default, so every brief here
   // became a Nadi Report. Pre-selecting the first option would just move that guess into the form.
   const [cbOffering, setCbOffering] = useState('')
+  // The disclaimer. '' means "send nothing" and let the pipeline apply its default, which
+  // for astro is `none` — the whole point of the change that added this control is that a
+  // disclaimer is now chosen rather than assumed.
+  const [cbDisclaimer, setCbDisclaimer] = useState('')
   // "Add a new product": a landing page URL is scraped into a research pack and registered, so the
   // product becomes pickable without anyone touching the pipeline's manifest by hand.
   const [cbAddOpen, setCbAddOpen] = useState(false)
@@ -506,6 +518,9 @@ export default function CreativesPage({ params }: PageProps) {
         // The product. Sent for 'create' only; a research run discovers the subject rather than
         // being told it, and the pipeline infers it there only when unambiguous.
         offering: cbMethod === 'create' ? cbOffering : undefined,
+        // Blank = let the pipeline default it (astro: no disclaimer). A research run authors no
+        // creative, so there is nothing for a disclaimer to sit on.
+        disclaimer_choice: cbMethod === 'create' ? (cbDisclaimer || undefined) : undefined,
         // Several languages SPLIT the run round-robin rather than multiplying it.
         languages: cbSelectedLanguages.length ? cbSelectedLanguages : undefined,
         formats: cbFormats.length ? cbFormats : undefined,
@@ -861,6 +876,33 @@ export default function CreativesPage({ params }: PageProps) {
                       ? 'No products are set up yet — add one below to get started.'
                       : 'Decides the research the copy is written from, the folder it is filed in, and the name it carries here.'}
                   </span>
+
+                  {/* The disclaimer. Astrology creatives used to get one from the director
+                      guide's claim-type table with nobody asked — 19 of 31 recent briefs carried
+                      one, most often "*For guidance only. T&C apply." Blank sends nothing and the
+                      pipeline applies its default, which is no disclaimer. */}
+                  <label className="block mt-3">
+                    <span className="text-xs font-semibold block mb-1" style={{ color: 'var(--ink-2)' }}>
+                      Disclaimer
+                    </span>
+                    <select
+                      value={cbDisclaimer}
+                      onChange={e => setCbDisclaimer(e.target.value)}
+                      className="input"
+                      aria-label="Which disclaimer should this creative carry?"
+                    >
+                      <option value="">
+                        {`Default — ${defaultDisclaimerLabel}`}
+                      </option>
+                      {(cbOptions?.disclaimers?.astro ?? []).map(d => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
+                      ))}
+                    </select>
+                    <span className="block text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--ink-4)' }}>
+                      Designed into the layout rather than squeezed in afterwards. It is written in
+                      the creative&rsquo;s own language.
+                    </span>
+                  </label>
 
                   {/* Add a product by giving its landing page. The pipeline scrapes that page into
                       the research pack its authoring session reads, then registers the product so

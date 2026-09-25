@@ -82,6 +82,19 @@ export interface CustomBriefOptions {
    * whatever the brief said.
    */
   offerings: CustomBriefOffering[]
+  /**
+   * What disclaimer the creative may carry, per domain, plus the astro default.
+   *
+   * Astrology creatives used to get one from the director guide's claim-type table with nobody
+   * ever asked — 19 of 31 recent briefs carried one, 10 of them "*For guidance only. T&C apply."
+   * The operator chooses now, and "No disclaimer" is a real choice. Served rather than hardcoded
+   * because the pipeline is what enforces the wording on the written brief.
+   */
+  disclaimers?: {
+    astro: CustomBriefChoice[]
+    automotive: CustomBriefChoice[]
+    default_astro: string
+  }
   languages: string[]
   delivery_profiles: { value: string; label: string; aspect: number }[]
   models: { model: string; quality: string }[]
@@ -110,7 +123,8 @@ export interface StartCustomBriefBody {
   method: CustomBriefMethod
   prompt: string
   /** A string because the input is text and empty must mean "use the default"
-   *  (5). The pipeline owns the clamping so there is one rule, not two. */
+   *  (1 — one creative unless more are asked for). The pipeline owns the clamping
+   *  so there is one rule, not two. */
   count?: string
   track?: CustomBriefTrack
   domain?: 'astro' | 'automotive'
@@ -121,6 +135,14 @@ export interface StartCustomBriefBody {
    * values if it is missing. Enforced in the form too, so the operator cannot submit without it.
    */
   offering?: string
+  /**
+   * The disclaimer wording — a `value` from `CustomBriefOptions.disclaimers` for this domain.
+   *
+   * Optional. Omitted means the domain default: for astro that is `none` (no disclaimer at all),
+   * for automotive the guide's "*Ex-Showroom, <City>" rule. The pipeline rejects an unknown value
+   * with a 400 naming the legal ones.
+   */
+  disclaimer_choice?: string
   /** Single-language spelling, kept for callers that only ever send one. */
   language?: string
   /** Several languages SPLIT the run round-robin rather than multiplying it:
