@@ -42,7 +42,7 @@ export function BreakevenBar({
         {isEstimated && (
           <span className="chip chip-warn" style={{ fontSize: 11 }}>
             <TriangleAlert size={11} />
-            Margin is assumed, not configured
+            Profit margin is a guess — add it in Settings
           </span>
         )}
         {/* With products on different margins there is no single breakeven the
@@ -51,10 +51,10 @@ export function BreakevenBar({
             is the difference between a useful simplification and a wrong number. */}
         {economics.hasMixedMargins && (
           <span className="chip chip-neutral" style={{ fontSize: 11 }}>
-            Line shown for {economics.productName}; each campaign uses its own
+            Line shown for {economics.productName}; each campaign is judged on its own product
           </span>
         )}
-        <span className="explain ml-auto">
+        <span className="explain ml-auto min-w-0 break-words">
           {economics.productName ? `${economics.productName} · ` : ''}
           {formatPercent(marginPct)} margin
           {refundPct > 0 ? ` · ${formatPercent(refundPct)} refunds` : ''}

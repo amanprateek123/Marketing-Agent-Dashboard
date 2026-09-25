@@ -9,7 +9,18 @@ import type {
   ToolImpactOverview,
   ToolImpactReturnNature,
 } from '@/types'
-import { formatCurrency, formatRelativeTime, plainLabel } from '@/lib/utils'
+import {
+  formatInr,
+  formatRelative,
+  formatWhen,
+  humanise,
+  plainStatus,
+} from '@/lib/plain-language'
+
+/** Rupees for small per-result costs keep paise; everything else is whole rupees. */
+function costInr(value: number): string {
+  return formatInr(value, { decimals: Math.abs(value) < 100 ? 2 : 0 })
+}
 
 export function formatActionValueRoas(value: number): string {
   const gap = Math.abs(value - 1)
@@ -19,10 +30,7 @@ export function formatActionValueRoas(value: number): string {
 export function returnBasisLabel(
   basis: DashboardCampaignRow['revenueBasis'],
 ): string {
-  if (basis === 'meta_action_value') return 'Meta action value'
-  if (basis === 'configured_conversion_value') return 'Configured estimate'
-  if (basis === 'no_attributed_revenue') return 'No attributed value'
-  return 'Unknown derivation'
+  return plainStatus('returnBasis', basis).label
 }
 
 function isResolvedMetaValue(campaign: DashboardCampaignRow): boolean {
@@ -147,7 +155,7 @@ function dateKeyMs(value: string): number | null {
 
 function shortDate(value: string): string {
   const at = dateKeyMs(value)
-  if (at == null) return value
+  if (at == null) return '—'
   return new Intl.DateTimeFormat('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -156,30 +164,11 @@ function shortDate(value: string): string {
 }
 
 function longDate(value: string): string {
-  const at = dateKeyMs(value)
-  if (at == null) return value
-  return new Intl.DateTimeFormat('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(at))
+  return dateKeyMs(value) == null ? '—' : formatWhen(value)
 }
 
 function compactCurrency(value: number): string {
-  const absolute = Math.abs(value)
-  const sign = value < 0 ? '−' : ''
-  const compact = (divisor: number, suffix: string) => {
-    const scaled = absolute / divisor
-    const digits = scaled >= 10 ? 0 : 1
-    return `${sign}₹${scaled.toFixed(digits).replace(/\.0$/, '')}${suffix}`
-  }
-  if (absolute >= 10_000_000) return compact(10_000_000, 'Cr')
-  if (absolute >= 100_000) return compact(100_000, 'L')
-  if (absolute >= 1_000) return compact(1_000, 'k')
-  if (absolute >= 10) return `${sign}₹${Math.round(absolute)}`
-  return `${sign}₹${absolute.toFixed(absolute >= 1 ? 1 : 2).replace(/\.0+$/, '')}`
+  return formatInr(value, { compact: true })
 }
 
 function niceMaximum(value: number): number {
@@ -194,7 +183,7 @@ function niceMaximum(value: number): number {
 function percentLabel(value: number | null): string {
   return value == null || !Number.isFinite(value)
     ? 'unknown'
-    : `${value.toFixed(1)}%`
+    : `${Math.round(value)}%`
 }
 
 type ReturnNaturePresentation = {
@@ -209,14 +198,14 @@ function returnNaturePresentation(
 ): ReturnNaturePresentation {
   if (nature === 'meta_reported_action_value') {
     return {
-      label: 'Meta-reported action value',
+      label: plainStatus('returnNature', 'meta_reported_action_value').label,
       color: 'var(--viz-value)',
       filled: true,
     }
   }
   if (nature === 'configured_conversion_estimate') {
     return {
-      label: 'Configured conversion estimate',
+      label: plainStatus('returnNature', 'configured_conversion_estimate').label,
       color: 'var(--viz-estimate)',
       dashArray: '7 5',
       filled: false,
@@ -224,14 +213,14 @@ function returnNaturePresentation(
   }
   if (nature === 'no_attributed_return') {
     return {
-      label: 'No attributed return',
+      label: plainStatus('returnNature', 'no_attributed_return').label,
       color: 'var(--viz-value)',
       filled: true,
     }
   }
   if (nature === 'mixed') {
     return {
-      label: 'Mixed return basis',
+      label: plainStatus('returnNature', 'mixed').label,
       color: 'var(--viz-estimate)',
       dashArray: '3 4',
       filled: false,
@@ -239,14 +228,14 @@ function returnNaturePresentation(
   }
   if (nature === 'not_applicable') {
     return {
-      label: 'Return not applicable',
+      label: plainStatus('returnNature', 'not_applicable').label,
       color: 'var(--viz-unknown)',
       dashArray: '3 4',
       filled: false,
     }
   }
   return {
-    label: 'Unknown / legacy return',
+    label: plainStatus('returnNature', 'unknown').label,
     color: 'var(--viz-unknown)',
     dashArray: '3 4',
     filled: false,
@@ -262,7 +251,7 @@ function pointReturnPresentation(
     return base
   }
   return {
-    label: `${base.label} · provenance incomplete`,
+    label: `${base.label} · not fully confirmed`,
     color: 'var(--viz-unknown)',
     dashArray: '3 4',
     filled: false,
@@ -299,8 +288,8 @@ function splitConsecutiveDays<T extends { at: number }>(points: T[]): T[][] {
  */
 export function DailySpendValueChart({
   performance,
-  title = 'Daily spend vs attributed value',
-  subtitle = 'Observed Meta-account dates · sales only',
+  title = 'Money spent and sales value, day by day',
+  subtitle = 'Sales campaigns only, by the date Meta recorded',
   emptyHistoryLabel,
 }: {
   performance?: ToolImpactDailyPerformance | null
@@ -370,8 +359,8 @@ export function DailySpendValueChart({
           subtitle={subtitle}
         />
         <ChartEmpty
-          title="Daily history unavailable"
-          label="This backend snapshot does not include day-wise performance yet."
+          title="Day-by-day figures not available"
+          label="Day-by-day figures are not available yet."
         />
       </div>
     )
@@ -387,8 +376,8 @@ export function DailySpendValueChart({
           subtitle={subtitle}
         />
         <ChartEmpty
-          title="No verified sales launches"
-          label="Daily performance will appear after a sales campaign launches."
+          title="No sales campaigns yet"
+          label="Day-by-day results appear once a sales campaign goes live."
         />
       </div>
     )
@@ -404,10 +393,10 @@ export function DailySpendValueChart({
           subtitle={subtitle}
         />
         <ChartEmpty
-          title="Daily history not synced"
+          title="No daily figures yet"
           label={
             emptyHistoryLabel ??
-            `${performance.coverage.eligibleCampaigns} verified sales launch${performance.coverage.eligibleCampaigns === 1 ? '' : 'es'} ${performance.coverage.eligibleCampaigns === 1 ? 'has' : 'have'} no persisted daily rows yet.`
+            `${performance.coverage.eligibleCampaigns} sales campaign${performance.coverage.eligibleCampaigns === 1 ? '' : 's'} ${performance.coverage.eligibleCampaigns === 1 ? 'has' : 'have'} no daily figures saved yet.`
           }
         />
       </div>
@@ -501,7 +490,7 @@ export function DailySpendValueChart({
     performance.returnCoverage.untrustedRows
   const basisSummary = (performance.returnCoverage.byBasis ?? [])
     .filter((entry) => entry.rowCount > 0)
-    .map((entry) => `${returnBasisLabel(entry.basis)} ${entry.rowCount}`)
+    .map((entry) => `${returnBasisLabel(entry.basis)}: ${entry.rowCount} days`)
     .join(' · ')
   const spendReconciles =
     performance.coverage.spendCoveragePct != null &&
@@ -510,10 +499,10 @@ export function DailySpendValueChart({
     ) <= Math.max(1, performance.coverage.lifetimeSpend * 0.01)
   const spendReconciliationLabel =
     performance.coverage.spendCoveragePct == null
-      ? 'Spend reconciliation unknown'
+      ? 'Not sure the daily spend adds up'
       : spendReconciles
-        ? 'Spend reconciles'
-        : 'Spend does not reconcile'
+        ? 'Daily spend adds up to the total'
+        : 'Daily spend does not add up to the total'
 
   return (
     <div className="card overflow-hidden">
@@ -526,7 +515,7 @@ export function DailySpendValueChart({
 
       <div className="px-4 sm:px-5 pt-3 flex items-center gap-x-4 gap-y-2 flex-wrap explain">
         <span className="micro-label">
-          Selected range · through{' '}
+          Up to{' '}
           {shortDate(visiblePoints[visiblePoints.length - 1]?.date ?? '')}
         </span>
         <span className="inline-flex items-center gap-1.5">
@@ -537,7 +526,7 @@ export function DailySpendValueChart({
           />
           Spend{' '}
           <strong className="mono" style={{ color: 'var(--ink)' }}>
-            {formatCurrency(Math.round(selectedSpend))}
+            {formatInr(selectedSpend)}
           </strong>
         </span>
         <span className="inline-flex items-center gap-1.5">
@@ -554,7 +543,7 @@ export function DailySpendValueChart({
           </svg>
           {rangeReturnPresentation.label}{' '}
           <strong className="mono" style={{ color: 'var(--ink)' }}>
-            {formatCurrency(Math.round(selectedAttributedValue))}
+            {formatInr(selectedAttributedValue)}
           </strong>
         </span>
         <span
@@ -581,7 +570,7 @@ export function DailySpendValueChart({
           className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           role="group"
           tabIndex={0}
-          aria-label={`Daily campaign performance from ${shortDate(visiblePoints[0]?.date ?? '')} to ${shortDate(visiblePoints[visiblePoints.length - 1]?.date ?? '')}. ${performance.coverage.campaignsWithRows} of ${performance.coverage.eligibleCampaigns} verified sales campaigns have daily rows.`}
+          aria-label={`Daily campaign performance from ${shortDate(visiblePoints[0]?.date ?? '')} to ${shortDate(visiblePoints[visiblePoints.length - 1]?.date ?? '')}. ${performance.coverage.campaignsWithRows} of ${performance.coverage.eligibleCampaigns} sales campaigns have daily figures.`}
           onFocus={() =>
             setActiveDate(
               (current) =>
@@ -735,7 +724,7 @@ export function DailySpendValueChart({
               index === visiblePoints.length - 1
                 ? chartWidth - margin.right
                 : (x + nextX) / 2
-            const valueLabel = `${pointReturnPresentation(point.nature, point.productScoped).label} ${formatCurrency(Math.round(point.displayReturn))}`
+            const valueLabel = `${pointReturnPresentation(point.nature, point.productScoped).label} ${formatInr(point.displayReturn)}`
             return (
               <rect
                 key={`hit-${point.date}`}
@@ -744,7 +733,7 @@ export function DailySpendValueChart({
                 width={Math.max(1, right - left)}
                 height={plotHeight}
                 fill="transparent"
-                aria-label={`${longDate(point.date)}: spend ${formatCurrency(Math.round(point.spend))}, ${valueLabel}`}
+                aria-label={`${longDate(point.date)}: spend ${formatInr(point.spend)}, ${valueLabel}`}
                 onMouseEnter={() => setActiveDate(point.date)}
                 onPointerDown={() => setActiveDate(point.date)}
               />
@@ -767,7 +756,7 @@ export function DailySpendValueChart({
         </svg>
         <p className="sr-only" aria-live="polite">
           {activePoint
-            ? `${longDate(activePoint.date)}. Spend ${formatCurrency(Math.round(activePoint.spend))}. ${pointReturnPresentation(activePoint.nature, activePoint.productScoped).label} ${formatCurrency(Math.round(activePoint.displayReturn))}.`
+            ? `${longDate(activePoint.date)}. Spend ${formatInr(activePoint.spend)}. ${pointReturnPresentation(activePoint.nature, activePoint.productScoped).label} ${formatInr(activePoint.displayReturn)}.`
             : ''}
         </p>
       </div>
@@ -777,21 +766,19 @@ export function DailySpendValueChart({
         style={{ borderTop: '1px solid var(--hairline-light)' }}
       >
         <span>
-          All stored history · campaign coverage {performance.coverage.status}{' '}
-          ·{' '}
-          {performance.coverage.campaignsWithRows}/
-          {performance.coverage.eligibleCampaigns}
+          {performance.coverage.campaignsWithRows} of{' '}
+          {performance.coverage.eligibleCampaigns} campaigns have daily figures (
+          {plainStatus('coverage', performance.coverage.status).label.toLowerCase()})
         </span>
         <span>
           {spendReconciliationLabel} ·{' '}
-          {formatCurrency(Math.round(performance.coverage.observedSpend))} daily /{' '}
-          {formatCurrency(Math.round(performance.coverage.lifetimeSpend))}{' '}
-          lifetime ({percentLabel(performance.coverage.spendCoveragePct)})
+          {formatInr(performance.coverage.observedSpend)} by day of{' '}
+          {formatInr(performance.coverage.lifetimeSpend)}{' '}
+          in total ({percentLabel(performance.coverage.spendCoveragePct)})
         </span>
         <span>
-          Return rows {performance.returnCoverage.status} ·{' '}
-          {performance.returnCoverage.trustedRows}/{totalRows} product-scoped
-          {basisSummary ? ` · ${basisSummary}` : ''}
+          {performance.returnCoverage.trustedRows} of {totalRows} days have confirmed
+          sales value{basisSummary ? ` · ${basisSummary}` : ''}
         </span>
       </div>
     </div>
@@ -826,7 +813,7 @@ function DailyChartHeader({
           background: 'var(--surface-warm)',
           border: '1px solid var(--hairline)',
         }}
-        aria-label="Daily chart range"
+        aria-label="How many days to show"
         role="group"
       >
         {DAILY_RANGES.map((option) => (
@@ -876,19 +863,15 @@ function DailyPointTooltip({
   )
   const tooltipNatureLabel = !point.productScoped
     ? point.nature === 'meta_reported_action_value'
-      ? 'Persisted Meta value · provenance incomplete'
+      ? 'Sales value from Meta · not fully confirmed'
       : point.nature === 'configured_conversion_estimate'
-        ? 'Configured estimate · provenance incomplete'
-        : 'Persisted return · provenance incomplete'
+        ? 'Estimated sales value · not fully confirmed'
+        : 'Sales value · not fully confirmed'
     : point.nature === 'configured_conversion_estimate'
-      ? 'Count × configured value estimate'
-      : point.nature === 'meta_reported_action_value'
-        ? 'Meta-reported action value'
-        : point.nature === 'no_attributed_return'
-          ? 'Known zero attributed return'
-          : point.nature === 'mixed'
-            ? 'Mixed return basis'
-            : 'Unknown / legacy return'
+      ? 'Number of sales × a set price (estimate)'
+      : point.nature === 'no_attributed_return'
+        ? 'Meta recorded no sales'
+        : plainStatus('returnNature', point.nature).label
   const tooltipWidth = chartWidth < 480 ? 210 : 232
   const tooltipHeight = 112
   const tooltipX = Math.max(
@@ -942,16 +925,12 @@ function DailyPointTooltip({
         fontWeight="600"
         fill="var(--ink)"
       >
-        {formatCurrency(Math.round(point.spend))}
+        {formatInr(point.spend)}
       </text>
       <text x={labelX} y={tooltipY + 58} fontSize="11" fill="var(--ink-3)">
         {point.nature === 'configured_conversion_estimate'
-          ? 'Configured estimate'
-          : point.nature === 'meta_reported_action_value'
-            ? 'Meta action value'
-            : point.nature === 'no_attributed_return'
-              ? 'No attributed return'
-              : 'Persisted return'}
+          ? 'Estimated sales'
+          : 'Sales value'}
       </text>
       <text
         x={valueX}
@@ -961,10 +940,10 @@ function DailyPointTooltip({
         fontWeight="600"
         fill={presentation.color}
       >
-        {formatCurrency(Math.round(point.displayReturn))}
+        {formatInr(point.displayReturn)}
       </text>
       <text x={labelX} y={tooltipY + 78} fontSize="11" fill="var(--ink-3)">
-        Raw return / spend
+        Return on ad spend
       </text>
       <text
         x={valueX}
@@ -1145,8 +1124,8 @@ export function CampaignDailyDrilldown({
     return (
       <div className="card overflow-hidden mt-4">
         <ChartEmpty
-          title="Individual history unavailable"
-          label="This snapshot has no campaign-level daily series yet."
+          title="No single-campaign history yet"
+          label="Day-by-day figures for each campaign are not available yet."
         />
       </div>
     )
@@ -1193,7 +1172,7 @@ export function CampaignDailyDrilldown({
   const hasLifetimeSpend = selected.coverage.lifetimeSpend > 0
   const salesBasisLabel = campaign
     ? returnBasisLabel(campaign.revenueBasis)
-    : 'Attributed value'
+    : 'Sales value'
   const resolvedSalesValue = campaign ? isResolvedMetaValue(campaign) : false
   const modeledSalesValue =
     campaign?.revenueBasis === 'configured_conversion_value'
@@ -1217,8 +1196,8 @@ export function CampaignDailyDrilldown({
             : 'var(--bad)'
   const resultSourceLabel =
     selected.resultMetric.source === 'goal_selected_metric'
-      ? 'Goal-selected stored metric'
-      : 'Objective proxy'
+      ? 'Measured against the campaign goal'
+      : 'Closest match to the campaign goal'
   const salesPerformance = selected.isRevenueObjective
     ? campaignAsSalesPerformance(selected, lifetimeReturn)
     : null
@@ -1232,7 +1211,7 @@ export function CampaignDailyDrilldown({
               htmlFor="campaign-performance-selector"
               className="micro-label block mb-2"
             >
-              Individual campaign
+              Pick a campaign
             </label>
             <select
               id="campaign-performance-selector"
@@ -1243,7 +1222,7 @@ export function CampaignDailyDrilldown({
               {entries.map((entry) => (
                 <option key={entry.campaignId} value={entry.campaignId}>
                   {entry.displayName} · {entry.objectiveLabel} ·{' '}
-                  {formatCurrency(Math.round(entry.coverage.lifetimeSpend))}
+                  {formatInr(entry.coverage.lifetimeSpend)}
                 </option>
               ))}
             </select>
@@ -1268,7 +1247,7 @@ export function CampaignDailyDrilldown({
               }
               title={
                 selected.resultMetric.optimizationGoal
-                  ? `Optimization goal: ${selected.resultMetric.optimizationGoal}`
+                  ? `Meta is aiming for: ${humanise(selected.resultMetric.optimizationGoal)}`
                   : undefined
               }
             >
@@ -1276,8 +1255,8 @@ export function CampaignDailyDrilldown({
             </span>
           )}
           <span className="chip chip-neutral">
-            {selected.coverage.observedDates} synced day
-            {selected.coverage.observedDates === 1 ? '' : 's'}
+            {selected.coverage.observedDates} day
+            {selected.coverage.observedDates === 1 ? '' : 's'} of figures
           </span>
           <span
             className={
@@ -1285,32 +1264,32 @@ export function CampaignDailyDrilldown({
                 ? 'chip chip-warn'
                 : 'chip chip-neutral'
             }
-            title={campaign?.dataAsOf ?? 'No campaign metrics timestamp'}
+            title={campaign?.dataAsOf ? `Figures as of ${formatWhen(campaign.dataAsOf)}` : 'We do not know when these figures were last updated'}
           >
             {campaign?.dataAsOf
-              ? `Lifetime metrics${campaign.isStale ? ' stale' : ''} · ${formatRelativeTime(campaign.dataAsOf)}`
-              : 'Lifetime freshness unknown'}
+              ? `${campaign.isStale ? 'Figures out of date' : 'Figures updated'} · ${formatRelative(campaign.dataAsOf)}`
+              : 'Last update unknown'}
           </span>
           {selected.coverage.warning && selected.series.length > 0 && (
             <span className="chip chip-warn" title={selected.coverage.warning}>
-              Daily coverage note
+              Some days missing
             </span>
           )}
         </div>
 
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 mt-4">
           <CampaignMetric
-            label="Lifetime spend"
-            value={formatCurrency(Math.round(selected.coverage.lifetimeSpend))}
-            sub={`${percentLabel(selected.coverage.spendCoveragePct)} in daily rows`}
+            label="Total spent"
+            value={formatInr(selected.coverage.lifetimeSpend)}
+            sub={`${percentLabel(selected.coverage.spendCoveragePct)} of it shown day by day`}
           />
           {selected.isRevenueObjective ? (
             <>
               <CampaignMetric
-                label={modeledSalesValue ? 'Lifetime configured estimate' : 'Lifetime attributed value'}
+                label={modeledSalesValue ? 'Estimated sales value' : 'Sales value'}
                 value={unknownSalesValue || !displayableSalesValue
                   ? 'Unavailable'
-                  : formatCurrency(Math.round(lifetimeReturn))}
+                  : formatInr(lifetimeReturn)}
                 sub={salesBasisLabel}
                 color={
                   modeledSalesValue
@@ -1321,7 +1300,7 @@ export function CampaignDailyDrilldown({
                 }
               />
               <CampaignMetric
-                label="Raw ROAS"
+                label="Return on ad spend"
                 value={!hasLifetimeSpend
                   ? '—'
                   : unknownSalesValue || !displayableSalesValue
@@ -1329,27 +1308,27 @@ export function CampaignDailyDrilldown({
                     : formatActionValueRoas(rawRoas)}
                 sub={
                   hasLifetimeSpend && displayableSalesValue && !unknownSalesValue
-                    ? `${salesBasisLabel} · raw return threshold 1.00x`
+                    ? `${salesBasisLabel} · 1.00x means it broke even`
                     : hasLifetimeSpend
-                      ? 'Return derivation unresolved'
+                      ? 'Sales value source unclear'
                       : 'No spend'
                 }
                 color={rawRoasColor}
               />
               <CampaignMetric
-                label={`Observed ${selected.resultMetric.label}`}
+                label={selected.resultMetric.label}
                 value={
                   observedResult == null
                     ? '—'
                     : selected.resultMetric.key === 'attributedReturn'
-                      ? formatCurrency(Math.round(observedResult))
+                      ? formatInr(observedResult)
                       : fullNumber(observedResult)
                 }
                 sub={
                   observedResult == null
-                    ? 'Result unavailable'
+                    ? 'Not available'
                     : resultDataPartial
-                      ? `${resultDaysWithData}/${selected.series.length} days with result data`
+                      ? `${resultDaysWithData} of ${selected.series.length} days have figures`
                       : resultSourceLabel
                 }
               />
@@ -1359,43 +1338,43 @@ export function CampaignDailyDrilldown({
               <CampaignMetric
                 label={selected.primaryKpi.label}
                 value={selected.primaryKpi.display}
-                sub={selected.primaryKpi.targetDisplay ?? 'No target configured'}
+                sub={selected.primaryKpi.targetDisplay ? `Target ${selected.primaryKpi.targetDisplay}` : 'No target set'}
                 color={healthColor(selected.primaryKpi.status)}
               />
               <CampaignMetric
-                label={`${resultIsDailyReach ? 'Peak daily' : 'Observed'} ${selected.resultMetric.label}`}
+                label={`${resultIsDailyReach ? 'Best day: ' : ''}${selected.resultMetric.label}`}
                 value={observedResult == null ? '—' : fullNumber(observedResult)}
                 sub={
                   observedResult == null
-                    ? 'Result unavailable'
+                    ? 'Not available'
                     : resultIsDailyReach
-                      ? 'Not unique across days'
+                      ? 'The same people can be counted on several days'
                       : resultDataPartial
-                        ? `${resultDaysWithData}/${selected.series.length} days with result data`
-                        : `${selected.coverage.observedDates} synced days`
+                        ? `${resultDaysWithData} of ${selected.series.length} days have figures`
+                        : `Over ${selected.coverage.observedDates} days`
                 }
               />
               <CampaignMetric
-                label="Observed cost / result"
+                label="Cost per result"
                 value={
                   observedCostPerResult == null
                     ? '—'
-                    : formatCurrency(observedCostPerResult)
+                    : costInr(observedCostPerResult)
                 }
                 sub={
                   observedCostPerResult == null
                     ? resultIsDailyReach
-                      ? 'Daily reach is not additive'
+                      ? 'Reach cannot be added up across days'
                       : observedResult == null
-                        ? 'Result unavailable'
+                        ? 'Not available'
                         : resultDataPartial
-                          ? 'Withheld · partial result coverage'
-                        : 'No result recorded'
+                          ? 'Not shown — some days are missing'
+                        : 'No results yet'
                     : `${resultSourceLabel}${
                         (selected.objectiveKey === 'traffic' ||
                           selected.objectiveKey === 'engagement') &&
                         observedCtr != null
-                          ? ` · CTR ${observedCtr.toFixed(2)}%`
+                          ? ` · click rate ${observedCtr.toFixed(2)}%`
                           : ''
                       }`
                 }
@@ -1409,11 +1388,11 @@ export function CampaignDailyDrilldown({
         <DailySpendValueChart
           key={selected.campaignId}
           performance={salesPerformance}
-          title="Daily spend vs attributed value"
+          title="Money spent and sales value, day by day"
           subtitle={`${selected.objectiveLabel} · ${selected.displayName}`}
           emptyHistoryLabel={
             selected.coverage.warning ??
-            'The campaign is verified, but no campaign-day metrics are stored yet.'
+            'This campaign is live, but no daily figures are saved yet.'
           }
         />
       ) : (
@@ -1485,14 +1464,14 @@ function ObjectiveDailyChart({
         <DailyChartHeader
           range={range}
           onRangeChange={setRange}
-          title={`Daily spend vs ${campaign.resultMetric.label.toLowerCase()}`}
-          subtitle={`${campaign.objectiveLabel} · no stored daily rows`}
+          title={`Money spent and ${campaign.resultMetric.label.toLowerCase()}, day by day`}
+          subtitle={`${campaign.objectiveLabel} · no daily figures yet`}
         />
         <ChartEmpty
-          title="Daily history not synced"
+          title="No daily figures yet"
           label={
             campaign.coverage.warning ??
-            'The campaign is verified, but no campaign-day metrics are stored yet.'
+            'This campaign is live, but no daily figures are saved yet.'
           }
         />
       </div>
@@ -1583,8 +1562,8 @@ function ObjectiveDailyChart({
       : null
   const sourceLabel =
     campaign.resultMetric.source === 'goal_selected_metric'
-      ? 'Goal-selected stored metric'
-      : 'Objective proxy'
+      ? 'Measured against the campaign goal'
+      : 'Closest match to the campaign goal'
   const resultColor = objectiveSeriesColor(
     campaign.objectiveKey,
     campaign.resultMetric.key,
@@ -1595,13 +1574,13 @@ function ObjectiveDailyChart({
       <DailyChartHeader
         range={range}
         onRangeChange={setRange}
-        title={`Daily spend vs ${campaign.resultMetric.label.toLowerCase()}`}
-        subtitle={`${campaign.objectiveLabel} · separate ₹ and result axes`}
+        title={`Money spent and ${campaign.resultMetric.label.toLowerCase()}, day by day`}
+        subtitle={`${campaign.objectiveLabel} · money on the left scale, results on the right`}
       />
 
       <div className="px-4 sm:px-5 pt-3 flex items-center gap-x-4 gap-y-2 flex-wrap explain">
         <span className="micro-label">
-          Through {shortDate(visiblePoints[visiblePoints.length - 1]?.date ?? '')}
+          Up to {shortDate(visiblePoints[visiblePoints.length - 1]?.date ?? '')}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span
@@ -1611,7 +1590,7 @@ function ObjectiveDailyChart({
           />
           Spend{' '}
           <strong className="mono" style={{ color: 'var(--ink)' }}>
-            {formatCurrency(Math.round(selectedSpend))}
+            {formatInr(selectedSpend)}
           </strong>
         </span>
         <span className="inline-flex items-center gap-1.5">
@@ -1620,7 +1599,7 @@ function ObjectiveDailyChart({
             className="inline-block rounded-full"
             style={{ width: 20, height: 3, background: resultColor }}
           />
-          {resultIsDailyReach ? 'Peak daily ' : ''}
+          {resultIsDailyReach ? 'Best day: ' : ''}
           {campaign.resultMetric.label}{' '}
           <strong className="mono" style={{ color: 'var(--ink)' }}>
             {selectedResult == null ? '—' : fullNumber(selectedResult)}
@@ -1628,18 +1607,18 @@ function ObjectiveDailyChart({
         </span>
         <span className="chip chip-neutral ml-auto">
           {resultIsDailyReach
-            ? 'Daily reach is not additive'
+            ? 'Reach cannot be added up across days'
             : selectedResult == null
-              ? 'Result unavailable'
+              ? 'Not available'
               : resultPoints.length < visiblePoints.length
-                ? 'Cost/result withheld · partial data'
+                ? 'Cost per result hidden — some days missing'
               : selectedCost == null
-                ? 'No result recorded'
-                : `${formatCurrency(selectedCost)} / result`}
+                ? 'No results yet'
+                : `${costInr(selectedCost)} per result`}
         </span>
         {resultPoints.length < visiblePoints.length && (
           <span className="chip chip-warn">
-            Result data {resultPoints.length}/{visiblePoints.length} days
+            Figures for {resultPoints.length} of {visiblePoints.length} days
           </span>
         )}
       </div>
@@ -1653,7 +1632,7 @@ function ObjectiveDailyChart({
           <strong style={{ color: 'var(--ink)' }}>
             {longDate(activePoint.date)}
           </strong>
-          <span>{formatCurrency(Math.round(activePoint.spend))} spent</span>
+          <span>{formatInr(activePoint.spend)} spent</span>
           <span>
             {activePoint.result == null
               ? `${campaign.resultMetric.label} unavailable`
@@ -1661,11 +1640,11 @@ function ObjectiveDailyChart({
           </span>
           <span>
             {campaign.primaryKpi.label}{' '}
-            {activePoint.primaryKpiDisplay ?? 'unavailable'}
+            {activePoint.primaryKpiDisplay ?? 'not available'}
           </span>
           {(campaign.objectiveKey === 'traffic' ||
             campaign.objectiveKey === 'engagement') && (
-            <span>CTR {activePoint.ctr.toFixed(2)}%</span>
+            <span>Click rate {activePoint.ctr.toFixed(2)}%</span>
           )}
         </div>
       )}
@@ -1833,7 +1812,7 @@ function ObjectiveDailyChart({
                 width={Math.max(1, right - left)}
                 height={plotHeight}
                 fill="transparent"
-                aria-label={`${longDate(point.date)}: spend ${formatCurrency(Math.round(point.spend))}, ${point.result == null ? `${campaign.resultMetric.label} unavailable` : `${fullNumber(point.result)} ${campaign.resultMetric.label}`}, ${campaign.primaryKpi.label} ${point.primaryKpiDisplay ?? 'unavailable'}.`}
+                aria-label={`${longDate(point.date)}: spend ${formatInr(point.spend)}, ${point.result == null ? `${campaign.resultMetric.label} unavailable` : `${fullNumber(point.result)} ${campaign.resultMetric.label}`}, ${campaign.primaryKpi.label} ${point.primaryKpiDisplay ?? 'unavailable'}.`}
                 onMouseEnter={() => setActiveDate(point.date)}
                 onPointerDown={() => setActiveDate(point.date)}
               />
@@ -1848,11 +1827,11 @@ function ObjectiveDailyChart({
       >
         <span>{sourceLabel}</span>
         <span>
-          {formatCurrency(Math.round(campaign.coverage.observedSpend))} daily /{' '}
-          {formatCurrency(Math.round(campaign.coverage.lifetimeSpend))} lifetime
+          {formatInr(campaign.coverage.observedSpend)} by day of{' '}
+          {formatInr(campaign.coverage.lifetimeSpend)} in total
           {' '}({percentLabel(campaign.coverage.spendCoveragePct)})
         </span>
-        <span>Coverage {campaign.coverage.status}</span>
+        <span>Figures: {plainStatus('coverage', campaign.coverage.status).label.toLowerCase()}</span>
       </div>
     </div>
   )
@@ -1881,9 +1860,9 @@ export function CampaignSpendValueChart({
       >
         <div>
           <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
-            Spend vs attributed value
+            Money spent vs sales value
           </h3>
-          <p className="explain mt-1">Every verified sales launch</p>
+          <p className="explain mt-1">Every sales campaign launched here, since it started</p>
         </div>
         <div className="flex items-center gap-3 explain">
           <span className="inline-flex items-center gap-1.5">
@@ -1898,13 +1877,13 @@ export function CampaignSpendValueChart({
               className="inline-block rounded-full"
               style={{ width: 18, height: 5, background: 'var(--viz-value)' }}
             />
-            Value
+            Sales value
           </span>
         </div>
       </div>
 
       {rows.length === 0 ? (
-        <ChartEmpty label="No verified sales launches in this scope." />
+        <ChartEmpty label="No sales campaigns have been launched here yet." />
       ) : (
         <div>
           {rows.map((campaign) => {
@@ -1929,14 +1908,10 @@ export function CampaignSpendValueChart({
                       <span>{campaign.statusLabel}</span>
                       <span>·</span>
                       <span>
-                        {campaign.toolImpactStage === 'mature'
-                          ? 'Mature'
-                          : campaign.spend > 0
-                            ? 'Early'
-                            : 'No spend'}
+                        {plainStatus('toolImpactStage', campaign.toolImpactStage).label}
                       </span>
                       {campaign.isStale && (
-                        <span className="chip chip-warn">Stale</span>
+                        <span className="chip chip-warn">Figures out of date</span>
                       )}
                     </div>
                   </div>
@@ -1950,10 +1925,10 @@ export function CampaignSpendValueChart({
                     }}
                   >
                     {campaign.spend <= 0
-                      ? 'ROAS —'
+                      ? 'Nothing spent'
                       : hasUnknownReturn(campaign)
-                        ? 'Return unavailable'
-                        : formatActionValueRoas(campaign.roas)}
+                        ? 'Sales value unclear'
+                        : `${formatActionValueRoas(campaign.roas)} return`}
                   </span>
                 </div>
 
@@ -1973,11 +1948,11 @@ export function CampaignSpendValueChart({
                   </div>
                   <span className="mono text-xs text-right">
                     {campaign.spend > 0
-                      ? formatCurrency(Math.round(campaign.spend))
+                      ? formatInr(campaign.spend)
                       : '—'}
                   </span>
 
-                  <span className="micro-label">{hasUnknownReturn(campaign) ? 'Return' : 'Value'}</span>
+                  <span className="micro-label">Sales</span>
                   <div
                     className="rounded-full overflow-hidden"
                     style={{ height: 8, background: 'var(--bg-muted)' }}
@@ -1999,7 +1974,7 @@ export function CampaignSpendValueChart({
                       ? '—'
                       : hasUnknownReturn(campaign)
                         ? 'Unavailable'
-                        : formatCurrency(Math.round(campaign.revenue))}
+                        : formatInr(campaign.revenue)}
                   </span>
                 </div>
 
@@ -2015,10 +1990,10 @@ export function CampaignSpendValueChart({
                   </span>
                   {campaign.dataAsOf ? (
                     <span className="explain">
-                      Data {formatRelativeTime(campaign.dataAsOf)}
+                      Updated {formatRelative(campaign.dataAsOf)}
                     </span>
                   ) : (
-                    <span className="explain">Freshness unknown</span>
+                    <span className="explain">Last update unknown</span>
                   )}
                 </div>
               </div>
@@ -2053,16 +2028,16 @@ export function ActionValueGapChart({
         style={{ borderBottom: '1px solid var(--hairline)' }}
       >
         <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
-          Attributed value minus spend
+          Sales value minus money spent
         </h3>
-        <div className="flex items-center justify-between mt-1 explain">
-          <span>Shortfall</span>
-          <span>Surplus · unknown returns remain unavailable</span>
+        <div className="flex items-center justify-between gap-3 mt-1 explain">
+          <span>← Brought back less</span>
+          <span className="text-right">Brought back more →</span>
         </div>
       </div>
 
       {rows.length === 0 ? (
-        <ChartEmpty label="No verified sales launches in this scope." />
+        <ChartEmpty label="No sales campaigns have been launched here yet." />
       ) : (
         <div>
           {rows.map((campaign) => {
@@ -2092,8 +2067,9 @@ export function ActionValueGapChart({
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <Link
                     href={`/dashboard/${tenantId}/campaigns/${campaign.id}`}
-                    className="text-sm font-semibold hover:underline truncate"
+                    className="text-sm font-semibold hover:underline truncate min-w-0"
                     style={{ color: 'var(--ink)' }}
+                    title={campaign.displayName}
                   >
                     {campaign.displayName}
                   </Link>
@@ -2105,18 +2081,18 @@ export function ActionValueGapChart({
                     }}
                   >
                     {campaign.spend <= 0
-                      ? 'No spend'
+                      ? 'Nothing spent'
                       : unknownReturn
-                        ? 'Return unavailable'
-                        : `${gap >= 0 ? '+' : '−'}${formatCurrency(Math.round(Math.abs(gap)))}`}
+                        ? 'Sales value unclear'
+                        : `${gap >= 0 ? '+' : '−'}${formatInr(Math.abs(gap))}`}
                   </span>
                 </div>
                 <div
                   className="relative rounded-full"
                   style={{ height: 12, background: 'var(--surface-warm)' }}
                   aria-label={unknownReturn
-                    ? `${campaign.displayName}: return unavailable`
-                    : `${campaign.displayName}: attributed value minus spend ${gap}`}
+                    ? `${campaign.displayName}: sales value unclear`
+                    : `${campaign.displayName}: sales value minus spend ${gap >= 0 ? '' : '-'}${formatInr(Math.abs(gap))}`}
                 >
                   <span
                     className="absolute top-[-3px] bottom-[-3px]"
@@ -2162,11 +2138,11 @@ export function NonSalesPerformanceChart({
       >
         <div>
           <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
-            Non-sales campaign goals
+            Campaigns with other goals
           </h3>
-          <p className="explain mt-1">Lifetime cards use an objective-level proxy; daily drilldowns use the persisted optimization goal</p>
+          <p className="explain mt-1">Campaigns aiming for clicks, reach, leads or engagement rather than sales</p>
         </div>
-        <span className="chip chip-neutral">{rows.length} launches</span>
+        <span className="chip chip-neutral">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2">
@@ -2210,14 +2186,14 @@ export function NonSalesPerformanceChart({
                   </Link>
                   <span className="explain">
                     {campaign.objectiveLabel} ·{' '}
-                    {formatCurrency(Math.round(campaign.spend))} spent
+                    {formatInr(campaign.spend)} spent
                   </span>
                 </div>
                 <span
                   className="mono font-semibold text-sm shrink-0"
                   style={{ color: seriesColor }}
                 >
-                  {campaign.spend > 0 ? reading.display : 'No spend'}
+                  {campaign.spend > 0 ? reading.display : 'Nothing spent'}
                 </span>
               </div>
 
@@ -2253,7 +2229,7 @@ export function NonSalesPerformanceChart({
                   />
                   {reading.targetDisplay
                     ? `Target ${reading.targetDisplay}`
-                    : plainLabel(reading.status)}
+                    : plainStatus('health', reading.status).label}
                 </span>
               </div>
             </div>
@@ -2270,10 +2246,10 @@ export function LaunchFunnelChart({
   cohort: ToolImpactOverview['cohort']
 }) {
   const stages = [
-    { label: 'Created', value: cohort.created, color: 'var(--viz-funnel-1)' },
-    { label: 'Verified', value: cohort.launched, color: 'var(--viz-funnel-2)' },
-    { label: 'Spent', value: cohort.withSpend, color: 'var(--viz-funnel-3)' },
-    { label: `Mature D${cohort.maturityDays}+`, value: cohort.mature, color: 'var(--viz-funnel-4)' },
+    { label: 'Created here', value: cohort.created, color: 'var(--viz-funnel-1)' },
+    { label: 'Confirmed live in Meta', value: cohort.launched, color: 'var(--viz-funnel-2)' },
+    { label: 'Started spending', value: cohort.withSpend, color: 'var(--viz-funnel-3)' },
+    { label: `Ran ${cohort.maturityDays}+ days`, value: cohort.mature, color: 'var(--viz-funnel-4)' },
   ]
   const maximum = Math.max(1, cohort.created)
 
@@ -2281,9 +2257,9 @@ export function LaunchFunnelChart({
     <div className="card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3 mb-4">
         <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
-          Launch footprint
+          How far campaigns got
         </h3>
-        <span className="chip chip-neutral">recorded source only</span>
+        <span className="chip chip-neutral">Launched here only</span>
       </div>
       <div className="space-y-4">
         {stages.map((stage, index) => (
@@ -2323,16 +2299,16 @@ export function DecisionActivityChart({
   const funnel = overview.diagnosis.decisionFunnel
   const outcomes = overview.diagnosis.observedOutcomes
   const decisionStatuses = [
-    { label: 'Open', value: funnel.open, color: 'var(--accent)' },
+    { label: 'Awaiting review', value: funnel.open, color: 'var(--accent)' },
     { label: 'Approved', value: funnel.approved, color: 'var(--info)' },
     { label: 'Rejected', value: funnel.rejected, color: 'var(--bad)' },
     { label: 'Expired', value: funnel.expired, color: 'var(--warn)' },
   ]
   const outcomeStatuses = [
     { label: 'Improved', value: outcomes.byLabel.improved },
-    { label: 'Worsened', value: outcomes.byLabel.worsened },
-    { label: 'Neutral', value: outcomes.byLabel.neutral },
-    { label: 'Inconclusive', value: outcomes.byLabel.inconclusive },
+    { label: 'Got worse', value: outcomes.byLabel.worsened },
+    { label: 'No change', value: outcomes.byLabel.neutral },
+    { label: 'No clear answer', value: outcomes.byLabel.inconclusive },
   ]
   const totalDecisionStatuses = Math.max(
     1,
@@ -2344,23 +2320,23 @@ export function DecisionActivityChart({
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
-            Decision and action records
+            Suggestions and what happened
           </h3>
-          <p className="explain mt-1">Separate telemetry—not a joined funnel</p>
+          <p className="explain mt-1">Two separate counts — one does not feed the other</p>
         </div>
-        <span className="chip chip-neutral">cohort scoped</span>
+        <span className="chip chip-neutral">These campaigns only</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="card-inset px-4 py-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="micro-label">Decision proposals</p>
+              <p className="micro-label">Changes suggested</p>
               <p className="display-num mt-1" style={{ fontSize: 30 }}>
                 {funnel.proposed}
               </p>
             </div>
-            <span className="explain">{funnel.executed} marked executed</span>
+            <span className="explain">{funnel.executed} carried out</span>
           </div>
           <div
             className="flex rounded-full overflow-hidden mt-4"
@@ -2393,13 +2369,13 @@ export function DecisionActivityChart({
         <div className="card-inset px-4 py-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="micro-label">Action outcome records</p>
+              <p className="micro-label">Changes checked afterwards</p>
               <p className="display-num mt-1" style={{ fontSize: 30 }}>
                 {outcomes.recorded}
               </p>
             </div>
             <span className="explain">
-              {outcomes.finalized72h} finalized
+              {outcomes.finalized72h} with a final answer
             </span>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-4">
@@ -2413,19 +2389,19 @@ export function DecisionActivityChart({
               </div>
             ))}
           </div>
-          <p className="explain mt-3">Observational labels—not causal proof</p>
+          <p className="explain mt-3">Before-and-after comparisons — they do not prove the change caused it</p>
         </div>
       </div>
 
       <div className="flex items-center gap-2 mt-4 flex-wrap explain">
-        <span>{overview.automation.cyclesRun} intelligence cycles</span>
+        <span>{overview.automation.cyclesRun} check-ups run</span>
         <span>·</span>
         <span>{overview.automation.campaignsWatched} campaigns watched</span>
         {overview.automation.lastCycleAt && (
           <>
             <span>·</span>
             <span>
-              checked {formatRelativeTime(overview.automation.lastCycleAt)}
+              last checked {formatRelative(overview.automation.lastCycleAt)}
             </span>
           </>
         )}
@@ -2453,7 +2429,7 @@ export function CampaignEvidenceTable({
         className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3"
         style={{ borderBottom: '1px solid var(--hairline-light)' }}
       >
-        <h3 className="font-semibold" style={{ color: 'var(--ink)' }}>
+        <h3 className="font-semibold min-w-0 truncate" style={{ color: 'var(--ink)' }}>
           {title}
         </h3>
         <span className="chip chip-neutral">{rows.length}</span>
@@ -2467,14 +2443,14 @@ export function CampaignEvidenceTable({
               <th className="num">Spend</th>
               {variant === 'sales' ? (
                 <>
-                  <th className="num">Attributed value</th>
-                  <th className="num">ROAS</th>
-                  <th className="num">Value − spend</th>
+                  <th className="num">Sales value</th>
+                  <th className="num">Return on ad spend</th>
+                  <th className="num">Sales minus spend</th>
                 </>
               ) : (
                 <th className="num">Goal result</th>
               )}
-              <th className="num">Evidence</th>
+              <th className="num">Launched by</th>
             </tr>
           </thead>
           <tbody>
@@ -2486,7 +2462,7 @@ export function CampaignEvidenceTable({
                   <td>
                     <Link
                       href={`/dashboard/${tenantId}/campaigns/${campaign.id}`}
-                      className="font-semibold hover:underline"
+                      className="font-semibold hover:underline break-words"
                     >
                       {campaign.displayName}
                     </Link>
@@ -2497,19 +2473,19 @@ export function CampaignEvidenceTable({
                   <td>
                     {campaign.statusLabel}
                     <span className="explain block">
-                      {plainLabel(campaign.toolImpactStage)}
+                      {plainStatus('toolImpactStage', campaign.toolImpactStage).label}
                     </span>
                   </td>
                   <td className="num">
                     {campaign.spend > 0
-                      ? formatCurrency(Math.round(campaign.spend))
+                      ? formatInr(campaign.spend)
                       : '—'}
                   </td>
                   {variant === 'sales' ? (
                     <>
                       <td className="num">
                         {campaign.spend > 0 && !unknownReturn
-                          ? formatCurrency(Math.round(campaign.revenue))
+                          ? formatInr(campaign.revenue)
                           : campaign.spend > 0 ? 'Unavailable' : '—'}
                       </td>
                       <td className="num">
@@ -2524,7 +2500,7 @@ export function CampaignEvidenceTable({
                       </td>
                       <td className="num">
                         {campaign.spend > 0 && !unknownReturn
-                          ? `${campaign.returnSurplus >= 0 ? '+' : '−'}${formatCurrency(Math.round(Math.abs(campaign.returnSurplus)))}`
+                          ? `${campaign.returnSurplus >= 0 ? '+' : '−'}${formatInr(Math.abs(campaign.returnSurplus))}`
                           : campaign.spend > 0 ? 'Unavailable' : '—'}
                       </td>
                     </>
@@ -2538,17 +2514,17 @@ export function CampaignEvidenceTable({
                   <td className="num">
                     <span className="block">
                       {campaign.toolOwnership?.actor === 'agent'
-                        ? 'Recorded AI'
+                        ? 'The AI'
                         : campaign.toolOwnership?.actor === 'human'
-                          ? 'Recorded dashboard'
-                          : 'Ownership unavailable'}
+                          ? 'A person, from the dashboard'
+                          : 'Not known'}
                     </span>
                     <span className="explain block">
                       {variant === 'sales'
                         ? returnBasisLabel(campaign.revenueBasis)
                         : campaign.dataAsOf
-                          ? `Data ${formatRelativeTime(campaign.dataAsOf)}`
-                          : 'Freshness unknown'}
+                          ? `Updated ${formatRelative(campaign.dataAsOf)}`
+                          : 'Last update unknown'}
                     </span>
                   </td>
                 </tr>
@@ -2562,7 +2538,7 @@ export function CampaignEvidenceTable({
 }
 
 function ChartEmpty({
-  title = 'No performance rows yet',
+  title = 'No results yet',
   label,
 }: {
   title?: string

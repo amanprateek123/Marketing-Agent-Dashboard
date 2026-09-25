@@ -536,6 +536,82 @@ const VOCAB = {
     assistant: ['Assistant', "The assistant's reply.", 'neutral'],
     system: ['System', 'An automatic note.', 'neutral'],
   },
+
+  /** App platforms (campaign copilot plan). */
+  appPlatform: {
+    ios: ['iPhone (iOS)', 'The app on the Apple App Store.', 'neutral'],
+    android: ['Android', 'The app on Google Play.', 'neutral'],
+    both: ['iPhone and Android', 'The app on both app stores.', 'neutral'],
+  },
+
+  /** Meta optimisation goals and conversion events (campaign copilot plan). */
+  metaGoal: {
+    offsite_conversions: ['Sales on your website', 'Meta shows the ad to people most likely to buy.', 'neutral'],
+    purchase: ['Purchases', 'Counts each sale.', 'neutral'],
+    lead: ['Leads', 'Counts each enquiry or sign-up.', 'neutral'],
+    lead_generation: ['Leads', 'Meta shows the ad to people most likely to enquire.', 'neutral'],
+    complete_registration: ['Sign-ups', 'Counts each completed sign-up.', 'neutral'],
+    link_clicks: ['Clicks to your site', 'Meta shows the ad to people most likely to click.', 'neutral'],
+    landing_page_views: ['Page visits', 'Meta shows the ad to people most likely to open the page.', 'neutral'],
+    reach: ['Reach', 'Show the ad to as many people as possible.', 'neutral'],
+    impressions: ['Views', 'Show the ad as many times as possible.', 'neutral'],
+    app_installs: ['App installs', 'Meta shows the ad to people most likely to install.', 'neutral'],
+    post_engagement: ['Likes and comments', 'Meta shows the ad to people most likely to react.', 'neutral'],
+    value: ['Highest-value sales', 'Meta aims for the biggest orders, not just the most.', 'neutral'],
+  },
+
+  /** Results page — how far a launched campaign has got (DashboardCampaignRow.toolImpactStage). */
+  toolImpactStage: {
+    outside_scope: ['Not counted here', 'Not launched through this workspace, so it is left out.', 'neutral'],
+    created_unverified: ['Launch not confirmed', 'Created here, but we cannot yet confirm it went live in Meta.', 'warn'],
+    verified_zero_spend: ['Live, nothing spent yet', 'Confirmed live in Meta but has not spent any money.', 'neutral'],
+    with_spend_immature: ['Early days', 'Spending, but too new to judge fairly.', 'info'],
+    mature: ['Ready to judge', 'Has run long enough for its results to count.', 'good'],
+  },
+
+  /** Where a campaign's sales value comes from (DashboardCampaignRow.revenueBasis). */
+  returnBasis: {
+    meta_action_value: ['Sales value from Meta', 'The value of sales Meta recorded for this campaign.', 'good'],
+    configured_conversion_value: ['Estimated sales value', 'Number of sales times a set price per sale — an estimate.', 'warn'],
+    no_attributed_revenue: ['No sales recorded', 'Meta recorded no sales value for this campaign.', 'neutral'],
+    unknown: ['Source unclear', 'We cannot tell where this sales figure came from.', 'neutral'],
+  },
+
+  /** Daily chart — the kind of sales value on a day (ToolImpactReturnNature). */
+  returnNature: {
+    meta_reported_action_value: ['Sales value from Meta', 'The value of sales Meta recorded.', 'good'],
+    configured_conversion_estimate: ['Estimated sales value', 'Number of sales times a set price per sale — an estimate.', 'warn'],
+    no_attributed_return: ['No sales recorded', 'Meta recorded no sales value.', 'neutral'],
+    mixed: ['Mixed sources', 'Some days come from Meta, others are estimates.', 'warn'],
+    not_applicable: ['Not a sales campaign', 'This campaign is not aiming for sales.', 'neutral'],
+    unknown: ['Source unclear', 'We cannot tell where this sales figure came from.', 'neutral'],
+  },
+
+  /** Results page — why a campaign is left out of the headline numbers. */
+  launchExclusion: {
+    manual_source: ['made directly in Meta', 'Created by the team in Meta, not through this workspace.', 'neutral'],
+    manual_source_name_coincidence: ['made in Meta with an AI-style name', 'The name looks like an AI launch, but it was made by hand in Meta.', 'neutral'],
+    unrecognized_source: ['from an unknown source', 'We cannot tell how this campaign was created.', 'neutral'],
+    human_outside_agent_scope: ['launched by a person', 'Launched from the dashboard by a person, so not counted as AI-only.', 'neutral'],
+    missing_meta_campaign_id: ['not found in Meta', 'We cannot find the matching campaign in Meta.', 'warn'],
+    missing_launched_at: ['no launch date', 'We do not know when this went live.', 'warn'],
+    zero_spend: ['nothing spent yet', 'Live but has not spent any money.', 'neutral'],
+    not_mature: ['too new to judge', 'Has not run long enough to count.', 'neutral'],
+  },
+
+  /** How a campaign's budget is set (read from campaign names: CBO / ABO). */
+  budgetModel: {
+    cbo: ['One campaign budget', 'Meta splits one budget across the ad sets.', 'neutral'],
+    abo: ['Budget per ad set', 'Each ad set has its own budget.', 'neutral'],
+    unknown: ['Budget setup unknown', 'We could not tell how the budget is set.', 'neutral'],
+  },
+  /** Why a safety check stopped a suggested change (intelligence regret log). */
+  blockedReason: {
+    bandit_disagreement: ['Two checks disagreed', 'Two internal checks disagreed on whether this would help.', 'warn'],
+    oscillation_cooldown: ['Changed too recently', 'This was changed too recently — waiting to avoid flip-flopping.', 'neutral'],
+    recipient_thin_evidence: ['Not enough data yet', 'Not enough data yet on this audience to be sure.', 'neutral'],
+    recipient_learned_poor_audience: ['Audience did poorly before', 'Past results say this audience underperforms.', 'warn'],
+  },
 } satisfies Record<string, Table>
 
 export type PlainDomain = keyof typeof VOCAB

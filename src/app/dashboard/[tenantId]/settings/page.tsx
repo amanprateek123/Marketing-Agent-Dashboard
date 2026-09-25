@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness, MetaPage } from '@/types'
 import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses, getMetaPages } from '@/lib/api'
-import { formatDateTime } from '@/lib/utils'
+import { formatInr, formatWhen, humanise, plainStatus, toneChip, errorDetail, PLAIN_ERROR } from '@/lib/plain-language'
+import { Details } from '@/components/plain/Details'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 import { PageSelect } from '@/components/ui/PageSelect'
 import styles from './settings.module.css'
@@ -31,15 +32,15 @@ function SectionHeader({ icon: Icon, iconBg, iconColor, title, subtitle, right, 
   icon: React.ElementType; iconBg: string; iconColor: string; title: string; subtitle?: string; right?: React.ReactNode; category?: string
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 mb-5">
-      <div className="flex items-start gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+      <div className="flex min-w-0 items-start gap-3">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-1" style={{ background: iconBg }}>
           <Icon size={15} style={{ color: iconColor }} />
         </div>
-        <div>
+        <div className="min-w-0">
           {category && <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: iconColor }}>{category}</p>}
           <h2 className="section-title">{title}</h2>
-          {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{subtitle}</p>}
+          {subtitle && <p className="text-xs mt-0.5 break-words" style={{ color: 'var(--ink-3)' }}>{subtitle}</p>}
         </div>
       </div>
       {right}
@@ -57,7 +58,7 @@ function SaveBtn({ state, onClick, label = 'Save changes' }: { state: 'idle' | '
       }>
       {state === 'loading' && <Loader2 size={11} className="animate-spin" />}
       {state === 'success' && <CheckCircle2 size={11} />}
-      {state === 'loading' ? 'Saving…' : state === 'success' ? 'Saved!' : state === 'error' ? 'Error — retry' : label}
+      {state === 'loading' ? 'Saving…' : state === 'success' ? 'Saved!' : state === 'error' ? "Didn't save — try again" : label}
     </button>
   )
 }
@@ -228,44 +229,45 @@ function ConversionTracking({ product, onChange, metaPages }: { product: Product
   }
   return (
     <div className="card-inset p-4 space-y-3">
-      <p className="micro-label">Conversion Tracking</p>
+      <p className="micro-label">What counts as a sale</p>
+      <p className="text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>How Meta knows someone bought or signed up, so it can find more people like them. Your developer or Meta setup usually tells you which option to pick.</p>
       <div className="flex gap-2 flex-wrap">
-        {([{ value: 'standard', label: 'Standard Event' }, { value: 'custom_event', label: 'Custom Event' }, { value: 'custom_conversion', label: 'Custom Conversion' }, { value: 'app_event', label: 'App Event' }] as const).map(opt => (
+        {([{ value: 'standard', label: 'Standard website action' }, { value: 'custom_event', label: 'Your own website action' }, { value: 'custom_conversion', label: 'Meta custom conversion' }, { value: 'app_event', label: 'In-app action' }] as const).map(opt => (
           <button key={opt.value} onClick={() => setMode(opt.value)} className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             style={mode === opt.value ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{opt.label}</button>
         ))}
       </div>
       {mode === 'app_event' && (
         <p className="text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-3)' }}>
-          For native-app products (react-native-fbsdk-next / Facebook SDK) — tracks a Meta App Event instead of a website pixel. Use this for App Promotion / App Engagement campaigns, e.g. optimizing toward an in-app event like <code className="mono">chat_success</code>.
+          For products sold inside a mobile app. Meta counts an action inside the app (for example, a completed chat) instead of a visit to your website. Use it for app install or app engagement campaigns.
         </p>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {mode === 'standard' && <div><FieldLabel>Event</FieldLabel><select value={product.conversionEvent || 'Purchase'} onChange={e => onChange({ ...product, conversionEvent: e.target.value })}
-          className="input">{STANDARD_EVENTS.map(ev => <option key={ev}>{ev}</option>)}</select></div>}
-        {mode === 'custom_event' && <div><FieldLabel>Event Name</FieldLabel><TextInput value={product.customEventName || ''} onChange={v => onChange({ ...product, customEventName: v })} placeholder="MY_CUSTOM_EVENT" mono /></div>}
-        {mode === 'custom_conversion' && <div><FieldLabel>Conversion ID</FieldLabel><TextInput value={product.customConversionId || ''} onChange={v => onChange({ ...product, customConversionId: v })} placeholder="1940441453551274" mono /></div>}
+        {mode === 'standard' && <div><FieldLabel>Action to count</FieldLabel><select value={product.conversionEvent || 'Purchase'} onChange={e => onChange({ ...product, conversionEvent: e.target.value })}
+          className="input">{STANDARD_EVENTS.map(ev => <option key={ev} value={ev}>{humanise(ev)}</option>)}</select></div>}
+        {mode === 'custom_event' && <div><FieldLabel>Action name (as set up on your site)</FieldLabel><TextInput value={product.customEventName || ''} onChange={v => onChange({ ...product, customEventName: v })} placeholder="MY_CUSTOM_EVENT" mono /></div>}
+        {mode === 'custom_conversion' && <div><FieldLabel>Custom conversion number (from Meta)</FieldLabel><TextInput value={product.customConversionId || ''} onChange={v => onChange({ ...product, customConversionId: v })} placeholder="1940441453551274" mono /></div>}
         {mode === 'app_event' && (
           <>
-            <div><FieldLabel>Meta App ID</FieldLabel><TextInput value={product.metaAppId || ''} onChange={v => onChange({ ...product, metaAppId: v })} placeholder="935762695083961" mono /></div>
-            <div><FieldLabel>App Event Name</FieldLabel><TextInput value={product.conversionEvent || ''} onChange={v => onChange({ ...product, conversionEvent: v })} placeholder="chat_success" mono /></div>
+            <div><FieldLabel>App number (from Meta)</FieldLabel><TextInput value={product.metaAppId || ''} onChange={v => onChange({ ...product, metaAppId: v })} placeholder="935762695083961" mono /></div>
+            <div><FieldLabel>In-app action name</FieldLabel><TextInput value={product.conversionEvent || ''} onChange={v => onChange({ ...product, conversionEvent: v })} placeholder="chat_success" mono /></div>
           </>
         )}
-        {mode !== 'app_event' && <div><FieldLabel>Pixel ID <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>}
+        {mode !== 'app_event' && <div><FieldLabel>Pixel number <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(leave blank to use the company one)</span></FieldLabel><TextInput value={product.pixelId || ''} onChange={v => onChange({ ...product, pixelId: v || undefined })} placeholder="459303576818354" mono /></div>}
         <div>
-          <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(blank = company default)</span></FieldLabel>
+          <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(leave blank to use the company one)</span></FieldLabel>
           {metaPages.length > 0 ? (
             <PageSelect pages={metaPages} value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} allowBlank="— Use company default —" />
           ) : (
-            <TextInput value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} placeholder="No Pages discovered yet — paste a Page ID" mono />
+            <TextInput value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} placeholder="No Pages found yet — paste the Page number" mono />
           )}
         </div>
       </div>
       {mode === 'app_event' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(default / fallback)</span></FieldLabel><TextInput value={product.metaAppStoreUrl || ''} onChange={v => onChange({ ...product, metaAppStoreUrl: v || undefined })} placeholder="Used when an ad set doesn't split by OS" mono /></div>
-          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(iOS)</span></FieldLabel><TextInput value={product.metaAppStoreUrlIos || ''} onChange={v => onChange({ ...product, metaAppStoreUrlIos: v || undefined })} placeholder="https://apps.apple.com/app/id…" mono /></div>
-          <div><FieldLabel>Store URL <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(Android)</span></FieldLabel><TextInput value={product.metaAppStoreUrlAndroid || ''} onChange={v => onChange({ ...product, metaAppStoreUrlAndroid: v || undefined })} placeholder="https://play.google.com/store/apps/details?id=…" mono /></div>
+          <div><FieldLabel>App store link <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(used for every phone)</span></FieldLabel><TextInput value={product.metaAppStoreUrl || ''} onChange={v => onChange({ ...product, metaAppStoreUrl: v || undefined })} placeholder="Used when ads are not split by phone type" mono /></div>
+          <div><FieldLabel>App store link <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(iPhone)</span></FieldLabel><TextInput value={product.metaAppStoreUrlIos || ''} onChange={v => onChange({ ...product, metaAppStoreUrlIos: v || undefined })} placeholder="https://apps.apple.com/app/id…" mono /></div>
+          <div><FieldLabel>App store link <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(Android)</span></FieldLabel><TextInput value={product.metaAppStoreUrlAndroid || ''} onChange={v => onChange({ ...product, metaAppStoreUrlAndroid: v || undefined })} placeholder="https://play.google.com/store/apps/details?id=…" mono /></div>
         </div>
       )}
     </div>
@@ -285,7 +287,7 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
   const [budget, setBudget] = useState('')
   const [busy, setBusy] = useState(false)
   const [justStarted, setJustStarted] = useState(false)
-  const [msg, setMsg] = useState<{ type: 'good' | 'bad'; text: string } | null>(null)
+  const [msg, setMsg] = useState<{ type: 'good' | 'bad'; text: string; detail?: string } | null>(null)
 
   async function load() {
     try {
@@ -299,16 +301,16 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
 
   async function onStart() {
     setMsg(null)
-    if (!urlA || !urlB) { setMsg({ type: 'bad', text: 'Both URLs (A and B) are required.' }); return }
-    if (urlA === urlB) { setMsg({ type: 'bad', text: 'URL B must differ from URL A.' }); return }
+    if (!urlA || !urlB) { setMsg({ type: 'bad', text: 'Enter both page links, A and B.' }); return }
+    if (urlA === urlB) { setMsg({ type: 'bad', text: 'Page B must be a different link from page A.' }); return }
     const b = Number(budget)
-    if (!Number.isFinite(b) || b <= 0) { setMsg({ type: 'bad', text: 'Enter a positive daily budget.' }); return }
+    if (!Number.isFinite(b) || b <= 0) { setMsg({ type: 'bad', text: 'Enter a daily budget above ₹0.' }); return }
     setBusy(true)
     try {
       await startLandingPageTest(tenantId, { product: productName, controlUrl: urlA, variantUrl: urlB, budget: b })
       setJustStarted(true)
-      setMsg({ type: 'good', text: 'Generating creative… the LP_TEST campaign will appear under Approvals in a few minutes. Approve it there to go live.' })
-    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Failed to start test.' }) }
+      setMsg({ type: 'good', text: 'Making the ads now. The test campaign will appear under Approvals in a few minutes — approve it there to go live.' })
+    } catch (e) { setMsg({ type: 'bad', text: "We couldn't start the test. Try again.", detail: errorDetail(e) }) }
     finally { setBusy(false) }
   }
 
@@ -316,9 +318,9 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
     setBusy(true); setMsg(null)
     try {
       await promoteLandingPage(tenantId, productName, url)
-      setMsg({ type: 'good', text: `Promoted — ${url} is now the live landing URL. Test cleared.` })
+      setMsg({ type: 'good', text: `Done — ${url} is now the page your ads send people to. The test is closed.` })
       await load()
-    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Promote failed.' }) }
+    } catch (e) { setMsg({ type: 'bad', text: "We couldn't switch the page. Try again.", detail: errorDetail(e) }) }
     finally { setBusy(false) }
   }
 
@@ -327,24 +329,24 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
     try {
       await cancelLandingPageTest(tenantId, productName)
       setJustStarted(false)
-      setMsg({ type: 'good', text: 'Test record cleared. (Pause the Meta campaign separately if it is live.)' })
+      setMsg({ type: 'good', text: 'Test closed. If its campaign is still running in Meta, pause it there too.' })
       await load()
-    } catch (e) { setMsg({ type: 'bad', text: e instanceof Error ? e.message : 'Cancel failed.' }) }
+    } catch (e) { setMsg({ type: 'bad', text: "We couldn't close the test. Try again.", detail: errorDetail(e) }) }
     finally { setBusy(false) }
   }
 
   const Header = (
     <div className="flex items-center gap-2">
       <FlaskConical size={13} style={{ color: 'var(--accent)' }} />
-      <FieldLabel>Landing Page A/B Test</FieldLabel>
+      <FieldLabel>Test two landing pages</FieldLabel>
     </div>
   )
 
   if (!productName) {
-    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Save the product first to run a landing-page test.</p></div>
+    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Save the product first, then you can test two landing pages.</p></div>
   }
   if (test === undefined) {
-    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Loading test status…</p></div>
+    return <div className="card-inset p-3">{Header}<p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>Checking for a running test…</p></div>
   }
 
   const ev = test?.evaluation
@@ -352,15 +354,15 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
 
   const Arm = ({ label, arm, win }: { label: string; arm?: LandingPageTestArm; win?: boolean }) => (
     <div className="card-inset p-3" style={win ? { borderColor: 'var(--good-border)', background: 'var(--good-bg)' } : undefined}>
-      <div className="flex items-center justify-between gap-2 mb-1.5">
+      <div className="flex min-w-0 items-center justify-between gap-2 mb-1.5">
         <span className="micro-label">{label}</span>
         {win && <span className="chip chip-good inline-flex items-center gap-1"><Trophy size={10} /> Leading</span>}
       </div>
-      <p className="text-[11px] mono truncate mb-2" style={{ color: 'var(--ink-2)' }} title={arm?.url}>{arm?.url || '—'}</p>
+      <p className="text-[11px] truncate mb-2" style={{ color: 'var(--ink-2)' }} title={arm?.url}>{arm?.url || '—'}</p>
       <div className="grid grid-cols-3 gap-2">
-        <div><p className="micro-label">Conv</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.conversions ?? 0}</p></div>
-        <div><p className="micro-label">CPA</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.cpa != null ? `₹${arm.cpa.toLocaleString()}` : '—'}</p></div>
-        <div><p className="micro-label">ROAS</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.roas != null ? `${arm.roas}x` : '—'}</p></div>
+        <div><p className="micro-label">Sales</p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.conversions ?? 0}</p></div>
+        <div><p className="micro-label"><Term help={GLOSSARY.cpa}>Cost per sale</Term></p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.cpa != null ? formatInr(arm.cpa) : '—'}</p></div>
+        <div><p className="micro-label"><Term help={GLOSSARY.roas}>Return</Term></p><p className="mono text-sm" style={{ color: 'var(--ink)' }}>{arm?.roas != null ? `${arm.roas}x` : '—'}</p></div>
       </div>
     </div>
   )
@@ -369,46 +371,47 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
     <div className="card-inset p-3.5">
       <div className="flex items-center justify-between gap-2 mb-2.5">
         {Header}
-        {test && <span className={`chip ${test.status === 'concluded' ? 'chip-good' : 'chip-accent'}`}>{test.status === 'concluded' ? 'Winner found' : 'Running'}</span>}
+        {test && <span className={`chip ${test.status === 'concluded' ? 'chip-good' : 'chip-accent'}`}>{test.status === 'concluded' ? 'Winner found' : 'Testing now'}</span>}
       </div>
 
-      {msg && <div className="mb-2.5 px-2.5 py-1.5 rounded-md text-[11px]" style={msg.type === 'good' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>{msg.text}</div>}
+      {msg && <div className="mb-2.5 px-2.5 py-1.5 rounded-md text-[11px] break-words" style={msg.type === 'good' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }}>{msg.text}</div>}
+      {msg?.detail && <Details className="mb-2.5" items={[{ label: 'Error', value: msg.detail }]} />}
 
       {/* ── Active test: show live per-URL results + actions ── */}
       {test ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <Arm label="A · Control" arm={ev?.control} win={!!isWinner(ev?.control?.url)} />
-            <Arm label="B · Variant" arm={ev?.variant} win={!!isWinner(ev?.variant?.url)} />
+            <Arm label="Page A · current" arm={ev?.control} win={!!isWinner(ev?.control?.url)} />
+            <Arm label="Page B · new" arm={ev?.variant} win={!!isWinner(ev?.variant?.url)} />
           </div>
           {ev ? (
             <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
               {ev.decided
-                ? <>Leader beats the other by <span className="mono font-semibold" style={{ color: 'var(--good)' }}>{ev.marginPct}%</span> on CPA — decisive.</>
-                : <>Gathering data — needs ≥15 conversions per arm and ≥15% CPA gap to call a winner. Current gap <span className="mono">{ev.marginPct}%</span>.</>}
+                ? <>The leading page gets sales <span className="mono font-semibold" style={{ color: 'var(--good)' }}>{ev.marginPct}%</span> cheaper — a clear winner.</>
+                : <>Still collecting results. We call a winner once each page has at least 15 sales and one is at least 15% cheaper per sale. Right now the gap is <span className="mono">{ev.marginPct}%</span>.</>}
             </p>
           ) : (
-            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Waiting for the first conversions to report per URL.</p>
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Waiting for the first sales to come in on each page.</p>
           )}
           <div className="flex items-center gap-2 flex-wrap">
             {(test.winnerUrl || ev?.leaderUrl) && (
               <button disabled={busy} onClick={() => onPromote((test.winnerUrl || ev?.leaderUrl) as string)} className="btn btn-accent text-xs inline-flex items-center gap-1.5">
-                <Trophy size={12} /> Promote {isWinner(ev?.variant?.url) ? 'B' : 'A'} as live URL
+                <Trophy size={12} /> Use page {isWinner(ev?.variant?.url) ? 'B' : 'A'} from now on
               </button>
             )}
-            <button disabled={busy} onClick={onCancel} className="btn btn-ghost text-xs">Clear test</button>
+            <button disabled={busy} onClick={onCancel} className="btn btn-ghost text-xs">Close test</button>
           </div>
-          {test.campaignId && <p className="text-[10px] mono" style={{ color: 'var(--ink-4)' }}>campaign {test.campaignId}</p>}
+          {test.campaignId && <Details reference={test.campaignId} />}
         </div>
       ) : justStarted ? (
-        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Creative generating + campaign being created. It will show up in Approvals shortly — approve it to launch, then results appear here.</p>
+        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>The ads and the test campaign are being made. It will show up in Approvals shortly — approve it to launch, and results will appear here.</p>
       ) : (
         /* ── No active test: the start form ── */
         <div className="space-y-2.5">
-          <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Tests two pages head-to-head — same audience + creative, only the URL differs. One creative set is generated and shared across both. Winner is reported here; you promote it.</p>
-          <div><FieldLabel>URL A · Control</FieldLabel><TextInput value={urlA} onChange={setUrlA} placeholder="https://…/v1" mono type="url" /></div>
-          <div><FieldLabel>URL B · Variant</FieldLabel><TextInput value={urlB} onChange={setUrlB} placeholder="https://…/v2" mono type="url" /></div>
-          <div className="w-40"><FieldLabel>Daily Budget</FieldLabel><NumericInput value={budget} onChange={setBudget} prefix="₹" placeholder="5000" /></div>
+          <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>Sends the same ads to the same people, but half go to page A and half to page B. We tell you which page gets cheaper sales; you decide whether to switch.</p>
+          <div><FieldLabel>Page A · your current page</FieldLabel><TextInput value={urlA} onChange={setUrlA} placeholder="https://…/v1" mono type="url" /></div>
+          <div><FieldLabel>Page B · the page to try</FieldLabel><TextInput value={urlB} onChange={setUrlB} placeholder="https://…/v2" mono type="url" /></div>
+          <div className="w-40"><FieldLabel>Daily budget</FieldLabel><NumericInput value={budget} onChange={setBudget} prefix="₹" placeholder="5000" /></div>
           <button disabled={busy} onClick={onStart} className="btn btn-accent text-xs inline-flex items-center gap-1.5">
             {busy ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />} Start test
           </button>
@@ -427,19 +430,19 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
   return (
     <div className="rounded-xl overflow-hidden transition-all" style={{ border: `1px solid ${isActive ? 'var(--hairline)' : 'var(--hairline-light)'}`, background: isActive ? 'var(--surface)' : 'var(--surface-warm)' }}>
       <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" style={{ borderBottom: open ? '1px solid var(--hairline-light)' : 'none' }} onClick={() => setOpen(o => !o)}>
-        <button className="shrink-0" onClick={e => { e.stopPropagation(); set('active', !isActive) }} title={isActive ? 'Deactivate' : 'Activate'}>
+        <button className="shrink-0" onClick={e => { e.stopPropagation(); set('active', !isActive) }} title={isActive ? 'Turn off — stop promoting this product' : 'Turn on — allow promoting this product'}>
           {isActive ? <ToggleRight size={20} style={{ color: 'var(--good)' }} /> : <ToggleLeft size={20} style={{ color: 'var(--ink-4)' }} />}
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: isActive ? 'var(--ink)' : 'var(--ink-3)' }}>{product.name || <span style={{ color: 'var(--ink-4)' }}>Unnamed product</span>}</p>
           {!open && <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {product.price != null && <span className="text-[11px] mono" style={{ color: 'var(--ink-3)' }}>{product.currency || 'INR'} {product.price.toLocaleString()}</span>}
-            {product.conversionEvent && <span className="chip chip-warn">{product.conversionEvent}</span>}
-            {!isActive && <span className="chip chip-neutral">Inactive</span>}
+            {product.price != null && <span className="text-[11px] mono" style={{ color: 'var(--ink-3)' }}>{(product.currency || 'INR') === 'INR' ? formatInr(product.price) : `${product.currency} ${product.price.toLocaleString('en-IN')}`}</span>}
+            {product.conversionEvent && <span className="chip chip-warn">Counts: {humanise(product.conversionEvent)}</span>}
+            {!isActive && <span className="chip chip-neutral">Turned off</span>}
           </div>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={e => { e.stopPropagation(); onRemove() }} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--bad-bg)]"><Trash2 size={13} style={{ color: 'var(--bad-border)' }} /></button>
+          <button onClick={e => { e.stopPropagation(); onRemove() }} title="Remove this product" aria-label="Remove this product" className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--bad-bg)]"><Trash2 size={13} style={{ color: 'var(--bad-border)' }} /></button>
           {open ? <ChevronUp size={14} style={{ color: 'var(--ink-4)' }} /> : <ChevronDown size={14} style={{ color: 'var(--ink-4)' }} />}
         </div>
       </div>
@@ -451,12 +454,12 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
               <select value={product.currency || 'INR'} onChange={e => set('currency', e.target.value)} className="input w-auto text-xs" style={{ width: 'auto' }}>{['INR', 'USD', 'EUR', 'GBP', 'AED'].map(c => <option key={c}>{c}</option>)}</select>
               <NumericInput value={product.price != null ? String(product.price) : ''} onChange={v => set('price', v ? Number(v) : undefined)} placeholder="999" />
             </div></div>
-            <div><FieldLabel>Conversion Value</FieldLabel><NumericInput value={product.conversionValue != null ? String(product.conversionValue) : ''} onChange={v => set('conversionValue', v ? Number(v) : undefined)} placeholder="999" /></div>
+            <div><FieldLabel>What one sale is worth (₹)</FieldLabel><NumericInput value={product.conversionValue != null ? String(product.conversionValue) : ''} onChange={v => set('conversionValue', v ? Number(v) : undefined)} placeholder="999" /></div>
           </div>
           {/* Contribution margin before the separate refund adjustment. Raw
               founder proof intentionally stays at recorded value vs spend. */}
           <div>
-            <FieldLabel>Contribution Margin</FieldLabel>
+            <FieldLabel>Profit margin</FieldLabel>
             <div className="flex items-center gap-2">
               <div className="w-32">
                 <NumericInput
@@ -473,8 +476,8 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
               </div>
               <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                 {product.contributionMargin != null && product.contributionMargin > 0
-                  ? <>Directional net-value threshold <span className="mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span></>
-                  : 'Vertical default applies when blank'}
+                  ? <>Ads need to return about <span className="mono font-semibold">{(1 / product.contributionMargin).toFixed(2)}x</span> their cost to break even</>
+                  : 'Blank uses a typical margin for your industry'}
               </p>
             </div>
           </div>
@@ -482,7 +485,7 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
               founder raw-ROAS proof does not reapply it. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
             <div>
-              <FieldLabel>Refund Rate</FieldLabel>
+              <FieldLabel>Share of sales refunded</FieldLabel>
               <div className="flex items-center gap-2">
                 <div className="w-32">
                   <NumericInput
@@ -498,13 +501,13 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
                 </div>
                 <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
                   {product.refundRatePercent != null && product.refundRatePercent > 0 && product.conversionValue != null
-                    ? <>→ net value <span className="mono font-semibold">₹{Math.round(product.conversionValue * (1 - product.refundRatePercent / 100)).toLocaleString()}</span></>
-                    : 'Blank = no refunds (gross revenue)'}
+                    ? <>So one sale is really worth <span className="mono font-semibold">{formatInr(Math.round(product.conversionValue * (1 - product.refundRatePercent / 100)))}</span></>
+                    : 'Blank means no refunds are taken off'}
                 </p>
               </div>
             </div>
             <div>
-              <FieldLabel>Hide Price In Creative</FieldLabel>
+              <FieldLabel>Hide the price in ads</FieldLabel>
               <button
                 type="button"
                 onClick={() => set('hidePriceInCreative', !product.hidePriceInCreative)}
@@ -515,18 +518,18 @@ function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }
                   ? <ToggleRight size={20} style={{ color: 'var(--good)' }} />
                   : <ToggleLeft size={20} style={{ color: 'var(--ink-4)' }} />}
                 <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-                  {product.hidePriceInCreative ? 'Price suppressed in all ads' : 'Price shown in ads (default)'}
+                  {product.hidePriceInCreative ? 'Price is hidden in every ad' : 'Price is shown in ads (usual)'}
                 </span>
               </button>
             </div>
           </div>
           <ConversionTracking product={product} onChange={onChange} metaPages={metaPages} />
-          <div><FieldLabel>Landing URL</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
+          <div><FieldLabel>Page your ads send people to</FieldLabel><TextInput value={product.landingUrl || ''} onChange={v => set('landingUrl', v)} placeholder="https://example.com/product" mono type="url" /></div>
           <LandingPageTestSection tenantId={tenantId} productName={product.name} defaultControlUrl={product.landingUrl || ''} />
-          <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="Brief description for the AI agent…" /></div>
+          <div><FieldLabel>Description</FieldLabel><TextArea value={product.description || ''} onChange={v => set('description', v)} placeholder="A short description the AI uses when writing ads…" /></div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {([{ key: 'languages' as const, label: 'Languages', ph: 'hindi, english' }, { key: 'trendKeywords' as const, label: 'Trend Keywords', ph: 'kundli, astrology' }, { key: 'differentiators' as const, label: 'Differentiators', ph: 'AI-powered, fast' }]).map(({ key, label, ph }) => (
-              <div key={key}><FieldLabel>{label}</FieldLabel><p className="text-[11px] mb-1.5" style={{ color: 'var(--ink-4)' }}>comma-separated</p>
+            {([{ key: 'languages' as const, label: 'Languages', ph: 'hindi, english' }, { key: 'trendKeywords' as const, label: 'Search words to watch', ph: 'kundli, astrology' }, { key: 'differentiators' as const, label: 'What makes it different', ph: 'AI-powered, fast' }]).map(({ key, label, ph }) => (
+              <div key={key}><FieldLabel>{label}</FieldLabel><p className="text-[11px] mb-1.5" style={{ color: 'var(--ink-4)' }}>Separate with commas</p>
                 <TextInput value={(product[key] as string[] || []).join(', ')} onChange={v => tags(key, v)} placeholder={ph} /></div>
             ))}
           </div>
@@ -575,6 +578,7 @@ export default function SettingsPage({ params }: PageProps) {
   const [promptsHistory, setPromptsHistory] = useState<PromptsHistoryEntry[]>([])
   const [rollbackState, setRollbackState] = useState<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({})
   const [fixCaptionResult, setFixCaptionResult] = useState<string | null>(null)
+  const [fixCaptionDetail, setFixCaptionDetail] = useState<string | null>(null)
 
   // Local editable copies
   const [info, setInfo] = useState({ name: '', industry: '', geography: '', language: '' })
@@ -654,7 +658,7 @@ export default function SettingsPage({ params }: PageProps) {
       }
       setError(null)
     } catch {
-      setError('We could not load the launch settings. Check the connection and try again.')
+      setError(PLAIN_ERROR)
     } finally { setLoading(false) }
   }
 
@@ -681,7 +685,7 @@ export default function SettingsPage({ params }: PageProps) {
     } catch {
       setMetaAccounts([])
       setMetaAccountsState('error')
-      setMetaAccountsError('Could not load ad accounts. Verify the Meta connection and retry.')
+      setMetaAccountsError("We couldn't load your ad accounts from Meta. Try again.")
     }
   }
 
@@ -704,7 +708,7 @@ export default function SettingsPage({ params }: PageProps) {
     } catch {
       setMetaPages([])
       setMetaPagesState('error')
-      setMetaPagesError('Could not load Pages. Verify the Meta connection and retry.')
+      setMetaPagesError("We couldn't load your Facebook Pages from Meta. Try again.")
     }
   }
 
@@ -729,12 +733,12 @@ export default function SettingsPage({ params }: PageProps) {
     try {
       await syncMetaAccounts(tenantId, selectedAccountIds)
       setMetaSyncState('success')
-      showToast(`Syncing campaigns for ${selectedAccountIds.length} account(s)…`, 'success')
+      showToast(`Bringing in campaigns from ${selectedAccountIds.length} ad account${selectedAccountIds.length === 1 ? '' : 's'}…`, 'success')
       fetchSettings()
       fetchMetaAccounts()
     } catch {
       setMetaSyncState('error')
-      showToast('Meta sync could not start. Verify the selected accounts and retry.', 'error')
+      showToast("We couldn't bring in your campaigns from Meta. Try again.", 'error')
     } finally {
       setTimeout(() => setMetaSyncState('idle'), 3000)
     }
@@ -745,12 +749,12 @@ export default function SettingsPage({ params }: PageProps) {
     try {
       await rollbackPrompts(tenantId, version)
       setRollbackState((s) => ({ ...s, [version]: 'success' }))
-      showToast(`Rolled back to prompts v${version}`, 'success')
+      showToast(`Went back to AI instructions version ${version}`, 'success')
       fetchPromptsHistory()
       setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 2500)
     } catch {
       setRollbackState((s) => ({ ...s, [version]: 'error' }))
-      showToast('Prompt rollback failed. No configuration was changed.', 'error')
+      showToast("We couldn't go back to that version. Nothing was changed.", 'error')
       setTimeout(() => setRollbackState((s) => ({ ...s, [version]: 'idle' })), 3000)
     }
   }
@@ -762,10 +766,10 @@ export default function SettingsPage({ params }: PageProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const result = await res.json()
       setState('success')
-      if (result.promptRegenTriggered) showToast('Saved. AI prompts regenerating…', 'success')
+      if (result.promptRegenTriggered) showToast('Saved. The AI is updating its instructions…', 'success')
       else showToast('Saved.', 'success')
       fetchSettings()
-    } catch { setState('error'); showToast('Save failed', 'error') }
+    } catch { setState('error'); showToast("We couldn't save this. Try again.", 'error') }
     finally { setTimeout(() => setState('idle'), 3000) }
   }
 
@@ -782,6 +786,7 @@ export default function SettingsPage({ params }: PageProps) {
   async function handleFixCaptionVideos() {
     setFixCaptionState('loading')
     setFixCaptionResult(null)
+    setFixCaptionDetail(null)
     try {
       const res = await fetch(`${API_BASE}/creative/${tenantId}/fix-caption-videos`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -789,12 +794,13 @@ export default function SettingsPage({ params }: PageProps) {
       setFixCaptionState('success')
       const fixed = data.fixed ?? data.fixedCount ?? 0
       const total = data.total ?? data.totalCount ?? 0
-      setFixCaptionResult(`${fixed} of ${total} videos re-fetched`)
+      setFixCaptionResult(`Fixed ${fixed} of ${total} videos`)
     } catch (err) {
       setFixCaptionState('error')
-      setFixCaptionResult(err instanceof Error ? err.message : 'Failed')
+      setFixCaptionResult("We couldn't fix the videos. Try again.")
+      setFixCaptionDetail(errorDetail(err) || null)
     } finally {
-      setTimeout(() => { setFixCaptionState('idle'); setFixCaptionResult(null) }, 6000)
+      setTimeout(() => { setFixCaptionState('idle'); setFixCaptionResult(null); setFixCaptionDetail(null) }, 6000)
     }
   }
 
@@ -807,7 +813,7 @@ export default function SettingsPage({ params }: PageProps) {
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
             <AlertCircle size={22} aria-hidden="true" />
           </span>
-          <h1 className="mt-4 text-xl font-bold" style={{ color: 'var(--ink)' }}>Launch settings are unavailable</h1>
+          <h1 className="mt-4 text-xl font-bold" style={{ color: 'var(--ink)' }}>We couldn&apos;t load your settings</h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6" style={{ color: 'var(--ink-3)' }}>{error}</p>
           <button type="button" onClick={fetchSettings} className="btn btn-primary mt-5">
             <RefreshCw size={14} aria-hidden="true" /> Try again
@@ -836,21 +842,21 @@ export default function SettingsPage({ params }: PageProps) {
     {
       id: 'products',
       label: 'Products',
-      detail: productsReady ? `${savedActiveProducts.length} active product${savedActiveProducts.length === 1 ? '' : 's'} available to Copilot.` : 'Add at least one active product.',
+      detail: productsReady ? `${savedActiveProducts.length} active product${savedActiveProducts.length === 1 ? '' : 's'} ready to promote.` : 'Add at least one active product.',
       ready: productsReady,
       icon: Package,
     },
     {
       id: 'meta',
       label: 'Meta connection',
-      detail: metaReady ? `${savedAccountCount} ad account${savedAccountCount === 1 ? '' : 's'} and a Page are selected.` : 'Connect a credential, ad account, and Facebook Page.',
+      detail: metaReady ? `${savedAccountCount} ad account${savedAccountCount === 1 ? '' : 's'} and a Page are selected.` : 'Connect Meta, then pick an ad account and a Facebook Page.',
       ready: metaReady,
       icon: metaConnected ? Wifi : WifiOff,
     },
     {
       id: 'safety',
-      label: 'Safety controls',
-      detail: safetyReady ? 'Weekly and per-campaign limits are active.' : 'Set weekly and per-campaign budget limits.',
+      label: 'Spending limits',
+      detail: safetyReady ? 'Weekly and per-campaign spending limits are set.' : 'Set a weekly and a per-campaign spending limit.',
       ready: safetyReady,
       icon: ShieldCheck,
     },
@@ -861,35 +867,35 @@ export default function SettingsPage({ params }: PageProps) {
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       {/* Toast */}
-      {toast && <div className="fixed right-4 top-4 z-50 max-w-[calc(100vw-2rem)] rounded-xl px-4 py-3 text-sm font-medium shadow-lg animate-scale-in" style={toast.type === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="status" aria-live="polite">{toast.msg}</div>}
+      {toast && <div className="fixed right-4 top-4 z-50 max-w-[calc(100vw-2rem)] break-words rounded-xl px-4 py-3 text-sm font-medium shadow-lg animate-scale-in" style={toast.type === 'success' ? { background: 'var(--good-bg)', color: 'var(--good)', border: '1px solid var(--good-border)' } : { background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="status" aria-live="polite">{toast.msg}</div>}
 
       {/* Page header */}
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="micro-label mb-2">Control · Launch readiness</p>
+          <p className="micro-label mb-2">Settings · Ready to launch?</p>
           <h1 className="page-title">Launch settings</h1>
-          <p className="page-subtitle max-w-2xl">Give Meridian the business context, platform access, and safety limits it needs to prepare controlled campaigns.</p>
+          <p className="page-subtitle max-w-2xl">Tell Meridian about your business, connect your Meta account, and set spending limits. It uses these to prepare campaigns you approve.</p>
         </div>
         <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost">
           {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-          {regenState === 'loading' ? 'Refreshing AI context…' : regenState === 'success' ? 'AI context refreshed' : 'Refresh AI context'}
+          {regenState === 'loading' ? 'Updating the AI…' : regenState === 'success' ? 'AI updated' : 'Update the AI with these settings'}
         </button>
       </div>
 
-      {error && <div className="mb-5 flex items-center gap-3 rounded-xl p-4 text-sm" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="alert"><AlertCircle size={14} /> {error}</div>}
+      {error && <div className="mb-5 flex items-center gap-3 break-words rounded-xl p-4 text-sm" style={{ background: 'var(--bad-bg)', color: 'var(--bad)', border: '1px solid var(--bad-border)' }} role="alert"><AlertCircle size={14} /> {error}</div>}
 
       <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-6" aria-label="Launch readiness and settings navigation">
           <div className={styles.readinessCard}>
-            <p className="micro-label">Launch foundation</p>
+            <p className="micro-label">Before your first launch</p>
             <div className="mt-4 flex items-center gap-4">
               <div className={styles.score} style={{ background: `conic-gradient(var(--good) ${readinessPercent}%, var(--muted) 0)` }} aria-label={`${readyCount} of ${launchChecks.length} launch essentials ready`}>
                 <span className={styles.scoreValue}>{readyCount}/4</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-base font-bold" style={{ color: 'var(--ink)' }}>{readyCount === 4 ? 'Ready to launch' : `${4 - readyCount} setup step${4 - readyCount === 1 ? '' : 's'} left`}</p>
                 <p className="mt-1 text-[11px] leading-4" style={{ color: 'var(--ink-3)' }}>
-                  Based on saved configuration, not unsaved form changes.
+                  Counts only what you have saved.
                 </p>
               </div>
             </div>
@@ -899,12 +905,12 @@ export default function SettingsPage({ params }: PageProps) {
           </div>
 
           <nav className={styles.sideNav} aria-label="Settings sections">
-            <p className="micro-label px-2 pb-2">Configuration groups</p>
+            <p className="micro-label px-2 pb-2">Jump to</p>
             {[
               { href: '#business', label: 'Business foundation', icon: Building2 },
-              { href: '#products', label: 'Products & measurement', icon: Package },
+              { href: '#products', label: 'Products & sales tracking', icon: Package },
               { href: '#meta', label: 'Meta connection', icon: Wifi },
-              { href: '#safety', label: 'Safety & automation', icon: ShieldCheck },
+              { href: '#safety', label: 'Spending limits & automation', icon: ShieldCheck },
             ].map(({ href, label, icon: Icon }) => (
               <a key={href} href={href} className={styles.sideNavLink}>
                 <span className="flex items-center gap-2"><Icon size={14} aria-hidden="true" /> {label}</span>
@@ -918,11 +924,11 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Company Info ── */}
         <SectionCard id="business">
-          <SectionHeader icon={Building2} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Company profile" subtitle="The market context Meridian uses before it recommends a campaign." />
+          <SectionHeader icon={Building2} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Company profile" subtitle="Who you are and where you sell. Meridian reads this before it suggests a campaign." />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div><FieldLabel required>Name</FieldLabel><TextInput value={info.name} onChange={v => setInfo(s => ({ ...s, name: v }))} placeholder="Company name" /></div>
             <div><FieldLabel>Industry</FieldLabel><TextInput value={info.industry} onChange={v => setInfo(s => ({ ...s, industry: v }))} placeholder="e.g. Astrology" /></div>
-            <div><FieldLabel>Geography</FieldLabel><TextInput value={info.geography} onChange={v => setInfo(s => ({ ...s, geography: v }))} placeholder="e.g. India" /></div>
+            <div><FieldLabel>Where you sell</FieldLabel><TextInput value={info.geography} onChange={v => setInfo(s => ({ ...s, geography: v }))} placeholder="e.g. India" /></div>
             <div><FieldLabel>Language</FieldLabel><TextInput value={info.language} onChange={v => setInfo(s => ({ ...s, language: v }))} placeholder="e.g. English" /></div>
           </div>
           <div className="mt-5"><SaveBtn state={infoState} onClick={() => saveSection({ name: info.name, industry: info.industry, geography: info.geography, language: info.language }, setInfoState)} label="Save" /></div>
@@ -930,88 +936,88 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Brand ── */}
         <SectionCard>
-          <SectionHeader icon={Palette} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Brand & voice" subtitle="The audience, positioning, and language guardrails behind AI recommendations." />
+          <SectionHeader icon={Palette} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Brand & voice" subtitle="Who you sell to, how you sound, and what the AI should never say." />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><FieldLabel>Target Audience</FieldLabel><TextInput value={brand.targetAudience} onChange={v => setBrand(s => ({ ...s, targetAudience: v }))} placeholder="25-40 year old professionals" /></div>
-              <div><FieldLabel>Tone</FieldLabel><TextInput value={brand.tone} onChange={v => setBrand(s => ({ ...s, tone: v }))} placeholder="bold and friendly" /></div>
+              <div><FieldLabel>Who you sell to</FieldLabel><TextInput value={brand.targetAudience} onChange={v => setBrand(s => ({ ...s, targetAudience: v }))} placeholder="25-40 year old professionals" /></div>
+              <div><FieldLabel>Tone of voice</FieldLabel><TextInput value={brand.tone} onChange={v => setBrand(s => ({ ...s, tone: v }))} placeholder="bold and friendly" /></div>
             </div>
-            <div><FieldLabel>Unique Value Proposition</FieldLabel><TextArea value={brand.uniqueValue} onChange={v => setBrand(s => ({ ...s, uniqueValue: v }))} placeholder="What makes you different?" /></div>
-            <div><FieldLabel>Brand Guidelines</FieldLabel><TextArea value={brand.brandGuidelines} onChange={v => setBrand(s => ({ ...s, brandGuidelines: v }))} placeholder="Key brand rules the AI should follow…" rows={3} /></div>
+            <div><FieldLabel>Why people choose you</FieldLabel><TextArea value={brand.uniqueValue} onChange={v => setBrand(s => ({ ...s, uniqueValue: v }))} placeholder="What makes you different?" /></div>
+            <div><FieldLabel>Brand rules</FieldLabel><TextArea value={brand.brandGuidelines} onChange={v => setBrand(s => ({ ...s, brandGuidelines: v }))} placeholder="Key brand rules the AI should follow…" rows={3} /></div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div><FieldLabel>Audience Personas</FieldLabel><TagsInput value={brand.audiencePersonas} onChange={v => setBrand(s => ({ ...s, audiencePersonas: v }))} placeholder="busy mom, student" /></div>
-              <div><FieldLabel>Customer Language</FieldLabel><TagsInput value={brand.customerLanguage} onChange={v => setBrand(s => ({ ...s, customerLanguage: v }))} placeholder="hindi, english" /></div>
-              <div><FieldLabel>Topics to Avoid</FieldLabel><TagsInput value={brand.avoid} onChange={v => setBrand(s => ({ ...s, avoid: v }))} placeholder="politics, religion" /></div>
+              <div><FieldLabel>Types of customer</FieldLabel><TagsInput value={brand.audiencePersonas} onChange={v => setBrand(s => ({ ...s, audiencePersonas: v }))} placeholder="busy mom, student" /></div>
+              <div><FieldLabel>Languages your customers use</FieldLabel><TagsInput value={brand.customerLanguage} onChange={v => setBrand(s => ({ ...s, customerLanguage: v }))} placeholder="hindi, english" /></div>
+              <div><FieldLabel>Topics to avoid</FieldLabel><TagsInput value={brand.avoid} onChange={v => setBrand(s => ({ ...s, avoid: v }))} placeholder="politics, religion" /></div>
             </div>
           </div>
-          <div className="mt-5"><SaveBtn state={brandState} onClick={() => saveSection({ targetAudience: brand.targetAudience, tone: brand.tone, uniqueValue: brand.uniqueValue, brandGuidelines: brand.brandGuidelines, audiencePersonas: brand.audiencePersonas, customerLanguage: brand.customerLanguage, avoid: brand.avoid }, setBrandState)} label="Save Brand" /></div>
+          <div className="mt-5"><SaveBtn state={brandState} onClick={() => saveSection({ targetAudience: brand.targetAudience, tone: brand.tone, uniqueValue: brand.uniqueValue, brandGuidelines: brand.brandGuidelines, audiencePersonas: brand.audiencePersonas, customerLanguage: brand.customerLanguage, avoid: brand.avoid }, setBrandState)} label="Save brand" /></div>
         </SectionCard>
 
         {/* ── Products ── */}
         <SectionCard id="products">
-          <SectionHeader icon={Package} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Products & measurement" title="Product catalogue" subtitle="What Meridian can promote, where customers land, and how results are measured."
+          <SectionHeader icon={Package} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Products & sales tracking" title="Products" subtitle="What Meridian can promote, where your ads send people, and how a sale is counted."
             right={<button onClick={() => setProducts(p => [...p, { name: '', active: true, currency: 'INR' }])} className="btn btn-ghost"><Plus size={12} /> Add product</button>} />
           {products.length === 0 ? (
             <div className="card-inset py-10 text-center" style={{ borderStyle: 'dashed' }}>
               <Package size={22} className="mx-auto mb-2" style={{ color: 'var(--ink-4)' }} />
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>No products configured</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--ink-3)' }}>No products yet. Add one so Meridian has something to promote.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {products.map((p, i) => <ProductCard key={i} product={p} index={i} tenantId={tenantId} metaPages={metaPages} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
             </div>
           )}
-          {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save Products" /></div>}
+          {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save products" /></div>}
         </SectionCard>
 
         {/* ── Budget & Rules ── */}
         <SectionCard id="safety">
-          <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" category="Safety & automation" title="Budget guardrails" subtitle="Hard caps, performance targets, and controlled pause or scale thresholds." />
+          <SectionHeader icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" category="Spending limits & automation" title="Spending limits" subtitle="The most it may spend, what good results look like, and when to pause or grow a campaign on its own." />
           <div className="space-y-3">
-            <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Budget Caps" hint="Hard limits the agent will never spend past, no matter how well things are going.">
+            <RuleGroup icon={DollarSign} iconBg="var(--good-bg)" iconColor="var(--good)" title="Spending caps" hint="Limits it will never spend past, however well things are going.">
               <div><FieldLabel>Weekly cap — most you&apos;ll spend in 7 days</FieldLabel><NumericInput value={budgetFields.weeklyBudgetCap ?? ''} onChange={v => setBudgetFields(b => ({ ...b, weeklyBudgetCap: v }))} prefix="₹" /></div>
               <div><FieldLabel>Most any single campaign can spend per day</FieldLabel><NumericInput value={budgetFields.maxBudgetPerCampaign ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetPerCampaign: v }))} prefix="₹" /></div>
-              <div><FieldLabel>Biggest single budget increase the agent can make</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
+              <div><FieldLabel>Biggest single budget increase it can make</FieldLabel><NumericInput value={budgetFields.maxBudgetScalePercent ?? ''} onChange={v => setBudgetFields(b => ({ ...b, maxBudgetScalePercent: v }))} suffix="%" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Performance Targets" hint="What doing well means for this business — the agent measures every campaign against these.">
+            <RuleGroup icon={TrendingUp} iconBg="var(--accent-bg)" iconColor="var(--accent)" title="Goals" hint="What doing well means for this business — every campaign is measured against these.">
               <div><FieldLabel><Term help={GLOSSARY.targetRoas}>Target ROAS</Term> — the return you want once healthy</FieldLabel><NumericInput value={budgetFields.targetROAS ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetROAS: v }))} suffix="x" step={0.1} /></div>
               <div><FieldLabel><Term help={GLOSSARY.cpa}>Target CPA</Term> — what you&apos;re willing to pay per sale</FieldLabel><NumericInput value={budgetFields.targetCPA ?? ''} onChange={v => setBudgetFields(b => ({ ...b, targetCPA: v }))} prefix="₹" /></div>
             </RuleGroup>
-            <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Auto-Pause Triggers" hint="If a campaign crosses any of these lines, the agent pauses it automatically instead of waiting for you to notice.">
+            <RuleGroup icon={TrendingDown} iconBg="var(--bad-bg)" iconColor="var(--bad)" title="Pause automatically when" hint="If a campaign crosses any of these lines, it is paused straight away instead of waiting for you to notice.">
               <div><FieldLabel>Pause if <Term help={GLOSSARY.roas}>ROAS</Term> drops below</FieldLabel><NumericInput value={budgetFields.pauseIfROASBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfROASBelow: v }))} suffix="x" step={0.1} /></div>
               <div><FieldLabel>Pause if <Term help={GLOSSARY.ctr}>CTR</Term> drops below</FieldLabel><NumericInput value={budgetFields.pauseIfCTRBelow ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfCTRBelow: v }))} suffix="%" step={0.1} /></div>
               <div><FieldLabel>Pause if <Term help={GLOSSARY.freq}>frequency</Term> goes above</FieldLabel><NumericInput value={budgetFields.pauseIfFrequencyAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, pauseIfFrequencyAbove: v }))} step={0.1} /></div>
             </RuleGroup>
-            <RuleGroup icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Auto-Scale Trigger" hint="When a campaign is clearly winning, the agent can raise its budget on its own instead of waiting for approval.">
+            <RuleGroup icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" title="Grow automatically when" hint="When a campaign is clearly winning, its budget can be raised without waiting for approval.">
               <div><FieldLabel>Increase budget once <Term help={GLOSSARY.roas}>ROAS</Term> is above</FieldLabel><NumericInput value={budgetFields.scaleIfROASAbove ?? ''} onChange={v => setBudgetFields(b => ({ ...b, scaleIfROASAbove: v }))} suffix="x" step={0.1} /></div>
             </RuleGroup>
           </div>
-          <div className="mt-5"><SaveBtn state={budgetState} onClick={() => { const body: Record<string, number> = {}; for (const [k, v] of Object.entries(budgetFields)) { if (v.trim()) body[k] = Number(v) }; saveSection(body, setBudgetState) }} label="Save Budget Rules" /></div>
+          <div className="mt-5"><SaveBtn state={budgetState} onClick={() => { const body: Record<string, number> = {}; for (const [k, v] of Object.entries(budgetFields)) { if (v.trim()) body[k] = Number(v) }; saveSection(body, setBudgetState) }} label="Save spending limits" /></div>
         </SectionCard>
 
         {/* ── Marketing Preferences ── */}
         <SectionCard>
-          <SectionHeader icon={Megaphone} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Marketing preferences" subtitle="Platforms, formats, and content rules Meridian should follow." />
+          <SectionHeader icon={Megaphone} iconBg="var(--accent-bg)" iconColor="var(--accent)" category="Business" title="Marketing preferences" subtitle="Where to advertise, which ad formats to prefer, and what to stay away from." />
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><FieldLabel>Platforms</FieldLabel><TagsInput value={marketing.platforms} onChange={v => setMarketing(s => ({ ...s, platforms: v }))} placeholder="instagram, facebook, youtube" /></div>
-              <div><FieldLabel>Preferred Formats</FieldLabel><TagsInput value={marketing.preferredFormats} onChange={v => setMarketing(s => ({ ...s, preferredFormats: v }))} placeholder="video, carousel, image" /></div>
+              <div><FieldLabel>Preferred ad formats</FieldLabel><TagsInput value={marketing.preferredFormats} onChange={v => setMarketing(s => ({ ...s, preferredFormats: v }))} placeholder="video, carousel, image" /></div>
             </div>
-            <div><FieldLabel>Forbidden Topics</FieldLabel><TagsInput value={marketing.forbiddenTopics} onChange={v => setMarketing(s => ({ ...s, forbiddenTopics: v }))} placeholder="politics, religion" /></div>
+            <div><FieldLabel>Never mention</FieldLabel><TagsInput value={marketing.forbiddenTopics} onChange={v => setMarketing(s => ({ ...s, forbiddenTopics: v }))} placeholder="politics, religion" /></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><FieldLabel>Campaigns Per Run</FieldLabel><NumericInput value={marketing.campaignsPerRun} onChange={v => setMarketing(s => ({ ...s, campaignsPerRun: v }))} /></div>
-              <div><FieldLabel>Run Frequency</FieldLabel><TextInput value={marketing.runFrequency} onChange={v => setMarketing(s => ({ ...s, runFrequency: v }))} placeholder="daily, weekly" /></div>
+              <div><FieldLabel>Campaigns each time it plans</FieldLabel><NumericInput value={marketing.campaignsPerRun} onChange={v => setMarketing(s => ({ ...s, campaignsPerRun: v }))} /></div>
+              <div><FieldLabel>How often it plans</FieldLabel><TextInput value={marketing.runFrequency} onChange={v => setMarketing(s => ({ ...s, runFrequency: v }))} placeholder="daily, weekly" /></div>
             </div>
           </div>
-          <div className="mt-5"><SaveBtn state={marketingState} onClick={() => saveSection({ platforms: marketing.platforms, preferredFormats: marketing.preferredFormats, forbiddenTopics: marketing.forbiddenTopics, campaignsPerRun: marketing.campaignsPerRun ? Number(marketing.campaignsPerRun) : undefined, runFrequency: marketing.runFrequency || undefined }, setMarketingState)} label="Save Marketing" /></div>
+          <div className="mt-5"><SaveBtn state={marketingState} onClick={() => saveSection({ platforms: marketing.platforms, preferredFormats: marketing.preferredFormats, forbiddenTopics: marketing.forbiddenTopics, campaignsPerRun: marketing.campaignsPerRun ? Number(marketing.campaignsPerRun) : undefined, runFrequency: marketing.runFrequency || undefined }, setMarketingState)} label="Save preferences" /></div>
         </SectionCard>
 
         {/* ── Pipeline Config ── */}
         <SectionCard>
-          <SectionHeader icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Safety & automation" title="Automation policy" subtitle="Controls how the intelligence workflow runs and where approval is required." />
+          <SectionHeader icon={Zap} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Spending limits & automation" title="How it works on its own" subtitle="How boldly it plans, how often, and what still needs your approval." />
           <div className="space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
-              <FieldLabel>Strategy</FieldLabel>
+              <FieldLabel>Approach</FieldLabel>
               {(['conservative', 'balanced', 'experimental'] as const).map(s => (
                 <button key={s} onClick={() => setPipeline(p => ({ ...p, campaignStrategy: s }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize"
                   style={pipeline.campaignStrategy === s ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>{s}</button>
@@ -1019,143 +1025,145 @@ export default function SettingsPage({ params }: PageProps) {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <FieldLabel>Mode</FieldLabel>
+                <FieldLabel>How often</FieldLabel>
                 <select value={pipeline.mode} onChange={e => setPipeline(p => ({ ...p, mode: e.target.value }))} disabled={pipeline.autoSwitch}
                   className="input disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="daily">Daily</option><option value="weekly">Weekly</option>
                 </select>
-                {pipeline.autoSwitch && <p className="text-[10px] mt-1" style={{ color: 'var(--ink-3)' }}>Auto-switch is on</p>}
+                {pipeline.autoSwitch && <p className="text-[10px] mt-1" style={{ color: 'var(--ink-3)' }}>Chosen automatically while “Pick how often automatically” is on</p>}
               </div>
-              <div><FieldLabel>Ideas Per Run</FieldLabel><NumericInput value={pipeline.ideasPerRun} onChange={v => setPipeline(p => ({ ...p, ideasPerRun: v }))} placeholder="3" /></div>
-              <div><FieldLabel>Cold Start Days</FieldLabel><NumericInput value={pipeline.coldStartDays} onChange={v => setPipeline(p => ({ ...p, coldStartDays: v }))} placeholder="7" /></div>
-              <div><FieldLabel>Grace Period (hrs)</FieldLabel><NumericInput value={pipeline.pauseGracePeriodHours} onChange={v => setPipeline(p => ({ ...p, pauseGracePeriodHours: v }))} placeholder="48" /></div>
+              <div><FieldLabel>Ad ideas each time</FieldLabel><NumericInput value={pipeline.ideasPerRun} onChange={v => setPipeline(p => ({ ...p, ideasPerRun: v }))} placeholder="3" /></div>
+              <div><FieldLabel>Settling-in days for new campaigns</FieldLabel><NumericInput value={pipeline.coldStartDays} onChange={v => setPipeline(p => ({ ...p, coldStartDays: v }))} placeholder="7" /></div>
+              <div><FieldLabel>Hours before it may pause a new ad</FieldLabel><NumericInput value={pipeline.pauseGracePeriodHours} onChange={v => setPipeline(p => ({ ...p, pauseGracePeriodHours: v }))} placeholder="48" /></div>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
               <button onClick={() => setPipeline(p => ({ ...p, autoSwitch: !p.autoSwitch }))} className="flex items-center gap-2 text-sm">
                 {pipeline.autoSwitch ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
-                <span className="font-medium" style={{ color: pipeline.autoSwitch ? 'var(--accent)' : 'var(--ink-3)' }}>Auto-switch mode</span>
+                <span className="font-medium" style={{ color: pipeline.autoSwitch ? 'var(--accent)' : 'var(--ink-3)' }}>Pick how often automatically</span>
               </button>
               <button onClick={() => setPipeline(p => ({ ...p, scaleRequiresApproval: !p.scaleRequiresApproval }))} className="flex items-center gap-2 text-sm">
                 {pipeline.scaleRequiresApproval ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
-                <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? 'var(--accent)' : 'var(--ink-3)' }}>Scale requires approval</span>
+                <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? 'var(--accent)' : 'var(--ink-3)' }}>Ask me before raising a budget</span>
               </button>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <FieldLabel>Agent Team Mode</FieldLabel>
+              <FieldLabel>How the AI team works</FieldLabel>
               {(['sequential', 'cli'] as const).map(m => (
                 <button key={m} onClick={() => setPipeline(p => ({ ...p, teamMode: m }))} className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                   style={(pipeline as Record<string, unknown>).teamMode === m ? { background: 'var(--accent)', color: '#fff' } : { background: 'var(--surface-warm)', color: 'var(--ink-2)', border: '1px solid var(--hairline)' }}>
-                  {m === 'sequential' ? 'Sequential (default)' : 'CLI Debate'}
+                  {m === 'sequential' ? 'One after another (usual)' : 'Debate first'}
                 </button>
               ))}
-              <p className="text-xs w-full" style={{ color: 'var(--ink-3)' }}>Sequential: reliable, fast. CLI Debate: higher quality, uses tmux.</p>
+              <p className="text-xs w-full" style={{ color: 'var(--ink-3)' }}>One after another is quick and reliable. Debate first lets the AI helpers argue ideas through — slower, sometimes better.</p>
             </div>
           </div>
-          <div className="mt-5"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save Pipeline Config" /></div>
+          <div className="mt-5"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save automation settings" /></div>
         </SectionCard>
 
         {/* ── Competitors ── */}
         <SectionCard>
-          <SectionHeader icon={Users} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Competitive context" subtitle="Companies and market moments the research agents should watch." />
+          <SectionHeader icon={Users} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Competitive context" subtitle="Competitors and dates in the year the research should keep an eye on." />
           <div className="space-y-4">
             <div><FieldLabel>Competitors</FieldLabel><TagsInput value={competitors.competitors} onChange={v => setCompetitors(s => ({ ...s, competitors: v }))} placeholder="Nike, Adidas, Puma" /></div>
-            <div><FieldLabel>Competitor Notes</FieldLabel><TextArea value={competitors.competitorNotes} onChange={v => setCompetitors(s => ({ ...s, competitorNotes: v }))} placeholder="Key things to watch for…" /></div>
-            <div><FieldLabel>Calendar Context</FieldLabel><TextArea value={competitors.calendarContext} onChange={v => setCompetitors(s => ({ ...s, calendarContext: v }))} placeholder="Seasonal events, sale periods…" /></div>
+            <div><FieldLabel>Notes on competitors</FieldLabel><TextArea value={competitors.competitorNotes} onChange={v => setCompetitors(s => ({ ...s, competitorNotes: v }))} placeholder="Key things to watch for…" /></div>
+            <div><FieldLabel>Key dates and seasons</FieldLabel><TextArea value={competitors.calendarContext} onChange={v => setCompetitors(s => ({ ...s, calendarContext: v }))} placeholder="Seasonal events, sale periods…" /></div>
           </div>
-          <div className="mt-5"><SaveBtn state={competitorsState} onClick={() => saveSection({ competitors: competitors.competitors, competitorNotes: competitors.competitorNotes, calendarContext: competitors.calendarContext }, setCompetitorsState)} label="Save Competitors" /></div>
+          <div className="mt-5"><SaveBtn state={competitorsState} onClick={() => saveSection({ competitors: competitors.competitors, competitorNotes: competitors.competitorNotes, calendarContext: competitors.calendarContext }, setCompetitorsState)} label="Save competitors" /></div>
         </SectionCard>
 
         {/* ── Notifications ── */}
         <SectionCard>
-          <SectionHeader icon={Bell} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Operator notifications" subtitle="Where pipeline digests and intervention alerts are delivered." />
+          <SectionHeader icon={Bell} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Where we send updates" subtitle="Where daily summaries and “needs your attention” alerts are sent." />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><FieldLabel>Slack Webhook</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="Stored securely" mono type="password" /></div>
+            <div><FieldLabel>Slack link (webhook)</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="Stored securely" mono type="password" /></div>
             <div><FieldLabel>Email</FieldLabel><TextInput value={delivery.email} onChange={v => setDelivery(s => ({ ...s, email: v }))} placeholder="team@company.com" type="email" /></div>
-            <div><FieldLabel>WhatsApp Number</FieldLabel><TextInput value={delivery.whatsappNumber} onChange={v => setDelivery(s => ({ ...s, whatsappNumber: v }))} placeholder="+91..." /></div>
-            <div><FieldLabel>Notion Database ID</FieldLabel><TextInput value={delivery.notionDatabaseId} onChange={v => setDelivery(s => ({ ...s, notionDatabaseId: v }))} placeholder="abc123..." mono /></div>
+            <div><FieldLabel>WhatsApp number</FieldLabel><TextInput value={delivery.whatsappNumber} onChange={v => setDelivery(s => ({ ...s, whatsappNumber: v }))} placeholder="+91..." /></div>
+            <div><FieldLabel>Notion database (copy from its link)</FieldLabel><TextInput value={delivery.notionDatabaseId} onChange={v => setDelivery(s => ({ ...s, notionDatabaseId: v }))} placeholder="abc123..." mono /></div>
           </div>
-          <div className="mt-5"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { slackWebhook: delivery.slackWebhook || undefined, email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save Notifications" /></div>
+          <div className="mt-5"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { slackWebhook: delivery.slackWebhook || undefined, email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save where to send updates" /></div>
         </SectionCard>
 
         {/* ── Meta Ads ── */}
         <SectionCard id="meta">
-          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} category="Meta connection" title="Meta workspace" subtitle="Choose the business, Page, and ad accounts Meridian is allowed to use." right={<StatusPill active={metaConnected} />} />
+          <SectionHeader icon={metaConnected ? Wifi : WifiOff} iconBg={metaConnected ? 'var(--good-bg)' : 'var(--bad-bg)'} iconColor={metaConnected ? 'var(--good)' : 'var(--bad)'} category="Meta connection" title="Your Meta account" subtitle="Pick the business, Facebook Page and ad accounts Meridian may use." right={<StatusPill active={metaConnected} />} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
-            {[{ label: 'Credential', value: metaConnected ? 'Stored securely' : 'Not connected', sub: undefined as string | undefined, active: metaConnected, warn: false },
+            {[{ label: 'Meta login', value: metaConnected ? 'Connected' : 'Not connected', sub: undefined as string | undefined, active: metaConnected, warn: false },
               { label: 'Ad accounts', value: savedAccountCount > 0 ? `${savedAccountCount} selected` : 'None selected', sub: undefined as string | undefined, active: savedAccountCount > 0, warn: false },
-              { label: 'Page', value: currentPage ? currentPage.name : (settings?.meta?.pageId || '—'), sub: currentPage ? settings?.meta?.pageId : undefined, active: !!settings?.meta?.pageId, warn: !!settings?.meta?.pageId && !currentPage && metaPages.length > 0 }
+              { label: 'Page', value: currentPage ? currentPage.name : (settings?.meta?.pageId ? 'Page not found' : 'None selected'), sub: undefined as string | undefined, active: !!settings?.meta?.pageId, warn: !!settings?.meta?.pageId && !currentPage && metaPages.length > 0 }
             ].map(f => (
-              <div key={f.label}>
+              <div key={f.label} className="min-w-0">
                 <p className="micro-label mb-1.5">{f.label}</p>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.warn ? 'var(--bad)' : f.active ? 'var(--good)' : 'var(--ink-4)' }} />
-                  <p className="truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{f.value}</p>
+                  <p className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }} title={f.value}>{f.value}</p>
                 </div>
                 {f.sub && <p className="text-[11px] mono truncate mt-0.5" style={{ color: 'var(--ink-4)' }}>{f.sub}</p>}
-                {f.warn && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>Not found in discovered Pages — verify below</p>}
+                {f.warn && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>We can&apos;t find this Page in your Meta account — pick one below</p>}
               </div>
             ))}
           </div>
+          {settings?.meta?.pageId && <Details title="Page reference" reference={settings.meta.pageId} className="mb-4" />}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mb-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
-            <div><FieldLabel>Pixel ID</FieldLabel><TextInput value={meta.pixelId} onChange={v => setMeta(s => ({ ...s, pixelId: v }))} placeholder="123456789" mono /></div>
+            <div><FieldLabel>Pixel number <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(Meta&apos;s sales tracker on your site)</span></FieldLabel><TextInput value={meta.pixelId} onChange={v => setMeta(s => ({ ...s, pixelId: v }))} placeholder="123456789" mono /></div>
             <div>
-              <FieldLabel>Business Manager <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(scopes ad-account/Page discovery below)</span></FieldLabel>
+              <FieldLabel>Business <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(limits the ad accounts and Pages listed below)</span></FieldLabel>
               {metaBusinesses.length > 0 ? (
                 <select value={meta.businessId} onChange={e => setMeta(s => ({ ...s, businessId: e.target.value }))} className="input">
-                  <option value="">All businesses (unscoped — may show other brands&apos; accounts)</option>
+                  <option value="">All businesses (may include other brands&apos; accounts)</option>
                   {metaBusinesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               ) : (
-                <TextInput value={meta.businessId} onChange={v => setMeta(s => ({ ...s, businessId: v }))} placeholder="No businesses found — paste Business ID" mono />
+                <TextInput value={meta.businessId} onChange={v => setMeta(s => ({ ...s, businessId: v }))} placeholder="No businesses found — paste the business number" mono />
               )}
             </div>
           </div>
           <div className="pt-1 pb-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>— which Page these ads post as. Wrong here means ads run under the wrong brand.</span></FieldLabel>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <div className="min-w-0"><FieldLabel>Facebook Page <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>— the Page your ads appear from. Pick the wrong one and ads run under the wrong brand.</span></FieldLabel></div>
               <button onClick={fetchMetaPages} disabled={!metaConnected || metaPagesState === 'loading'} className="btn btn-ghost shrink-0">
-                <RefreshCw size={11} className={metaPagesState === 'loading' ? 'animate-spin' : ''} /> Discover from Meta
+                <RefreshCw size={11} className={metaPagesState === 'loading' ? 'animate-spin' : ''} /> Look up in Meta
               </button>
             </div>
-            {!metaConnected && <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Add an access token above to discover Pages.</p>}
+            {!metaConnected && <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Connect Meta first, then we can list your Pages.</p>}
             {metaPagesState === 'error' && <p className="text-xs mb-1" style={{ color: 'var(--bad)' }}>{metaPagesError}</p>}
             {metaConnected && metaPages.length === 0 && metaPagesState === 'idle' && (
-              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>No Pages found for this token.</p>
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>We didn&apos;t find any Facebook Pages in this Meta account.</p>
             )}
             {metaPages.length > 0 && (
               <PageSelect pages={metaPages} value={meta.pageId} onChange={v => setMeta(s => ({ ...s, pageId: v }))} />
             )}
           </div>
-          <div className="mb-5"><SaveBtn state={metaState} onClick={() => saveSection({ meta: { pixelId: meta.pixelId.trim() || undefined, businessId: meta.businessId.trim() || undefined, pageId: meta.pageId.trim() || undefined } }, setMetaState)} label="Save Meta Settings" /></div>
+          <div className="mb-5"><SaveBtn state={metaState} onClick={() => saveSection({ meta: { pixelId: meta.pixelId.trim() || undefined, businessId: meta.businessId.trim() || undefined, pageId: meta.pageId.trim() || undefined } }, setMetaState)} label="Save Meta settings" /></div>
 
           <div className="pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <FieldLabel>
-                Ad Accounts{metaAccounts.length > 0 && (
+                Ad accounts{metaAccounts.length > 0 && (
                   <span className="font-normal normal-case ml-1" style={{ color: 'var(--ink-3)' }}>
-                    ({selectedAccountIds.length} selected{showAllAccounts ? ` · ${metaAccounts.length} discovered` : ''})
+                    ({selectedAccountIds.length} selected{showAllAccounts ? ` · ${metaAccounts.length} found` : ''})
                   </span>
                 )}
               </FieldLabel>
               <button onClick={fetchMetaAccounts} disabled={!metaConnected || metaAccountsState === 'loading'} className="btn btn-ghost">
-                <RefreshCw size={11} className={metaAccountsState === 'loading' ? 'animate-spin' : ''} /> Discover from Meta
+                <RefreshCw size={11} className={metaAccountsState === 'loading' ? 'animate-spin' : ''} /> Look up in Meta
               </button>
             </div>
 
             {!metaConnected && (
-              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Add an access token above to discover ad accounts.</p>
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Connect Meta first, then we can list your ad accounts.</p>
             )}
             {metaAccountsState === 'error' && (
               <p className="text-xs mb-2" style={{ color: 'var(--bad)' }}>{metaAccountsError}</p>
             )}
             {metaConnected && metaAccounts.length === 0 && metaAccountsState === 'idle' && (
-              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>No ad accounts found for this token.</p>
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>We didn&apos;t find any ad accounts in this Meta account.</p>
             )}
 
             {metaAccounts.length > 0 && (
               <div className="space-y-1.5 mb-2">
                 {(showAllAccounts ? metaAccounts : metaAccounts.filter((acc) => selectedAccountIds.includes(acc.id))).map((acc) => {
                   const checked = selectedAccountIds.includes(acc.id)
+                  const accStatus = plainStatus('metaAccountStatus', acc.status)
                   return (
                     <button
                       key={acc.id}
@@ -1166,19 +1174,27 @@ export default function SettingsPage({ params }: PageProps) {
                     >
                       {checked ? <ToggleRight size={20} className="shrink-0" style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={20} className="shrink-0" style={{ color: 'var(--ink-4)' }} />}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" style={{ color: 'var(--ink)' }}>{acc.name || acc.id}</p>
-                        <p className="text-xs mono truncate" style={{ color: 'var(--ink-3)' }}>{acc.id} · {acc.currency || '—'} · {acc.timezoneName || '—'}</p>
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--ink)' }} title={acc.name || undefined}>{acc.name || 'Unnamed ad account'}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--ink-3)' }}>{acc.currency || '—'} · {acc.timezoneName || '—'}</p>
                       </div>
-                      <span className={acc.status === 'active' ? 'chip chip-good' : 'chip chip-neutral'}>{acc.status}</span>
+                      <span className={`chip ${toneChip(accStatus.tone)} shrink-0`} title={accStatus.meaning || undefined}>{accStatus.label}</span>
                     </button>
                   )
                 })}
               </div>
             )}
 
+            {metaAccounts.length > 0 && (
+              <Details
+                title="Ad account references"
+                className="mb-2"
+                items={(showAllAccounts ? metaAccounts : metaAccounts.filter((acc) => selectedAccountIds.includes(acc.id))).map((acc) => ({ label: acc.name || 'Unnamed ad account', value: acc.id }))}
+              />
+            )}
+
             {metaAccounts.length > selectedAccountIds.length && (
               <button type="button" onClick={() => setShowAllAccounts((s) => !s)} className="text-xs font-medium mb-4" style={{ color: 'var(--accent)' }}>
-                {showAllAccounts ? 'Show only selected accounts' : `Show all ${metaAccounts.length} discovered accounts…`}
+                {showAllAccounts ? 'Show only selected accounts' : `Show all ${metaAccounts.length} ad accounts we found…`}
               </button>
             )}
             {!(metaAccounts.length > selectedAccountIds.length) && <div className="mb-4" />}
@@ -1186,28 +1202,28 @@ export default function SettingsPage({ params }: PageProps) {
             <SaveBtn
               state={metaSyncState}
               onClick={handleSyncMetaAccounts}
-              label={selectedAccountIds.length > 0 ? `Sync ${selectedAccountIds.length} Selected Account${selectedAccountIds.length === 1 ? '' : 's'}` : 'Sync All Active Accounts'}
+              label={selectedAccountIds.length > 0 ? `Bring in campaigns from ${selectedAccountIds.length} selected account${selectedAccountIds.length === 1 ? '' : 's'}` : 'Bring in campaigns from all active accounts'}
             />
           </div>
         </SectionCard>
 
         {/* ── AI Prompts ── */}
         <SectionCard>
-          <SectionHeader icon={ShieldCheck} iconBg="var(--muted)" iconColor="var(--ink-3)" category="Safety & automation" title="AI context versions" subtitle="Refresh AI instructions from saved business data or restore an earlier version." />
+          <SectionHeader icon={ShieldCheck} iconBg="var(--muted)" iconColor="var(--ink-3)" category="Safety & automation" title="AI instructions" subtitle="Update the AI from what you saved above, or go back to an earlier version." />
           <div className="flex items-center gap-3">
             <button onClick={handleRegen} disabled={regenState === 'loading'} className="btn btn-ghost">
               {regenState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              {regenState === 'loading' ? 'Regenerating…' : regenState === 'success' ? 'Done!' : 'Regenerate Now'}
+              {regenState === 'loading' ? 'Updating…' : regenState === 'success' ? 'Done' : 'Update now'}
             </button>
-            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Takes ~10–30 seconds. Safe to run at any time.</p>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>Takes about 10–30 seconds. Safe to run any time.</p>
           </div>
 
           {/* Prompts version history */}
           <div className="mt-5 pt-5" style={{ borderTop: '1px solid var(--hairline-light)' }}>
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 className="micro-label">Version history</h3>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>Rollback to a previous prompt set if a regeneration regresses agent behavior.</p>
+                <h3 className="micro-label">Earlier versions</h3>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-3)' }}>If the AI started doing worse after an update, go back to an earlier version.</p>
               </div>
             </div>
 
@@ -1219,8 +1235,8 @@ export default function SettingsPage({ params }: PageProps) {
                   <thead>
                     <tr>
                       <th>Version</th>
-                      <th>Generated</th>
-                      <th>Learning version</th>
+                      <th>Made</th>
+                      <th>Lessons included</th>
                       <th className="num">Action</th>
                     </tr>
                   </thead>
@@ -1234,14 +1250,14 @@ export default function SettingsPage({ params }: PageProps) {
                           <tr key={entry.version}>
                             <td>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs mono font-semibold" style={{ color: 'var(--ink)' }}>v{entry.version}</span>
+                                <span className="text-xs mono font-semibold" style={{ color: 'var(--ink)' }}>Version {entry.version}</span>
                                 {isCurrent && (
                                   <span className="chip chip-good">Current</span>
                                 )}
                               </div>
                             </td>
-                            <td className="text-xs mono tabular-nums">{formatDateTime(entry.generatedAt)}</td>
-                            <td className="text-xs mono">{entry.learningVersion != null ? `L${entry.learningVersion}` : '—'}</td>
+                            <td className="text-xs tabular-nums whitespace-nowrap">{formatWhen(entry.generatedAt)}</td>
+                            <td className="text-xs">{entry.learningVersion != null ? `Set ${entry.learningVersion}` : '—'}</td>
                             <td className="num">
                               {isCurrent ? (
                                 <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>—</span>
@@ -1257,7 +1273,7 @@ export default function SettingsPage({ params }: PageProps) {
                                   }
                                 >
                                   {rs === 'loading' ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
-                                  {rs === 'loading' ? 'Rolling back…' : rs === 'success' ? 'Done' : rs === 'error' ? 'Failed' : 'Rollback'}
+                                  {rs === 'loading' ? 'Rolling back…' : rs === 'success' ? 'Done' : rs === 'error' ? "Didn't work" : 'Go back to this'}
                                 </button>
                               )}
                             </td>
@@ -1273,7 +1289,7 @@ export default function SettingsPage({ params }: PageProps) {
 
         {/* ── Fix Caption Videos ── */}
         <SectionCard>
-          <SectionHeader icon={Sparkles} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Maintenance" title="Repair missing video captions" subtitle="Re-fetch only video creatives whose captions are incomplete." />
+          <SectionHeader icon={Sparkles} iconBg="var(--warn-bg)" iconColor="var(--warn)" category="Maintenance" title="Repair missing video captions" subtitle="Fetch again any video ads whose captions came through incomplete." />
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={handleFixCaptionVideos}
@@ -1285,13 +1301,14 @@ export default function SettingsPage({ params }: PageProps) {
               }
             >
               {fixCaptionState === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              {fixCaptionState === 'loading' ? 'Processing…' : fixCaptionState === 'success' ? 'Done!' : fixCaptionState === 'error' ? 'Failed' : 'Re-fetch Videos Without Captions'}
+              {fixCaptionState === 'loading' ? 'Working…' : fixCaptionState === 'success' ? 'Done' : fixCaptionState === 'error' ? "Didn't work" : 'Fix videos missing captions'}
             </button>
             {fixCaptionResult && (
               <p className="text-xs font-medium" style={{ color: fixCaptionState === 'error' ? 'var(--bad)' : 'var(--good)' }}>
                 {fixCaptionResult}
               </p>
             )}
+            {fixCaptionDetail && <Details className="w-full" items={[{ label: 'Error', value: fixCaptionDetail }]} />}
           </div>
         </SectionCard>
 

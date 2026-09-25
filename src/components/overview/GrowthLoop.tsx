@@ -28,16 +28,16 @@ export function GrowthLoop({ activity, insights, portfolio, tenantId }: GrowthLo
     {
       label: 'Understand',
       value: insights.length,
-      unit: insights.length === 1 ? 'learning signal' : 'learning signals',
-      detail: 'Find patterns in campaign evidence',
+      unit: insights.length === 1 ? 'pattern spotted' : 'patterns spotted',
+      detail: 'Spot what is working in past campaigns',
       href: `${base}/learnings`,
       icon: Sparkles,
     },
     {
       label: 'Create',
       value: activity.creatives.ready,
-      unit: 'creatives ready',
-      detail: 'Turn strategy into usable ads',
+      unit: 'ads ready',
+      detail: 'Turn the plan into ready-to-run ads',
       href: `${base}/creatives`,
       icon: ImageIcon,
     },
@@ -48,7 +48,7 @@ export function GrowthLoop({ activity, insights, portfolio, tenantId }: GrowthLo
         activity.queue.pendingApprovalCampaigns === 1
           ? 'campaign waiting'
           : 'campaigns waiting',
-      detail: 'Keep a human at the launch gate',
+      detail: 'Nothing goes live without your approval',
       href: `${base}/approvals`,
       icon: Inbox,
     },
@@ -56,15 +56,15 @@ export function GrowthLoop({ activity, insights, portfolio, tenantId }: GrowthLo
       label: 'Measure',
       value: portfolio.campaignCount,
       unit: portfolio.campaignCount === 1 ? 'campaign tracked' : 'campaigns tracked',
-      detail: 'Judge each campaign by its goal',
+      detail: 'Check each campaign against its own goal',
       href: `${base}/campaigns`,
       icon: Activity,
     },
     {
       label: 'Improve',
       value: openProposals,
-      unit: openProposals === 1 ? 'proposal open' : 'proposals open',
-      detail: 'Convert diagnosis into the next action',
+      unit: openProposals === 1 ? 'suggestion waiting' : 'suggestions waiting',
+      detail: 'Turn what we found into the next change',
       href: `${base}/proposed-actions`,
       icon: CheckCircle2,
     },
@@ -73,16 +73,16 @@ export function GrowthLoop({ activity, insights, portfolio, tenantId }: GrowthLo
   return (
     <section aria-labelledby="growth-loop-title" className="card overflow-hidden">
       <div className="flex flex-col gap-2 border-b px-5 py-4 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: 'var(--hairline)' }}>
-        <div>
+        <div className="min-w-0">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="beacon" aria-hidden="true" />
-            <p className="micro-label">AI growth loop</p>
+            <p className="micro-label">How it works</p>
           </div>
           <h2 id="growth-loop-title" className="section-title">
-            Every result feeds the next decision
+            Every result shapes what we do next
           </h2>
         </div>
-        <p className="explain">Observed operating state; no incrementality claim</p>
+        <p className="explain">Counts of what is happening now — not a claim about extra sales</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
@@ -121,7 +121,7 @@ export function GrowthLoop({ activity, insights, portfolio, tenantId }: GrowthLo
               <p className="mt-1 text-sm font-medium" style={{ color: 'var(--ink-2)' }}>
                 {step.unit}
               </p>
-              <p className="explain mt-2">{step.detail}</p>
+              <p className="explain mt-2 break-words">{step.detail}</p>
             </Link>
           )
         })}

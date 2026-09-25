@@ -19,13 +19,16 @@ import {
   TimerReset,
   Zap,
 } from 'lucide-react'
+import { plainLabel } from '@/lib/utils'
 import {
-  formatCurrency,
-  formatDateTime,
-  formatRelativeTime,
-  formatSignedCurrency,
-  plainLabel,
-} from '@/lib/utils'
+  formatInr,
+  formatRelative,
+  formatWhen,
+  humanise,
+  PLAIN_ERROR,
+  plainStatus,
+} from '@/lib/plain-language'
+import { Details } from '@/components/plain/Details'
 import { getToolImpact } from '@/lib/api'
 import type {
   DashboardCampaignRow,
@@ -57,20 +60,18 @@ const SCOPE_COPY: Record<
   { label: string; shortLabel: string }
 > = {
   agent: {
-    label: 'Autonomous AI launches',
+    label: 'Campaigns the AI launched on its own',
     shortLabel: 'AI only',
   },
   managed: {
-    label: 'All Meridian launches',
-    shortLabel: 'All Meridian launches',
+    label: 'Every campaign launched from this dashboard',
+    shortLabel: 'Everything launched here',
   },
 }
 
-const DECISION_STATUS_LABEL: Record<string, string> = {
-  shadow_review: 'Awaiting review',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired unreviewed',
+/** '+₹1,200' / '−₹800' — money with a sign, for "sales minus spend". */
+function formatSignedInr(amount: number): string {
+  return `${amount < 0 ? '−' : '+'}${formatInr(Math.abs(amount))}`
 }
 
 const TOOL_IMPACT_SALES_OBJECTIVES = new Set([
@@ -99,10 +100,10 @@ function hasLaunchEvidence(campaign: DashboardCampaignRow): boolean {
 
 function formatDuration(hours: number | null | undefined): string {
   if (hours == null || !Number.isFinite(hours)) return '—'
-  if (hours < 1) return `${Math.round(hours * 60)}m`
+  if (hours < 1) return `${Math.round(hours * 60)} min`
   return hours < 24
-    ? `${hours.toFixed(hours < 10 ? 1 : 0)}h`
-    : `${(hours / 24).toFixed(1)}d`
+    ? `${hours.toFixed(hours < 10 ? 1 : 0)} hours`
+    : `${(hours / 24).toFixed(1)} days`
 }
 
 function formatModeledDelta(deltaPct: number): string {
@@ -143,7 +144,7 @@ function DemoMetric({
           : 'var(--ink)'
 
   return (
-    <div className="card card-metric px-4 sm:px-5 py-5">
+    <div className="card card-metric px-4 sm:px-5 py-5 min-w-0">
       <div className="flex items-center gap-2 mb-2">
         {health !== 'neutral' && (
           <span
@@ -156,7 +157,7 @@ function DemoMetric({
       <p className="display-num" style={{ fontSize: 34, color }}>
         {value}
       </p>
-      <p className="explain mt-2">{sub}</p>
+      <p className="explain mt-2 break-words">{sub}</p>
     </div>
   )
 }
@@ -175,11 +176,11 @@ function Disclosure({
   return (
     <details className="card overflow-hidden group">
       <summary className="list-none cursor-pointer px-4 sm:px-5 py-4 flex items-center gap-3 [&::-webkit-details-marker]:hidden">
-        <span style={{ color: 'var(--accent)' }}>{icon}</span>
-        <span className="font-semibold" style={{ color: 'var(--ink)' }}>
+        <span className="shrink-0" style={{ color: 'var(--accent)' }}>{icon}</span>
+        <span className="font-semibold min-w-0 break-words" style={{ color: 'var(--ink)' }}>
           {title}
         </span>
-        {badge && <span className="chip chip-neutral ml-auto">{badge}</span>}
+        {badge && <span className="chip chip-neutral ml-auto shrink-0">{badge}</span>}
         <ChevronDown
           size={16}
           className={`${badge ? '' : 'ml-auto'} transition-transform group-open:rotate-180`}
@@ -222,7 +223,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
         setError(
           err instanceof Error
             ? err.message
-            : "Couldn't load Meridian performance",
+            : "Couldn't load the results",
         )
       }
     } finally {
@@ -254,7 +255,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
     return (
       <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-[1600px] mx-auto">
         <div
-          className="flex items-center gap-3 rounded-xl px-5 py-4"
+          className="flex items-center gap-3 rounded-xl px-5 py-4 flex-wrap"
           style={{
             background: 'var(--bad-bg)',
             border: '1px solid var(--bad-border)',
@@ -262,11 +263,16 @@ export default function AgentAchievementPage({ params }: PageProps) {
           }}
         >
           <AlertTriangle size={17} className="shrink-0" />
-          <span>{error ?? 'No Meridian performance data available'}</span>
+          <span className="min-w-0">
+            {error ? PLAIN_ERROR : 'There are no results to show yet.'}
+          </span>
           <button onClick={() => void load()} className="btn btn-ghost ml-auto">
-            Retry
+            Try again
           </button>
         </div>
+        {error && (
+          <Details className="mt-3" items={[{ label: 'Error', value: error }]} />
+        )}
       </div>
     )
   }
@@ -318,33 +324,35 @@ export default function AgentAchievementPage({ params }: PageProps) {
   const warnings: string[] = []
   if (scopeMismatch) {
     warnings.push(
-      `Requested ${SCOPE_COPY[scope].label}, but the API returned ${SCOPE_COPY[responseScope].label}. Reload before presenting this snapshot.`,
+      `You asked for "${SCOPE_COPY[scope].label.toLowerCase()}", but these figures are for "${SCOPE_COPY[responseScope].label.toLowerCase()}". Reload before sharing them.`,
     )
   }
   if (error) {
-    warnings.push(`Reload failed; this is the last successful snapshot. ${error}`)
+    warnings.push("We couldn't refresh the figures, so these are the last ones we had.")
   }
   if (freshness.staleCampaigns > 0) {
-    warnings.push(`${freshness.staleCampaigns} active campaign metrics are stale.`)
+    warnings.push(
+      `${freshness.staleCampaigns} running campaign${freshness.staleCampaigns === 1 ? ' has' : 's have'} out-of-date figures.`,
+    )
   }
   if (freshness.campaignsWithoutFreshness > 0) {
     warnings.push(
-      `${freshness.campaignsWithoutFreshness} spending campaigns have no metrics timestamp.`,
+      `For ${freshness.campaignsWithoutFreshness} spending campaign${freshness.campaignsWithoutFreshness === 1 ? '' : 's'}, we don't know when the figures were last updated.`,
     )
   }
   if ((configuredBasis?.campaignCount ?? 0) > 0) {
     warnings.push(
-      `${configuredBasis?.campaignCount} sales campaigns use conversion count × configured value.`,
+      `${configuredBasis?.campaignCount} sales campaign${configuredBasis?.campaignCount === 1 ? ' uses' : 's use'} an estimated sales value (number of sales × a set price), not Meta's figure.`,
     )
   }
   if ((unknownBasis?.campaignCount ?? 0) > 0) {
     warnings.push(
-      `${unknownBasis?.campaignCount} sales campaigns have unknown return derivation.`,
+      `For ${unknownBasis?.campaignCount} sales campaign${unknownBasis?.campaignCount === 1 ? '' : 's'}, we can't tell where the sales value came from.`,
     )
   }
   if ((manualNameCoincidences?.count ?? 0) > 0) {
     warnings.push(
-      `${manualNameCoincidences?.count} manual campaigns match an old AGENT_* naming pattern but remain excluded because names are not ownership proof.`,
+      `${manualNameCoincidences?.count} campaign${manualNameCoincidences?.count === 1 ? ' was' : 's were'} made by hand in Meta with a name that looks like an AI launch. ${manualNameCoincidences?.count === 1 ? 'It is' : 'They are'} left out, because a name alone doesn't prove who launched it.`,
     )
   }
 
@@ -465,27 +473,27 @@ export default function AgentAchievementPage({ params }: PageProps) {
         <header className="mb-5">
           <div className="flex items-start justify-between gap-5 flex-wrap">
             <div className="max-w-3xl">
-              <p className="micro-label mb-2">Verified impact · campaigns Meridian owns</p>
-              <h1 className="page-title">Results Meridian can prove</h1>
+              <p className="micro-label mb-2">Campaigns launched from this dashboard</p>
+              <h1 className="page-title">What the AI has delivered</h1>
               <p className="page-subtitle">
-                Only launches recorded through this workspace. Campaigns created
-                directly in Meta by the marketing team are never mixed into these results.
+                How much the campaigns launched from here have spent and brought back
+                in sales. Campaigns your team made directly in Meta are never counted.
               </p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <span className="chip chip-accent">Campaign-lifetime results</span>
+                <span className="chip chip-accent">Since each campaign started</span>
                 <span className="chip chip-neutral">
-                  Proof headline uses campaign-scoped Meta value only
+                  Headline sales use Meta&apos;s own figures only
                 </span>
                 {warnings.length > 0 && (
                   <span className="chip chip-warn">
-                    {warnings.length} data note{warnings.length === 1 ? '' : 's'}
+                    {warnings.length} thing{warnings.length === 1 ? '' : 's'} to know about these figures
                   </span>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={downloadEvidenceCsv} className="btn btn-ghost">
-                <Download size={14} /> Evidence CSV
+                <Download size={14} /> Download spreadsheet
               </button>
               <button
                 onClick={() => void load()}
@@ -510,12 +518,12 @@ export default function AgentAchievementPage({ params }: PageProps) {
               <p className="font-semibold" style={{ color: 'var(--ink)' }}>
                 {SCOPE_COPY[responseScope].label}
               </p>
-              <p className="explain truncate">
-                {cohort.ownershipEvidence.persistedAgentSource} recorded AI ·{' '}
-                {cohort.ownershipEvidence.persistedHumanSource} recorded dashboard
+              <p className="explain break-words">
+                {cohort.ownershipEvidence.persistedAgentSource} launched by the AI ·{' '}
+                {cohort.ownershipEvidence.persistedHumanSource} launched by a person
                 {freshness.latestMetricsAt
-                  ? ` · latest metrics ${formatRelativeTime(freshness.latestMetricsAt)}`
-                  : ' · freshness unknown'}
+                  ? ` · figures updated ${formatRelative(freshness.latestMetricsAt)}`
+                  : ' · last update unknown'}
               </p>
             </div>
           </div>
@@ -525,7 +533,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
               background: 'var(--surface-warm)',
               border: '1px solid var(--hairline)',
             }}
-            aria-label="Campaign scope"
+            aria-label="Which campaigns to include"
           >
             {(['agent', 'managed'] as const).map((value) => (
               <button
@@ -546,36 +554,36 @@ export default function AgentAchievementPage({ params }: PageProps) {
           </div>
         </div>
 
-        <section className="mb-8" aria-label="Headline performance">
+        <section className="mb-8" aria-label="Headline results">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <DemoMetric
-              label="Verified launches"
+              label="Campaigns live in Meta"
               value={cohort.launched.toString()}
-              sub={`${cohort.withSpend} received spend · ${cohort.mature} mature`}
+              sub={`${cohort.withSpend} have spent money · ${cohort.mature} ran long enough to judge`}
             />
             <DemoMetric
-              label="Proof-eligible sales spend"
-              value={formatCurrency(Math.round(raw.spend))}
-              sub={`${raw.resolvedSalesCampaignsWithSpend}/${raw.salesCampaignsWithSpend} sales campaigns have resolved Meta return`}
+              label="Spent on sales campaigns"
+              value={formatInr(raw.spend)}
+              sub={`${raw.resolvedSalesCampaignsWithSpend} of ${raw.salesCampaignsWithSpend} sales campaigns have sales figures from Meta`}
               health={raw.returnCoverage === 'complete' ? 'neutral' : 'watch'}
             />
             <DemoMetric
-              label="Resolved Meta action value"
-              value={hasProofSpend ? formatCurrency(Math.round(raw.attributedReturn)) : '—'}
+              label="Sales value from Meta"
+              value={hasProofSpend ? formatInr(raw.attributedReturn) : '—'}
               sub={raw.returnCoverage === 'complete'
-                ? 'Resolved Meta attribution only'
-                : `${formatCurrency(Math.round(raw.excludedSalesSpend))} sales spend withheld from headline`}
+                ? "Meta's own sales figures only"
+                : `${formatInr(raw.excludedSalesSpend)} of spend left out — its sales figures aren't confirmed`}
               health={raw.returnCoverage === 'complete' ? 'neutral' : 'watch'}
             />
             <DemoMetric
-              label="Raw ROAS · resolved Meta value"
+              label="Return on ad spend"
               value={hasProofSpend ? formatActionValueRoas(raw.weightedRoas) : '—'}
               sub={
                 hasProofSpend
-                  ? `${formatSignedCurrency(raw.returnSurplus)} value minus spend · benchmark 1.00x`
+                  ? `${formatSignedInr(raw.returnSurplus)} sales minus spend · 1.00x means it broke even`
                   : hasSalesSpend
-                    ? 'Sales spend exists, but return provenance is not proof-eligible'
-                    : 'No sales spend in this scope'
+                    ? "Money was spent, but the sales figures aren't confirmed yet"
+                    : 'Nothing spent on sales campaigns yet'
               }
               health={roasHealth}
             />
@@ -592,10 +600,10 @@ export default function AgentAchievementPage({ params }: PageProps) {
             <div className="flex items-center gap-2">
               <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
               <h2 id="campaign-performance-heading" className="section-title">
-                Campaign performance
+                How each campaign is doing
               </h2>
             </div>
-            <span className="chip chip-neutral">All verified launches</span>
+            <span className="chip chip-neutral">Every campaign live in Meta</span>
           </div>
 
           <DailySpendValueChart performance={data.dailyPerformance} />
@@ -607,18 +615,18 @@ export default function AgentAchievementPage({ params }: PageProps) {
           />
 
           <div className="flex items-center justify-between gap-3 mt-4 mb-3 flex-wrap">
-            <p className="micro-label">Campaign-lifetime comparison</p>
+            <p className="micro-label">Since each campaign started</p>
             <div
               className="inline-flex rounded-lg p-0.5"
               style={{
                 background: 'var(--surface-warm)',
                 border: '1px solid var(--hairline)',
               }}
-              aria-label="Campaign comparison chart"
+              aria-label="Which comparison to show"
             >
               {([
-                ['comparison', 'Spend vs value'],
-                ['gap', 'Value gap'],
+                ['comparison', 'Spend vs sales'],
+                ['gap', 'Sales minus spend'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -668,7 +676,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-4">
             <Zap size={18} style={{ color: 'var(--accent)' }} />
             <h2 id="system-proof-heading" className="section-title">
-              Automation and decision activity
+              What the AI did behind the scenes
             </h2>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -678,25 +686,25 @@ export default function AgentAchievementPage({ params }: PageProps) {
 
           <div className="card-inset px-4 py-3 mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
             <CompactStat
-              label="Agent-only approval median"
+              label="Typical time to be ready for approval"
               value={formatDuration(data.automation.timeToApprovalReady.medianHours)}
-              sub={`${data.automation.timeToApprovalReady.sampleSize} joined agent runs`}
+              sub={`Based on ${data.automation.timeToApprovalReady.sampleSize} AI launches`}
             />
             <CompactStat
-              label="Agent-only live median"
+              label="Typical time to go live"
               value={formatDuration(data.automation.timeToLive.medianHours)}
-              sub={`${data.automation.timeToLive.sampleSize} joined agent runs`}
+              sub={`Based on ${data.automation.timeToLive.sampleSize} AI launches`}
             />
             <CompactStat
-              label="Tenant pipeline records"
+              label="Campaign runs"
               value={data.automation.pipelineRuns.total.toString()}
-              sub={`${data.automation.pipelineRuns.completed} completed · ${data.automation.pipelineRuns.failed} failed`}
+              sub={`${data.automation.pipelineRuns.completed} finished · ${data.automation.pipelineRuns.failed} failed`}
             />
             <CompactStat
-              label="Last intelligence check"
+              label="Last check-up"
               value={
                 data.automation.lastCycleAt
-                  ? formatRelativeTime(data.automation.lastCycleAt)
+                  ? formatRelative(data.automation.lastCycleAt)
                   : '—'
               }
               sub={data.automation.cadenceLabel}
@@ -704,10 +712,10 @@ export default function AgentAchievementPage({ params }: PageProps) {
           </div>
         </section>
 
-        <section className="space-y-3" aria-label="Evidence details">
+        <section className="space-y-3" aria-label="More detail">
           <Disclosure
-            title="Complete campaign ledger"
-            badge={`${ledgerCampaigns.length} records`}
+            title="Every campaign, one row each"
+            badge={`${ledgerCampaigns.length} campaign${ledgerCampaigns.length === 1 ? '' : 's'}`}
             icon={<Database size={17} />}
           >
             <div className="space-y-4">
@@ -718,7 +726,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
                 variant="sales"
               />
               <CampaignEvidenceTable
-                title="Non-sales campaigns"
+                title="Campaigns with other goals"
                 rows={nonSalesLedger}
                 tenantId={tenantId}
                 variant="other"
@@ -727,8 +735,8 @@ export default function AgentAchievementPage({ params }: PageProps) {
           </Disclosure>
 
           <Disclosure
-            title="Evidence quality and methodology"
-            badge={warnings.length > 0 ? `${warnings.length} notes` : 'No alerts'}
+            title="How these figures are worked out"
+            badge={warnings.length > 0 ? `${warnings.length} note${warnings.length === 1 ? '' : 's'}` : 'Nothing to flag'}
             icon={<ShieldCheck size={17} />}
           >
             {warnings.length > 0 && (
@@ -739,7 +747,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
                   border: '1px solid var(--warn-border)',
                 }}
               >
-                <ul className="list-disc pl-5 space-y-1 text-sm">
+                <ul className="list-disc pl-5 space-y-1 text-sm break-words">
                   {warnings.map((warning) => (
                     <li key={warning}>{warning}</li>
                   ))}
@@ -747,20 +755,20 @@ export default function AgentAchievementPage({ params }: PageProps) {
               </div>
             )}
 
-            <p className="micro-label mb-2">Return provenance</p>
+            <p className="micro-label mb-2">Where the sales figures come from</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
               {raw.revenueBasis
                 .filter((entry) => entry.campaignCount > 0)
                 .map((entry) => (
-                  <div key={entry.basis} className="card-inset px-3 py-3">
+                  <div key={entry.basis} className="card-inset px-3 py-3 min-w-0">
                     <p className="font-semibold text-sm">
                       {returnBasisLabel(entry.basis)}
                     </p>
                     <p className="explain mt-1">
                       {entry.campaignCount} campaign
                       {entry.campaignCount === 1 ? '' : 's'} ·{' '}
-                      {formatCurrency(Math.round(entry.spend))} spent ·{' '}
-                      {formatActionValueRoas(entry.weightedRoas)}
+                      {formatInr(entry.spend)} spent ·{' '}
+                      {formatActionValueRoas(entry.weightedRoas)} return
                     </p>
                   </div>
                 ))}
@@ -768,7 +776,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
 
             {cohort.exclusions.some((item) => item.count > 0) && (
               <>
-                <p className="micro-label mb-2">Excluded or incomplete</p>
+                <p className="micro-label mb-2">Left out of the headline figures</p>
                 <div className="flex items-center gap-2 flex-wrap mb-5">
                   {cohort.exclusions
                     .filter((item) => item.count > 0)
@@ -776,9 +784,9 @@ export default function AgentAchievementPage({ params }: PageProps) {
                       <span
                         key={item.code}
                         className="chip chip-neutral"
-                        title={item.description}
+                        title={plainStatus('launchExclusion', item.code).meaning || item.description}
                       >
-                        {item.count} {plainLabel(item.code)}
+                        {item.count} {plainStatus('launchExclusion', item.code).label}
                       </span>
                     ))}
                 </div>
@@ -786,17 +794,17 @@ export default function AgentAchievementPage({ params }: PageProps) {
             )}
 
             <dl className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
-              <MethodItem label="Cohort" value={data.scope.cohortRule} />
+              <MethodItem label="Which campaigns count" value={data.scope.cohortRule} />
               <MethodItem
-                label="ROAS formula"
+                label="How return on ad spend is worked out"
                 value={`${data.methodology.actionValueRoasFormula}; ${data.methodology.thresholdRule}.`}
               />
               <MethodItem
-                label="Verified launch"
+                label="When a campaign counts as live"
                 value={data.methodology.verifiedLaunchRule}
               />
               <MethodItem
-                label="Maturity"
+                label="When a campaign is old enough to judge"
                 value={data.methodology.maturityRule}
               />
             </dl>
@@ -806,16 +814,15 @@ export default function AgentAchievementPage({ params }: PageProps) {
               style={{ borderTop: '1px solid var(--hairline-light)' }}
             >
               <p className="font-semibold text-sm" style={{ color: 'var(--ink)' }}>
-                Claim boundary
+                What these figures don&apos;t claim
               </p>
               <p className="explain mt-1">
-                These are scoped observed results. Attributed action value is not
-                reconciled cash, and this page does not claim AI caused the outcome
-                or beat the marketing team without a comparable holdout.
+                These are the results we saw. Sales value from Meta is not the same as
+                cash in the bank, and this page does not claim the AI caused the
+                results or beat your team — that would need a fair side-by-side test.
               </p>
               <p className="explain mt-2">
-                Snapshot {formatDateTime(data.generatedAt)} · contract{' '}
-                {data.methodology.version}
+                Figures worked out {formatWhen(data.generatedAt)}
               </p>
             </div>
 
@@ -823,26 +830,37 @@ export default function AgentAchievementPage({ params }: PageProps) {
               className="mt-5 pt-4"
               style={{ borderTop: '1px solid var(--hairline-light)' }}
             >
-              <p className="micro-label mb-2">Full contract notes</p>
-              <ul className="list-disc pl-5 space-y-1 text-sm" style={{ color: 'var(--ink-2)' }}>
-                {data.methodology.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
+              <Details
+                title="Technical notes"
+                items={[{ label: 'Method version', value: data.methodology.version }]}
+              >
+                <ul className="list-disc pl-5 space-y-1">
+                  {data.methodology.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </Details>
             </div>
+            {error && (
+              <Details
+                title="Why the refresh failed"
+                className="mt-3"
+                items={[{ label: 'Error', value: error }]}
+              />
+            )}
           </Disclosure>
 
           <Disclosure
-            title="Decision and outcome detail"
-            badge={`${funnel.proposed} proposed · ${outcomes.recorded} actions`}
+            title="Changes the AI suggested"
+            badge={`${funnel.proposed} suggested · ${outcomes.recorded} checked`}
             icon={<Sparkles size={17} />}
           >
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
               {([
                 ['Awaiting review', funnel.open],
                 ['Approved', funnel.approved],
-                ['Expired', funnel.expired],
-                ['Final outcomes', outcomes.finalized72h],
+                ['Expired unreviewed', funnel.expired],
+                ['Results checked', outcomes.finalized72h],
               ] as const).map(([label, value]) => (
                 <CompactStat key={label} label={label} value={String(value)} />
               ))}
@@ -868,18 +886,18 @@ export default function AgentAchievementPage({ params }: PageProps) {
                   return (
                     <div
                       key={`${example.campaignName}-${index}`}
-                      className="card-inset px-4 py-4"
+                      className="card-inset px-4 py-4 min-w-0"
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-semibold">{example.campaignName}</p>
+                        <div className="min-w-0">
+                          <p className="font-semibold break-words">{example.campaignName}</p>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
                             <span className="chip chip-accent">
-                              {plainLabel(example.actionType)}
+                              {plainStatus('actionType', example.actionType).label}
                             </span>
                             {goalContext && (
                               <span className="chip chip-neutral">
-                                {plainLabel(goalContext.objective)} · {plainLabel(goalContext.primaryKPI)}
+                                {plainStatus('objective', goalContext.objective).label} · {plainLabel(goalContext.primaryKPI)}
                               </span>
                             )}
                           </div>
@@ -888,12 +906,12 @@ export default function AgentAchievementPage({ params }: PageProps) {
                           <p className="mono font-semibold">
                             {goalContext
                               ? `${formatModeledDelta(goalContext.expectedImpact.deltaPct)} ${plainLabel(goalContext.expectedImpact.metric)}`
-                              : 'Withheld'}
+                              : 'No forecast'}
                           </p>
                           <p className="explain">
                             {goalContext
-                              ? `${Math.round(goalContext.expectedImpact.confidence * 100)}% confidence · modeled KPI`
-                              : 'legacy contract'}
+                              ? `${Math.round(goalContext.expectedImpact.confidence * 100)}% sure · a forecast`
+                              : 'Made before forecasts were added'}
                           </p>
                         </div>
                       </div>
@@ -904,8 +922,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
                       )}
                       <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
                         <p className="explain">
-                          {DECISION_STATUS_LABEL[example.status] ??
-                            plainLabel(example.status)}
+                          {plainStatus('reviewStatus', example.status).label}
                         </p>
                         {goalContext && (
                           <Link
@@ -913,7 +930,7 @@ export default function AgentAchievementPage({ params }: PageProps) {
                             className="text-xs font-semibold"
                             style={{ color: 'var(--accent-strong)' }}
                           >
-                            Review 16-step trace →
+                            See why it suggested this →
                           </Link>
                         )}
                       </div>
@@ -922,11 +939,11 @@ export default function AgentAchievementPage({ params }: PageProps) {
                 })}
               </div>
             ) : (
-              <p className="explain">No open decision examples in this cohort.</p>
+              <p className="explain">No suggestions waiting for these campaigns.</p>
             )}
             <p className="explain mt-4">
-              Model estimates are hypothetical. Observed outcomes are
-              before/after measurements, not causal proof.
+              Forecasts are the AI&apos;s best guess. Results are before-and-after
+              comparisons — they don&apos;t prove the change caused them.
             </p>
           </Disclosure>
         </section>
@@ -1025,9 +1042,8 @@ function ReliabilityCard({
 }
 
 function gateLabel(gate: 'passed' | 'held' | 'unavailable'): string {
-  if (gate === 'passed') return 'Passed'
-  if (gate === 'held') return 'Safety hold'
-  return 'Unavailable'
+  if (gate === 'held') return 'Held back for safety'
+  return plainStatus('coverage', gate).label
 }
 
 function gateChipClass(gate: 'passed' | 'held' | 'unavailable'): string {
@@ -1049,25 +1065,25 @@ function BrainReliabilityPanel({
   const outcomes = reliability?.outcomes
 
   const traceStatus = !trace || trace.cyclesRun === 0
-    ? 'Building evidence'
+    ? 'Not enough yet'
     : trace.fullTraceCycles === trace.cyclesRun
-      ? 'Complete traces'
+      ? 'All complete'
       : `${trace.partialTraceCycles + trace.unavailableTraceCycles} incomplete`
   const gateStatus = !gates || gates.evaluatedCycles === 0
-    ? 'Building evidence'
+    ? 'Not enough yet'
     : gates.recommendHeld > 0
-      ? `${gates.recommendHeld} safety hold${gates.recommendHeld === 1 ? '' : 's'}`
-      : 'All eligible passed'
+      ? `${gates.recommendHeld} held back for safety`
+      : 'All passed'
   const predictionStatus = !predictions || predictions.decisions === 0
-    ? 'Awaiting decisions'
+    ? 'No suggestions yet'
     : predictions.legacyOrIncomplete === 0
-      ? 'Contracts complete'
-      : `${predictions.legacyOrIncomplete} incomplete`
+      ? 'All have a forecast'
+      : `${predictions.legacyOrIncomplete} without a forecast`
   const outcomeStatus = !outcomes || (outcomes.due24h === 0 && outcomes.due72h === 0)
-    ? 'Building evidence'
+    ? 'Not enough yet'
     : outcomes.reportable
-      ? 'Sample reportable'
-      : 'Measurement active'
+      ? 'Enough to report'
+      : 'Still measuring'
 
   const topBlocker = gates?.topRecommendBlockers[0]
 
@@ -1078,28 +1094,28 @@ function BrainReliabilityPanel({
           <BrainCircuit size={19} style={{ color: 'var(--accent)' }} />
           <div>
             <h2 id="brain-reliability-heading" className="section-title">
-              16-step brain reliability
+              How carefully the AI checks your campaigns
             </h2>
-            {reliability && (
-              <p className="explain mt-0.5">
-                {reliability.window.days}d operating evidence · {reliability.window.cohort}
-              </p>
-            )}
+            <p className="explain mt-0.5">
+              {reliability
+                ? `Last ${reliability.window.days} days · each check answers a different question, so they are not added up`
+                : 'Each check answers a different question, so they are not added up'}
+            </p>
           </div>
         </div>
-        <span className="chip chip-neutral">4 independent checks · no blended score</span>
+        <span className="chip chip-neutral">4 separate checks</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <ReliabilityCard
           icon={<CheckCircle2 size={18} />}
-          label="16-step completeness"
+          label="Check-ups done in full"
           value={trace ? coverageValue(trace.fullTraceCycles, trace.cyclesRun) : '—'}
           status={traceStatus}
-          detail={trace ? `${trace.requiredSteps}/${trace.requiredSteps} steps required per cycle` : 'Cycle trace contract unavailable'}
+          detail={trace ? `Each check-up has ${trace.requiredSteps} steps` : 'Not available yet'}
           footnote={trace
-            ? `${trace.statusCompleted} completed · ${trace.failed} failed · ${trace.pending} pending`
-            : 'Available after the reliability contract is deployed'}
+            ? `${trace.statusCompleted} finished · ${trace.failed} failed · ${trace.pending} still running`
+            : 'This check is not switched on yet'}
           progressPct={trace?.fullTraceRatePct ?? null}
           tone={trace
             ? coverageTone(
@@ -1111,17 +1127,17 @@ function BrainReliabilityPanel({
         />
         <ReliabilityCard
           icon={<ClipboardCheck size={18} />}
-          label="Current evidence readiness"
+          label="Enough evidence to suggest a change"
           value={gates ? coverageValue(gates.recommendPassed, gates.evaluatedCycles) : '—'}
           status={gateStatus}
           detail={gates
-            ? `${gates.executionEvidencePassed} also passed execution evidence`
-            : 'Evidence-gate contract unavailable'}
+            ? `${gates.executionEvidencePassed} also had enough to act on`
+            : 'Not available yet'}
           footnote={gates
             ? topBlocker
-              ? `Top hold: ${plainLabel(topBlocker.code)} (${topBlocker.count}) · ${gates.unavailableCycles} legacy/unavailable`
-              : `${gates.unavailableCycles} legacy/unavailable cycles`
-            : 'Safety holds prevent weak actions from being proposed'}
+              ? `Most common reason held back: ${humanise(topBlocker.code).toLowerCase()} (${topBlocker.count}) · ${gates.unavailableCycles} older check-ups not rated`
+              : `${gates.unavailableCycles} older check-ups not rated`
+            : 'The AI holds back when evidence is weak, so it does not suggest risky changes'}
           progressPct={gates?.recommendPassRatePct ?? null}
           tone={gates
             ? coverageTone(
@@ -1133,15 +1149,15 @@ function BrainReliabilityPanel({
         />
         <ReliabilityCard
           icon={<Gauge size={18} />}
-          label="Goal-aware predictions"
+          label="Suggestions with a forecast"
           value={predictions ? coverageValue(predictions.completePredictions, predictions.decisions) : '—'}
           status={predictionStatus}
           detail={predictions
-            ? `${predictions.goalAwareDecisions} decisions use goal-aware contracts`
-            : 'Prediction contract unavailable'}
+            ? `${predictions.goalAwareDecisions} suggestions are tied to the campaign goal`
+            : 'Not available yet'}
           footnote={predictions
-            ? `${predictions.byStatus.shadow_review} awaiting review · ${predictions.executionSucceeded} executed`
-            : 'Counts only complete KPI + delta + confidence predictions'}
+            ? `${predictions.byStatus.shadow_review} awaiting review · ${predictions.executionSucceeded} carried out`
+            : 'Counts suggestions that say what should change, by how much, and how sure the AI is'}
           progressPct={predictions?.contractCoveragePct ?? null}
           tone={predictions
             ? coverageTone(
@@ -1153,15 +1169,15 @@ function BrainReliabilityPanel({
         />
         <ReliabilityCard
           icon={<TimerReset size={18} />}
-          label="Observed measurement"
-          value={outcomes ? `24h ${coverageValue(outcomes.measured24h, outcomes.due24h)}` : '—'}
+          label="Results checked afterwards"
+          value={outcomes ? `${coverageValue(outcomes.measured24h, outcomes.due24h)} after 1 day` : '—'}
           status={outcomeStatus}
           detail={outcomes
-            ? `72h ${coverageValue(outcomes.finalized72h, outcomes.due72h)} · ${outcomes.conclusive72h} conclusive`
-            : 'Outcome contract unavailable'}
+            ? `${coverageValue(outcomes.finalized72h, outcomes.due72h)} after 3 days · ${outcomes.conclusive72h} with a clear answer`
+            : 'Not available yet'}
           footnote={outcomes
-            ? `Prediction accuracy unavailable · need ${outcomes.minimumConclusiveSample} conclusive outcomes`
-            : '24h and 72h checks begin after an action executes'}
+            ? `Forecast accuracy shown once there are ${outcomes.minimumConclusiveSample} clear answers`
+            : 'Results are checked 1 day and 3 days after a change is made'}
           progressPct={outcomes && outcomes.due72h > 0
             ? (outcomes.finalized72h / outcomes.due72h) * 100
             : null}
@@ -1173,14 +1189,14 @@ function BrainReliabilityPanel({
         <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3">
           <div>
             <p className="font-semibold" style={{ color: 'var(--ink)' }}>
-              Recent brain cycles
+              Latest check-ups
             </p>
-            <p className="explain">Trace, evidence gate and decision output</p>
+            <p className="explain">What the AI looked at and what it suggested</p>
           </div>
-          <span className="chip chip-neutral">
+          <span className="chip chip-neutral shrink-0">
             {reliability
               ? `${Math.min(reliability.recentCycles.length, 5)} shown`
-              : 'Unavailable'}
+              : 'Not available'}
           </span>
         </div>
 
@@ -1194,7 +1210,7 @@ function BrainReliabilityPanel({
               return (
                 <div
                   key={cycle.cycleId}
-                  className="px-4 sm:px-5 py-3 grid grid-cols-1 lg:grid-cols-[minmax(220px,1.5fr)_0.7fr_0.9fr_0.9fr_0.8fr] gap-2 lg:gap-4 items-center"
+                  className="px-4 sm:px-5 py-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_0.7fr_0.9fr_0.9fr_0.8fr] gap-2 lg:gap-4 items-center"
                   style={{ borderTop: '1px solid var(--hairline-light)' }}
                 >
                   <div className="min-w-0">
@@ -1202,48 +1218,49 @@ function BrainReliabilityPanel({
                       href={`/dashboard/${tenantId}/proposed-actions?campaignId=${encodeURIComponent(cycle.campaignId)}`}
                       className="font-semibold text-sm block truncate"
                       style={{ color: 'var(--ink)' }}
+                      title={cycle.campaignName}
                     >
                       {cycle.campaignName}
                     </Link>
                     <p className="explain truncate">
-                      {formatRelativeTime(cycle.startedAt)} · {plainLabel(cycle.status)}
+                      {formatRelative(cycle.startedAt)} · {plainStatus('agentRun', cycle.status).label}
                     </p>
                   </div>
                   <div>
-                    <p className="micro-label">Trace</p>
+                    <p className="micro-label">Steps done</p>
                     <span className={traceComplete ? 'chip chip-good mt-1' : 'chip chip-warn mt-1'}>
                       {cycle.stepsRecorded}/{cycle.requiredSteps} steps
                     </span>
                   </div>
                   <div>
-                    <p className="micro-label">Recommend gate</p>
+                    <p className="micro-label">Enough to suggest?</p>
                     <span className={`${gateChipClass(cycle.recommendGate)} mt-1`}>
                       {gateLabel(cycle.recommendGate)}
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <p className="micro-label">Execution evidence</p>
+                    <p className="micro-label">Enough to act?</p>
                     <span className={`${gateChipClass(cycle.executionEvidenceGate)} mt-1`}>
                       {gateLabel(cycle.executionEvidenceGate)}
                     </span>
                     {holdReason && (
-                      <p className="explain truncate mt-1" title={holdReason}>
-                        {plainLabel(holdReason)}
+                      <p className="explain truncate mt-1" title={humanise(holdReason)}>
+                        {humanise(holdReason)}
                       </p>
                     )}
                   </div>
                   <div className="lg:text-right">
-                    <p className="micro-label">Decision output</p>
+                    <p className="micro-label">Suggested</p>
                     <p className="font-semibold text-sm mt-1" style={{ color: 'var(--ink)' }}>
                       {cycle.decisionsWritten > 0
-                        ? `${cycle.decisionsWritten} proposed`
+                        ? `${cycle.decisionsWritten} change${cycle.decisionsWritten === 1 ? '' : 's'}`
                         : cycle.recommendGate === 'held'
-                          ? '0 · safety hold'
-                          : '0 actions'}
+                          ? 'Nothing · held back for safety'
+                          : 'Nothing needed'}
                     </p>
                     {cycle.confidenceOverall != null && (
                       <p className="explain">
-                        {Math.round(cycle.confidenceOverall * 100)}% confidence
+                        {Math.round(cycle.confidenceOverall * 100)}% sure
                       </p>
                     )}
                   </div>
@@ -1257,8 +1274,8 @@ function BrainReliabilityPanel({
             style={{ borderTop: '1px solid var(--hairline)' }}
           >
             {reliability
-              ? 'No intelligence cycles in this evidence window.'
-              : 'Cycle evidence unavailable in this snapshot.'}
+              ? 'No check-ups in this period yet.'
+              : 'Check-up history is not available yet.'}
           </div>
         )}
       </div>
@@ -1281,16 +1298,17 @@ function CompactStat({
       <p className="display-num mt-1" style={{ fontSize: 22 }}>
         {value}
       </p>
-      {sub && <p className="explain mt-1">{sub}</p>}
+      {sub && <p className="explain mt-1 break-words">{sub}</p>}
     </div>
   )
 }
 
 function MethodItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="micro-label mb-1">{label}</dt>
-      <dd style={{ color: 'var(--ink-2)' }}>{value}</dd>
+      <dd className="break-words" style={{ color: 'var(--ink-2)' }}>{value}</dd>
+
     </div>
   )
 }

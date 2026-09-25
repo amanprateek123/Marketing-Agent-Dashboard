@@ -9,8 +9,16 @@ import {
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
-import { Term, GLOSSARY } from '@/components/plain/Term'
+import { Term, GLOSSARY, PlainTerm } from '@/components/plain/Term'
+import { Details } from '@/components/plain/Details'
+import {
+  PLAIN_ERROR,
+  errorDetail,
+  formatRelative,
+  humanise,
+  plainStatus,
+  toneChip,
+} from '@/lib/plain-language'
 import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
 import {
   getActionOutcomes,
@@ -25,34 +33,23 @@ import type {
   SignalAccuracy,
 } from '@/types'
 
-// Plain-English labels for the internal reason codes the safety system logs
-// when it blocks an action — these are code slugs, not written for display.
-const BLOCKED_REASON_LABEL: Record<string, string> = {
-  bandit_disagreement: 'Two internal checks disagreed on whether this would help',
-  oscillation_cooldown: 'This was changed too recently — waiting to avoid flip-flopping',
-  recipient_thin_evidence: 'Not enough data yet on this audience to be sure',
-  recipient_learned_poor_audience: 'Past results say this audience underperforms',
-}
-function humanizeBlockedReason(reason: string): string {
-  return BLOCKED_REASON_LABEL[reason] ?? reason.replace(/_/g, ' ')
-}
 
 interface PageProps {
   params: Promise<{ tenantId: string }>
 }
 
 function OutcomeChip({ label }: { label: string | null }) {
-  const classes: Record<string, string> = {
-    improved:     'chip-good',
-    worsened:     'chip-bad',
-    neutral:      'chip-neutral',
-    inconclusive: 'chip-warn',
-    pending:      'chip-accent',
+  if (!label) {
+    return (
+      <span className="chip chip-accent" title="Results are checked 3 days after the change.">
+        Checking in 3 days
+      </span>
+    )
   }
-  const key = label ?? 'pending'
+  const plain = plainStatus('reviewVerdict', label)
   return (
-    <span className={`chip ${classes[key] ?? classes.pending}`}>
-      {key === 'pending' ? 'Awaiting 72h check' : key === 'improved' ? 'Observed improvement' : key === 'worsened' ? 'Observed decline' : key}
+    <span className={`chip ${toneChip(plain.tone)}`} title={plain.meaning || undefined}>
+      {plain.label}
     </span>
   )
 }
@@ -91,6 +88,8 @@ export default function IntelligencePage({ params }: PageProps) {
   const [signals, setSignals] = useState<SignalAccuracy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // The raw failure messages, kept for the collapsed Details block only.
+  const [errorDetails, setErrorDetails] = useState<{ label: string; value: string }[]>([])
   const [unavailableSections, setUnavailableSections] = useState<string[]>([])
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -100,6 +99,7 @@ export default function IntelligencePage({ params }: PageProps) {
       setLoading(true)
       setError(null)
       setUnavailableSections([])
+      setErrorDetails([])
       setOutcomes(null)
       setRegret(null)
       setEvals([])
@@ -118,13 +118,23 @@ export default function IntelligencePage({ params }: PageProps) {
       if (e.status === 'fulfilled') setEvals(e.value)
       if (s.status === 'fulfilled') setSignals(s.value)
       const unavailable: string[] = []
-      if (o.status === 'rejected') unavailable.push('Action outcomes')
-      if (r.status === 'rejected') unavailable.push('Safety calibration')
-      if (e.status === 'rejected') unavailable.push('Copy comparisons')
-      if (s.status === 'rejected') unavailable.push('Signal performance')
+      const details: { label: string; value: string }[] = []
+      const sections = [
+        [o, 'Results of past changes'],
+        [r, 'Changes the safety checks stopped'],
+        [e, 'Instruction versions compared'],
+        [s, 'Where good ideas came from'],
+      ] as const
+      for (const [result, name] of sections) {
+        if (result.status === 'rejected') {
+          unavailable.push(name)
+          details.push({ label: name, value: errorDetail(result.reason) || 'No message' })
+        }
+      }
       setUnavailableSections(unavailable)
+      setErrorDetails(details)
       if ([o, r, e, s].every((x) => x.status === 'rejected')) {
-        setError('Could not reach the intelligence endpoints — is the agent API running?')
+        setError(PLAIN_ERROR)
       }
       setLoading(false)
     }
@@ -136,7 +146,7 @@ export default function IntelligencePage({ params }: PageProps) {
     return (
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <IntelligenceCenterNav tenantId={tenantId} active="quality" />
-        <div role="status" aria-label="Loading decision quality">
+        <div role="status" aria-label="Loading results of past changes">
           <div className="skeleton h-4 w-36 rounded" />
           <div className="skeleton mt-3 h-9 w-full max-w-xl rounded-lg" />
           <div className="skeleton mt-3 h-4 w-full max-w-3xl rounded" />
@@ -149,7 +159,7 @@ export default function IntelligencePage({ params }: PageProps) {
             ))}
           </div>
           <div className="skeleton mt-6 h-64 rounded-2xl" />
-          <span className="sr-only">Loading decision quality…</span>
+          <span className="sr-only">Loading results of past changes…</span>
         </div>
       </div>
     )
@@ -177,25 +187,26 @@ export default function IntelligencePage({ params }: PageProps) {
       <IntelligenceCenterNav tenantId={tenantId} active="quality" />
       {/* Header */}
       <div className="mb-7 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-        <div>
-          <p className="micro-label mb-2">Intelligence center · Decision quality</p>
-          <h1 className="page-title">Know whether the intelligence is earning trust</h1>
+        <div className="min-w-0">
+          <p className="micro-label mb-2">Insights · Did it help?</p>
+          <h1 className="page-title">Did the changes we made help?</h1>
           <p className="page-subtitle max-w-3xl">
-            Follow executed actions into 72-hour outcome checks, calibrate safety blocks and compare learning versions.
+            Every change made to your ads is checked 3 days later to see whether results got better or worse. This page also shows
+            how often the safety checks were right to stop a change.
           </p>
           <p className="mt-2 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
-            These are observed before-and-after checks—not proof that Meridian alone caused the change.
+            These compare results before and after a change — other things may also have moved the numbers.
           </p>
         </div>
         <button onClick={() => setReloadKey((key) => key + 1)} className="btn btn-ghost self-start lg:self-auto">
-          <RefreshCw size={14} /> Refresh scorecard
+          <RefreshCw size={14} /> Refresh
         </button>
       </div>
 
       {error && (
         <div className="mb-6 flex flex-col gap-3 rounded-xl p-4 text-sm sm:flex-row sm:items-center" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
           <AlertCircle size={16} className="shrink-0" />
-          <span className="flex-1">{error}</span>
+          <span className="min-w-0 flex-1 break-words">{error}</span>
           <button onClick={() => setReloadKey((key) => key + 1)} className="btn btn-ghost shrink-0">
             <RefreshCw size={14} /> Retry
           </button>
@@ -209,33 +220,37 @@ export default function IntelligencePage({ params }: PageProps) {
           style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}
         >
           <AlertCircle size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-          <div>
-            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Some evidence is temporarily unavailable</p>
-            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-              Missing: {unavailableSections.join(', ')}. Other loaded sections remain available.
+          <div className="min-w-0">
+            <p className="font-semibold" style={{ color: 'var(--ink)' }}>Some sections could not load</p>
+            <p className="mt-0.5 break-words text-[12px]" style={{ color: 'var(--ink-2)' }}>
+              Missing: {unavailableSections.join(', ')}. Everything else below is up to date. Try refreshing in a minute.
             </p>
           </div>
         </div>
       )}
 
-      <section aria-label="Decision quality summary" className="mb-9 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {errorDetails.length > 0 && (
+        <Details className="mb-6" title="Technical details" items={errorDetails} />
+      )}
+
+      <section aria-label="Summary" className="mb-9 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           {
-            label: 'Executed actions',
+            label: 'Changes made',
             value: outcomes?.trackRecord.total ?? 0,
-            hint: 'Recorded as sent or applied',
+            hint: 'Changes applied to your ads',
             tone: 'var(--ink)',
           },
           {
-            label: 'Outcome checks',
+            label: 'Checked after 3 days',
             value: measuredCount,
-            hint: `${inconclusiveCount} inconclusive`,
+            hint: `${inconclusiveCount} with no clear answer`,
             tone: 'var(--ink)',
           },
           {
-            label: 'Observed improvement',
+            label: 'Made things better',
             value: observedImprovementRate === null ? '—' : `${observedImprovementRate}%`,
-            hint: 'Improved ÷ improved + worsened',
+            hint: 'Of the changes that clearly helped or hurt',
             tone: observedImprovementRate === null
               ? 'var(--ink-3)'
               : observedImprovementRate >= 50
@@ -245,13 +260,13 @@ export default function IntelligencePage({ params }: PageProps) {
                   : 'var(--bad)',
           },
           {
-            label: 'Safety calls supported',
+            label: 'Safety checks right',
             value: guardrailSupportRate === null ? '—' : `${guardrailSupportRate}%`,
-            hint: 'Excludes inconclusive checks',
+            hint: 'How often stopping a change was the right call',
             tone: guardrailSupportRate === null ? 'var(--ink-3)' : 'var(--accent-strong)',
           },
         ].map((metric) => (
-          <div key={metric.label} className="card p-4 sm:p-5">
+          <div key={metric.label} className="card min-w-0 p-4 sm:p-5">
             <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>{metric.label}</p>
             <p className="mt-1.5 text-[28px] font-bold leading-none tabular-nums" style={{ color: metric.tone }}>
               {metric.value}
@@ -266,11 +281,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={Activity}
           color="var(--good)"
-          title="Executed actions and 72-hour proxy checks"
-          hint="CPA or CTR is checked after execution because objective-specific KPI context is not yet stored on these records. The comparison is observational and does not establish incrementality."
+          title="Changes made, and what happened 3 days later"
+          hint="After each change we look at cost per sale or click rate 3 days on. It shows what happened afterwards, not proof the change alone caused it."
         />
         {!outcomes || (outcomes.trackRecord.total === 0 && outcomes.recent.length === 0) ? (
-          <EmptyState message="No executed actions have completed a 72-hour outcome check yet." />
+          <EmptyState message="No change has been checked yet. Results appear here 3 days after a change is made." />
         ) : (
           <div className="flex flex-col gap-4">
             {outcomes.trackRecord.byActionType.length > 0 && (
@@ -278,19 +293,19 @@ export default function IntelligencePage({ params }: PageProps) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Action type</th>
+                      <th>Kind of change</th>
                       <th className="num">Checked</th>
-                      <th className="num">Proxy improved</th>
-                      <th className="num">Proxy declined</th>
-                      <th className="num">Neutral</th>
-                      <th className="num">Inconclusive</th>
-                      <th className="num">Proxy decline rate</th>
+                      <th className="num">Got better</th>
+                      <th className="num">Got worse</th>
+                      <th className="num">No change</th>
+                      <th className="num">No clear answer</th>
+                      <th className="num">Share that got worse</th>
                     </tr>
                   </thead>
                   <tbody>
                     {outcomes.trackRecord.byActionType.map((b) => (
                       <tr key={b.actionType}>
-                        <td className="font-medium" style={{ color: 'var(--ink)' }}>{b.actionType.replace(/_/g, ' ')}</td>
+                        <td className="font-medium" style={{ color: 'var(--ink)' }}><PlainTerm domain="actionType" code={b.actionType} /></td>
                         <td className="num mono">{b.total}</td>
                         <td className="num mono font-semibold" style={{ color: 'var(--good)' }}>{b.improved}</td>
                         <td className="num mono font-semibold" style={{ color: b.worsened > 0 ? 'var(--bad)' : 'var(--ink-4)' }}>{b.worsened}</td>
@@ -309,17 +324,17 @@ export default function IntelligencePage({ params }: PageProps) {
             {outcomes.recent.length > 0 && (
               <div className="card overflow-x-auto">
                 <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-1">
-                  <p className="micro-label">Recent execution log</p>
-                  <span className="chip chip-info">Measured separately</span>
+                  <p className="micro-label">Latest changes</p>
+                  <span className="chip chip-info">Each checked on its own</span>
                 </div>
                 <table className="data-table">
                   <tbody>
                     {outcomes.recent.slice(0, 12).map((a, i) => (
                       <tr key={a._id ?? i}>
-                        <td className="font-medium whitespace-nowrap" style={{ color: 'var(--ink)' }}>{a.action.type.replace(/_/g, ' ')}</td>
-                        <td className="max-w-[220px] truncate" title={a.action.targetName}>{a.action.targetName ?? a.action.targetId}</td>
-                        <td className="whitespace-nowrap text-[10px]" style={{ color: 'var(--ink-3)' }}>{a.trigger.replace(/_/g, ' ')}</td>
-                        <td className="whitespace-nowrap mono text-[11px]" style={{ color: 'var(--ink-3)' }}>{formatRelativeTime(a.executedAt)}</td>
+                        <td className="font-medium whitespace-nowrap" style={{ color: 'var(--ink)' }}><PlainTerm domain="actionType" code={a.action.type} /></td>
+                        <td className="max-w-[220px] truncate" title={a.action.targetName ?? undefined}>{a.action.targetName ?? 'Unnamed ad'}</td>
+                        <td className="whitespace-nowrap text-[10px]" style={{ color: 'var(--ink-3)' }}>{humanise(a.trigger)}</td>
+                        <td className="whitespace-nowrap text-[11px]" style={{ color: 'var(--ink-3)' }}>{formatRelative(a.executedAt)}</td>
                         <td className="num"><OutcomeChip label={a.status === 'final' ? a.outcomeLabel : null} /></td>
                       </tr>
                     ))}
@@ -336,30 +351,30 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={ShieldAlert}
           color="var(--warn)"
-          title="Safety calibration"
-          hint="Meridian revisits blocked actions after 72 hours. A high miss rate suggests a guardrail may be too conservative; counterfactual labels remain model-based."
+          title="Changes the safety checks stopped — were they right?"
+          hint="When a safety check stops a change, we look again 3 days later. If stopping it often turns out to be a missed chance, that check may be too cautious. These are estimates."
         />
         {!regret || regret.total === 0 ? (
-          <EmptyState message="No blocked action has enough follow-up evidence for safety calibration yet." />
+          <EmptyState message="Nothing stopped by a safety check has been looked at again yet." />
         ) : (
           <div className="card overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Proposed action</th>
-                  <th>Guardrail reason</th>
-                  <th className="num">Evaluated blocks</th>
-                  <th className="num">Block supported</th>
-                  <th className="num">Possible miss</th>
-                  <th className="num">Inconclusive</th>
-                  <th className="num">Modeled miss rate · all evaluated</th>
+                  <th>Suggested change</th>
+                  <th>Why it was stopped</th>
+                  <th className="num">Looked at again</th>
+                  <th className="num">Right to stop</th>
+                  <th className="num">Missed chance</th>
+                  <th className="num">No clear answer</th>
+                  <th className="num">Missed-chance rate (estimate)</th>
                 </tr>
               </thead>
               <tbody>
                 {regret.byActionAndReason.map((r) => (
                   <tr key={`${r.actionType}-${r.blockedReason}`}>
-                    <td className="font-medium" style={{ color: 'var(--ink)' }}>{r.actionType.replace(/_/g, ' ')}</td>
-                    <td className="text-[11px]">{humanizeBlockedReason(r.blockedReason)}</td>
+                    <td className="font-medium" style={{ color: 'var(--ink)' }}><PlainTerm domain="actionType" code={r.actionType} /></td>
+                    <td className="min-w-[200px] break-words text-[11px]"><PlainTerm domain="blockedReason" code={r.blockedReason} /></td>
                     <td className="num mono">{r.total}</td>
                     <td className="num mono" style={{ color: 'var(--good)' }}>{r.correct}</td>
                     <td className="num mono" style={{ color: r.missed > 0 ? 'var(--bad)' : 'var(--ink-4)' }}>{r.missed}</td>
@@ -380,39 +395,34 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={GitCompareArrows}
           color="var(--accent)"
-          title="Legacy campaign version comparisons"
-          hint="This legacy diagnostic mixes campaign objectives and stored return bases. Treat its return-ratio comparison as directional only, not sales-performance proof."
+          title="Older check: did newer instructions do better?"
+          hint="Compares campaigns made with one version of the system's instructions against the version before. It mixes different campaign goals, so treat it as a rough hint, not proof of sales."
         />
         {evals.length === 0 ? (
-          <EmptyState message="No instruction versions have enough legacy campaign records to compare yet." />
+          <EmptyState message="There are not enough campaigns yet to compare one version with the last." />
         ) : (
           <div className="flex flex-col gap-3">
             {evals.map((e, i) => {
-              const verdictClass: Record<string, string> = {
-                improved:     'chip-good',
-                regressed:    'chip-bad',
-                neutral:      'chip-neutral',
-                inconclusive: 'chip-warn',
-              }
+              const verdict = plainStatus('reviewVerdict', e.verdict)
               return (
-                <div key={i} className="card p-4">
+                <div key={i} className="card min-w-0 p-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold mono tabular-nums" style={{ color: 'var(--ink)' }}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-3">
+                      <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
                         Version {e.newerVersion} <span style={{ color: 'var(--ink-3)' }}>vs</span> version {e.olderVersion}
                       </span>
-                      <span className={`chip uppercase ${verdictClass[e.verdict]}`}>
-                        {e.verdict}
+                      <span className={`chip ${toneChip(verdict.tone)}`} title={verdict.meaning || undefined}>
+                        {verdict.label}
                       </span>
                     </div>
-                    <span className="text-xs mono tabular-nums" style={{ color: 'var(--ink-2)' }}>
-                      <Term help={GLOSSARY.roas}>{`${e.newer.weightedROAS.toFixed(2)}x stored return-ratio proxy`}</Term> <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
+                    <span className="text-xs tabular-nums" style={{ color: 'var(--ink-2)' }}>
+                      <Term help={GLOSSARY.roas}>{`${e.newer.weightedROAS.toFixed(2)}x return on ad spend`}</Term> <span style={{ color: 'var(--ink-4)' }}>vs</span> {e.older.weightedROAS.toFixed(2)}x
                       <span className="ml-2" style={{ color: 'var(--ink-3)' }}>
                         ({e.newer.campaigns}/{e.older.campaigns} campaigns)
                       </span>
                     </span>
                   </div>
-                  <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--ink-2)' }}>{e.detail}</p>
+                  <p className="text-xs mt-2 break-words leading-relaxed" style={{ color: 'var(--ink-2)' }}>{e.detail}</p>
                 </div>
               )
             })}
@@ -425,11 +435,11 @@ export default function IntelligencePage({ params }: PageProps) {
         <SectionHeader
           icon={Radar}
           color="var(--info)"
-          title="Legacy signal follow-up"
-          hint="This legacy view includes all brief objectives, counts any recorded conversion as a result, and uses an arithmetic mean of stored ROAS. It is not purchase or revenue proof."
+          title="Older check: where the good ideas came from"
+          hint="For ideas that went live, how many brought any result, grouped by where the idea came from. It counts every kind of result, so it is a rough hint, not proof of sales."
         />
         {!signals || signals.briefsWithOutcomes === 0 ? (
-          <EmptyState message="No launched briefs have enough legacy follow-up data yet." />
+          <EmptyState message="Not enough ideas have gone live yet to show where the good ones came from." />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {([
@@ -441,16 +451,16 @@ export default function IntelligencePage({ params }: PageProps) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Source</th>
+                      <th>Where it came from</th>
                       <th className="num">Launched</th>
-                      <th className="num">Recorded result &gt; 0</th>
-                      <th className="num"><Term help={GLOSSARY.roas}>Mean stored ROAS proxy</Term></th>
+                      <th className="num">Brought a result</th>
+                      <th className="num"><Term help={GLOSSARY.roas}>Average return on ad spend</Term></th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.label}>
-                        <td className="font-medium capitalize" style={{ color: 'var(--ink)' }}>{r.label.replace(/_/g, ' ')}</td>
+                        <td className="max-w-[240px] truncate font-medium" style={{ color: 'var(--ink)' }} title={humanise(r.label)}>{humanise(r.label)}</td>
                         <td className="num mono">{r.launched}</td>
                         <td className="num mono">{r.converted}</td>
                         <td className="num mono font-bold" style={{ color: 'var(--ink-2)' }}>

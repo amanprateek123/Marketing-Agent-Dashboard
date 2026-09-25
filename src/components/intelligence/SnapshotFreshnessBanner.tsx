@@ -6,7 +6,7 @@ import {
   getSnapshotHistory,
   type IntelligenceSnapshotDoc,
 } from '@/lib/api'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelative, humanise } from '@/lib/plain-language'
 
 interface Props {
   tenantId: string
@@ -64,7 +64,7 @@ export function SnapshotFreshnessBanner({
           <div className="skeleton h-3 w-32 rounded" />
           <div className="skeleton mt-2 h-2.5 w-52 max-w-full rounded" />
         </div>
-        <span className="sr-only">Checking intelligence evidence freshness…</span>
+        <span className="sr-only">Checking how up to date these numbers are…</span>
       </div>
     )
   }
@@ -77,10 +77,10 @@ export function SnapshotFreshnessBanner({
         style={{ borderColor: 'var(--warn-border)', background: 'var(--warn-bg)' }}
       >
         <AlertCircle size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-        <div>
-          <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>Evidence freshness unavailable</p>
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>We couldn&apos;t check how fresh these numbers are</p>
           <p className="mt-0.5 text-[11px]" style={{ color: 'var(--ink-2)' }}>
-            Campaign data remains visible, but Meridian could not verify the latest intelligence snapshot.
+            The campaign numbers below are still shown, but we could not confirm when they were last updated. Try again in a minute.
           </p>
         </div>
       </div>
@@ -91,10 +91,10 @@ export function SnapshotFreshnessBanner({
     return (
       <div className="card mb-4 flex items-start gap-3 px-4 py-3" role="status">
         <Clock3 size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--ink-3)' }} />
-        <div>
-          <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>No intelligence snapshot yet</p>
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>No health check yet</p>
           <p className="mt-0.5 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-            Meridian has not recorded a campaign-level evidence snapshot for this campaign.
+            This campaign has not had its first automatic check-up yet. It runs every 15 minutes or so.
           </p>
         </div>
       </div>
@@ -106,7 +106,7 @@ export function SnapshotFreshnessBanner({
 
   return (
     <div
-      className="card mb-4 flex items-center gap-3 px-4 py-3"
+      className="card mb-4 flex flex-wrap items-center gap-3 px-4 py-3"
       role="status"
       style={
         veryStale
@@ -122,27 +122,27 @@ export function SnapshotFreshnessBanner({
       />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-semibold" style={{ color: 'var(--ink)' }}>
-          Evidence snapshot
+          Latest check-up
         </p>
         <p className="text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
-          Updated {formatRelativeTime(snap.collectedAt as string)}
+          Updated {formatRelative(snap.collectedAt as string)}
           {snap.freshnessSec != null && (
             <>
-              {' '}· {Math.round(snap.freshnessSec / 60)}m source lag
+              {' '}· Meta&apos;s numbers were {Math.round(snap.freshnessSec / 60)} minutes old
             </>
           )}
         </p>
       </div>
       {snap.missingFields.length > 0 && (
-        <span className="chip chip-warn shrink-0" title={snap.missingFields.join(', ')}>
-          {snap.missingFields.length} missing
+        <span className="chip chip-warn shrink-0" title={`Missing: ${snap.missingFields.map(humanise).join(', ')}`}>
+          {snap.missingFields.length} {snap.missingFields.length === 1 ? 'number' : 'numbers'} missing
         </span>
       )}
       <span
         className={`chip shrink-0 ${veryStale ? 'chip-warn' : fresh ? 'chip-good' : 'chip-neutral'}`}
-        title={`Intelligence schema ${snap.schemaVersion}`}
+        title={veryStale ? 'More than an hour old.' : fresh ? 'Less than 30 minutes old.' : 'Between 30 minutes and an hour old.'}
       >
-        {veryStale ? 'Stale' : fresh ? 'Fresh' : 'Aging'}
+        {veryStale ? 'Out of date' : fresh ? 'Up to date' : 'A little old'}
       </span>
     </div>
   )

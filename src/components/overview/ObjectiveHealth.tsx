@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, CircleDollarSign, Target } from 'lucide-react'
-import { formatCurrency, formatPercent } from '@/lib/utils'
+import { formatPercent } from '@/lib/utils'
+import { formatInr } from '@/lib/plain-language'
 import type { DashboardCampaignRow, FacetRollup } from '@/types'
 
 interface ObjectiveHealthProps {
@@ -24,7 +25,7 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
           Campaign health will appear here
         </h2>
         <p className="explain mx-auto mt-2 max-w-md">
-          Once campaigns begin spending, Meridian will judge sales, awareness, traffic and other goals on the result each one was built to deliver.
+          Once campaigns start spending, we will check each one against its own goal — sales, awareness, website visits and so on.
         </p>
         <Link href={`/dashboard/${tenantId}/campaign-copilot`} className="btn btn-accent mt-5">
           Build the first campaign <ArrowRight size={14} aria-hidden="true" />
@@ -39,10 +40,10 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
         className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-end sm:justify-between"
         style={{ borderBottom: '1px solid var(--hairline)' }}
       >
-        <div>
-          <p className="micro-label mb-1.5">Account campaign health</p>
+        <div className="min-w-0">
+          <p className="micro-label mb-1.5">How your campaigns are doing</p>
           <h2 id="objective-health-title" className="section-title">
-            Performance measured against the intended goal
+            Each campaign checked against its own goal
           </h2>
         </div>
         <Link
@@ -75,7 +76,7 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
               ? `${bad} need attention`
               : good > 0
                 ? `${good} on target`
-                : 'Signal pending'
+                : 'Too early to tell'
 
           return (
             <article
@@ -87,12 +88,12 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  <p className="truncate text-sm font-semibold" style={{ color: 'var(--ink)' }} title={objective.label}>
                     {objective.label}
                   </p>
                   <p className="explain mt-0.5">
                     {objective.campaignCount} campaign{objective.campaignCount === 1 ? '' : 's'} ·{' '}
-                    {formatCurrency(Math.round(objective.spend))} invested
+                    {formatInr(objective.spend)} spent
                   </p>
                 </div>
                 <span
@@ -111,7 +112,7 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
               </div>
 
               <p
-                className="display-num text-2xl"
+                className="display-num break-words text-2xl"
                 style={{
                   color:
                     bad > 0
@@ -125,17 +126,17 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
               </p>
               <p className="explain mt-1 min-h-10">
                 {isRevenueObjective
-                  ? `${formatCurrency(Math.round(objective.spend))} spend · open Campaigns for basis-aware raw return`
+                  ? `${formatInr(objective.spend)} spent · see Campaigns for sales by campaign`
                   : metricLabels.length
                     ? `Judged on ${metricLabels.slice(0, 2).join(' and ')}`
-                    : 'Waiting for an objective-specific result'}
+                    : 'Waiting for the first results for this goal'}
               </p>
 
               <div
                 className="mt-4 flex h-2 overflow-hidden rounded-full"
                 style={{ background: 'var(--muted)' }}
                 role="img"
-                aria-label={`${good} on target, ${watch} to watch, ${bad} need action, ${neutral} awaiting a signal`}
+                aria-label={`${good} on target, ${watch} to watch, ${bad} need attention, ${neutral} too early to tell`}
               >
                 {good > 0 && <span style={{ width: formatPercent(good / measured, 2), background: 'var(--good)' }} />}
                 {watch > 0 && <span style={{ width: formatPercent(watch / measured, 2), background: 'var(--warn)' }} />}
@@ -143,9 +144,9 @@ export function ObjectiveHealth({ campaigns, objectives, tenantId }: ObjectiveHe
               </div>
               <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: 'var(--ink-3)' }}>
                 <Legend color="var(--good)" label={`${good} on target`} />
-                <Legend color="var(--warn)" label={`${watch} watch`} />
-                <Legend color="var(--bad)" label={`${bad} action`} />
-                {neutral > 0 && <Legend color="var(--ink-4)" label={`${neutral} pending`} />}
+                <Legend color="var(--warn)" label={`${watch} to watch`} />
+                <Legend color="var(--bad)" label={`${bad} need attention`} />
+                {neutral > 0 && <Legend color="var(--ink-4)" label={`${neutral} too early`} />}
               </div>
             </article>
           )

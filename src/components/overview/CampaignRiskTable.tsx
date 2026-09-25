@@ -3,9 +3,8 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { AlertTriangle, Clock } from 'lucide-react'
-import {
-  formatCurrency, formatRelativeTime, formatSignedCurrency, severityToHealth,
-} from '@/lib/utils'
+import { formatSignedCurrency, severityToHealth } from '@/lib/utils'
+import { formatInr, formatWhen, plainStatus } from '@/lib/plain-language'
 import { HealthBadge } from '@/components/plain/HealthBadge'
 import type { DashboardCampaignRow, DashboardEconomics } from '@/types'
 
@@ -89,7 +88,7 @@ export function CampaignRiskTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="data-table">
+        <table className="data-table min-w-[720px]">
           <thead>
             <tr>
               <th style={{ width: '30%' }}>Campaign</th>
@@ -119,7 +118,7 @@ export function CampaignRiskTable({
                   <td>
                     <Link
                       href={`/dashboard/${tenantId}/campaigns/${c.id}`}
-                      className="font-semibold hover:underline"
+                      className="break-words font-semibold hover:underline"
                       style={{ color: 'var(--ink)' }}
                     >
                       {c.displayName}
@@ -144,7 +143,7 @@ export function CampaignRiskTable({
                       )}
                       {c.facets.budgetModel !== 'unknown' && (
                         <span className="chip chip-neutral" style={{ fontSize: 10.5 }}>
-                          {c.facets.budgetModel.toUpperCase()}
+                          {plainStatus('budgetModel', c.facets.budgetModel).label}
                         </span>
                       )}
                       {c.learningStage === 'LEARNING_LIMITED' && (
@@ -154,12 +153,12 @@ export function CampaignRiskTable({
                       )}
                       {c.capRisk && (
                         <span className="chip chip-bad" style={{ fontSize: 10.5 }}>
-                          <AlertTriangle size={10} /> Cap too low
+                          <AlertTriangle size={10} aria-hidden="true" /> Cost limit too low
                         </span>
                       )}
                       {c.isStale && (
                         <span className="chip chip-neutral" style={{ fontSize: 10.5 }}>
-                          <Clock size={10} /> Stale
+                          <Clock size={10} aria-hidden="true" /> Numbers out of date
                         </span>
                       )}
                     </div>
@@ -167,11 +166,11 @@ export function CampaignRiskTable({
                   <td>
                     <HealthBadge health={health} label={c.verdictLabel} />
                     {c.nextAction && (
-                      <p className="explain mt-1">{c.nextAction}</p>
+                      <p className="explain mt-1 break-words">{c.nextAction}</p>
                     )}
                   </td>
                   <td className="num" style={{ color: 'var(--ink)' }}>
-                    {c.spend > 0 ? formatCurrency(Math.round(c.spend)) : '—'}
+                    {c.spend > 0 ? formatInr(c.spend) : '—'}
                   </td>
                   {/* Each campaign is scored on the KPI its objective was set
                       to optimise — ROAS for sales, CPM for awareness, CPC for
@@ -222,9 +221,9 @@ export function CampaignRiskTable({
                     )}
                   </td>
                   <td className="num" style={{ color: 'var(--ink-3)' }}>
-                    {c.launchedAt ? formatRelativeTime(c.launchedAt) : '—'}
+                    {c.launchedAt ? formatWhen(c.launchedAt) : '—'}
                     {c.daysRunning != null && (
-                      <span className="explain block">{c.daysRunning}d run</span>
+                      <span className="explain block">{c.daysRunning} day{c.daysRunning === 1 ? '' : 's'} running</span>
                     )}
                   </td>
                 </tr>

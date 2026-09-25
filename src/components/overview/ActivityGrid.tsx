@@ -2,7 +2,7 @@ import Link from 'next/link'
 import {
   Activity, CheckCircle2, Image as ImageIcon, Inbox, Link2, RefreshCw,
 } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelative, plainStatus } from '@/lib/plain-language'
 import type { TenantActivity } from '@/types'
 
 /**
@@ -28,51 +28,51 @@ export function ActivityGrid({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <Cell
         icon={Link2}
-        title="Meta connection"
+        title="Meta ad account"
         href={`${base}/settings`}
         healthy={meta.connected}
         lines={
           meta.connected
             ? [
                 `${meta.accountCount} ad account${meta.accountCount === 1 ? '' : 's'}`,
-                meta.pixelId ? 'Pixel connected' : 'No pixel set',
-                meta.pageId ? 'Page connected' : 'No page set',
+                meta.pixelId ? 'Sales tracking connected' : 'Sales tracking not set up',
+                meta.pageId ? 'Facebook Page connected' : 'No Facebook Page chosen',
               ]
-            : ['Not connected — nothing can sync or launch']
+            : ['Not connected — we cannot read results or launch ads']
         }
       />
 
       <Cell
         icon={Activity}
-        title="Intelligence pipeline"
+        title="Ad idea research"
         href={`${base}/runs`}
         healthy={pipeline.failedInWindow === 0}
         lines={[
           pipeline.lastRunAt
-            ? `Last run ${formatRelativeTime(pipeline.lastRunAt)} · ${pipeline.lastRunStatus ?? '—'}`
-            : 'Never run',
-          `${pipeline.runsInWindow} run${pipeline.runsInWindow === 1 ? '' : 's'} this period`,
+            ? `Last ran ${formatRelative(pipeline.lastRunAt)}${pipeline.lastRunStatus ? ` · ${plainStatus('pipelineStatus', pipeline.lastRunStatus).label}` : ''}`
+            : 'Has not run yet',
+          `Ran ${pipeline.runsInWindow} time${pipeline.runsInWindow === 1 ? '' : 's'} in this period`,
           pipeline.runningNow > 0
             ? `${pipeline.runningNow} running now`
             : pipeline.failedInWindow > 0
-              ? `${pipeline.failedInWindow} failed`
-              : 'No failures',
+              ? `${pipeline.failedInWindow} did not finish`
+              : 'Nothing went wrong',
         ]}
       />
 
       <Cell
         icon={ImageIcon}
-        title="Creative library"
+        title="Your ads"
         href={`${base}/creatives`}
         healthy={creatives.failed === 0}
         lines={[
           `${creatives.ready} ready to use`,
-          creatives.producing > 0 ? `${creatives.producing} still producing` : 'None in production',
+          creatives.producing > 0 ? `${creatives.producing} being made` : 'None being made right now',
           creatives.failed > 0
-            ? `${creatives.failed} failed`
+            ? `${creatives.failed} could not be made`
             : creatives.allRejected > 0
-              ? `${creatives.allRejected} fully rejected`
-              : 'No failures',
+              ? `${creatives.allRejected} batch${creatives.allRejected === 1 ? '' : 'es'} with every ad turned down`
+              : 'Nothing went wrong',
         ]}
       />
 
@@ -84,35 +84,35 @@ export function ActivityGrid({
         lines={[
           `${queue.pendingApprovalCampaigns} campaign${queue.pendingApprovalCampaigns === 1 ? '' : 's'} to approve`,
           `${queue.pendingActions} suggested change${queue.pendingActions === 1 ? '' : 's'}`,
-          `${queue.pendingDecisions} optimiser decision${queue.pendingDecisions === 1 ? '' : 's'}`,
+          `${queue.pendingDecisions} budget or pause suggestion${queue.pendingDecisions === 1 ? '' : 's'}`,
         ]}
       />
 
       <Cell
         icon={RefreshCw}
-        title="Data freshness"
+        title="How fresh the numbers are"
         href={`${base}/campaigns`}
         healthy={sync.staleCampaignCount === 0}
         lines={[
-          sync.lastSyncAt ? `Synced ${formatRelativeTime(sync.lastSyncAt)}` : 'Never synced',
+          sync.lastSyncAt ? `Refreshed from Meta ${formatRelative(sync.lastSyncAt)}` : 'Not refreshed from Meta yet',
           sync.stalestCampaignHours != null
-            ? `Oldest numbers ${Math.round(sync.stalestCampaignHours)}h old`
-            : 'No live campaigns',
+            ? `Oldest numbers are ${Math.round(sync.stalestCampaignHours)} hour${Math.round(sync.stalestCampaignHours) === 1 ? '' : 's'} old`
+            : 'No campaigns running',
           sync.staleCampaignCount > 0
-            ? `${sync.staleCampaignCount} campaign${sync.staleCampaignCount === 1 ? '' : 's'} stale`
-            : 'All current',
+            ? `${sync.staleCampaignCount} campaign${sync.staleCampaignCount === 1 ? '' : 's'} out of date`
+            : 'All up to date',
         ]}
       />
 
       <Cell
         icon={CheckCircle2}
-        title="Optimiser"
+        title="Automatic check-ups"
         href={`${base}/proposed-actions`}
         healthy
         lines={[
-          `${queue.pendingActions + queue.pendingDecisions} proposal${queue.pendingActions + queue.pendingDecisions === 1 ? '' : 's'} open`,
-          'Auditing every 6 hours',
-          'Learning loop on days 7 / 14 / 30',
+          `${queue.pendingActions + queue.pendingDecisions} suggestion${queue.pendingActions + queue.pendingDecisions === 1 ? '' : 's'} waiting`,
+          'Checks your campaigns every 6 hours',
+          'Looks back at results after 7, 14 and 30 days',
         ]}
       />
     </div>
@@ -133,9 +133,9 @@ function Cell({
   healthy: boolean
 }) {
   return (
-    <Link href={href} className="card card-hover px-5 py-4 block">
+    <Link href={href} className="card card-hover block min-w-0 px-5 py-4">
       <div className="flex items-center gap-2 mb-2.5">
-        <Icon size={15} style={{ color: healthy ? 'var(--ink-3)' : 'var(--warn)' }} />
+        <Icon size={15} className="shrink-0" style={{ color: healthy ? 'var(--ink-3)' : 'var(--warn)' }} aria-hidden="true" />
         <p className="micro-label" style={{ color: 'var(--ink-3)' }}>
           {title}
         </p>
@@ -149,6 +149,7 @@ function Cell({
       {lines.map((l, i) => (
         <p
           key={i}
+          className="break-words"
           style={{
             fontSize: 13,
             color: i === 0 ? 'var(--ink)' : 'var(--ink-3)',

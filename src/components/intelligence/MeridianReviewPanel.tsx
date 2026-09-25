@@ -30,6 +30,8 @@ import type {
   IntelligenceReviewVerdict,
 } from '@/types/intelligence-review'
 import { FounderVerdict } from './FounderVerdict'
+import { Details } from '@/components/plain/Details'
+import { formatInr, formatWhen, humanise, plainStatus, shortRef, toneChip } from '@/lib/plain-language'
 
 export interface MeridianReviewPanelProps {
   review?: IntelligenceReviewResult
@@ -46,25 +48,25 @@ const VERDICT_PRESENTATION: Record<
   { label: string; color: string; background: string; border: string }
 > = {
   support: {
-    label: 'Evidence supports review',
+    label: 'The numbers back this change',
     color: 'var(--good)',
     background: 'var(--good-bg)',
     border: 'var(--good-border)',
   },
   hold: {
-    label: 'Safety hold',
+    label: 'Held back to be safe',
     color: 'var(--warn)',
     background: 'var(--warn-bg)',
     border: 'var(--warn-border)',
   },
   reject: {
-    label: 'Evidence rejects action',
+    label: 'The numbers argue against this change',
     color: 'var(--bad)',
     background: 'var(--bad-bg)',
     border: 'var(--bad-border)',
   },
   unavailable: {
-    label: 'Review unavailable',
+    label: 'No second check yet',
     color: 'var(--ink-3)',
     background: 'var(--surface-warm)',
     border: 'var(--hairline)',
@@ -79,23 +81,17 @@ const HIERARCHY_ORDER: Record<IntelligenceReviewHierarchyLevel, number> = {
 }
 
 function plainLabel(value: string): string {
-  const words = value.replaceAll('_', ' ').trim()
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Unavailable'
+  return humanise(value) || 'Unavailable'
+}
+
+function levelLabel(level: string): string {
+  if (level === 'adset') return 'Ad group'
+  return plainLabel(level)
 }
 
 function formatTimestamp(value: string | undefined): string {
-  if (!value) return 'Time unavailable'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Time unavailable'
-  return `${new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  }).format(date)} UTC`
+  const when = formatWhen(value)
+  return when === '—' ? 'Time unavailable' : when
 }
 
 function formatDelta(value: number): string {
@@ -119,7 +115,7 @@ function formatEvidenceValue(
 
   const normalizedUnit = unit?.trim().toLowerCase()
   if (normalizedUnit === 'inr' || normalizedUnit === '₹') {
-    return `₹${Math.round(value).toLocaleString('en-IN')}`
+    return formatInr(value)
   }
   if (normalizedUnit === 'percent' || normalizedUnit === '%') {
     return `${Math.round(value * 10) / 10}%`
@@ -127,16 +123,16 @@ function formatEvidenceValue(
   if (normalizedUnit === 'ratio' || normalizedUnit === 'x') {
     return `${value.toFixed(2)}x`
   }
-  return `${value.toLocaleString('en-IN')}${unit ? ` ${unit}` : ''}`
+  return `${value.toLocaleString('en-IN')}${unit ? ` ${humanise(unit).toLowerCase()}` : ''}`
 }
 
 function formatParameter(value: unknown): string {
   if (value === null || value === undefined) return 'Unavailable'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (typeof value === 'number') return value.toLocaleString('en-IN')
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return humanise(value)
   if (Array.isArray(value)) return value.map(formatParameter).join(', ')
-  return 'Structured configuration preserved'
+  return 'More settings'
 }
 
 function effectiveVerdict(
@@ -212,18 +208,18 @@ function HierarchyStrip({ evidence }: { evidence?: IntelligenceReviewEvidenceBun
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] font-semibold" style={{ color: 'var(--ink-3)' }}>
-          Evidence path
+          What was looked at
         </p>
         {coverage && (
           <div className="flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--ink-3)' }}>
-            <span>{coverage.adSetsIncluded}/{coverage.adSetsTotal} ad sets</span>
+            <span>{coverage.adSetsIncluded} of {coverage.adSetsTotal} ad groups</span>
             <span aria-hidden="true">·</span>
-            <span>{coverage.adsIncluded}/{coverage.adsTotal} ads</span>
-            {coverage.truncated && <span className="chip chip-warn" style={{ fontSize: '9px', padding: '0 6px' }}>Focused sample</span>}
+            <span>{coverage.adsIncluded} of {coverage.adsTotal} ads</span>
+            {coverage.truncated && <span className="chip chip-warn" style={{ fontSize: '9px', padding: '0 6px' }}>Only the most relevant</span>}
           </div>
         )}
       </div>
-      <ol className="flex flex-wrap items-center gap-2" aria-label="Campaign diagnosis hierarchy">
+      <ol className="flex flex-wrap items-center gap-2" aria-label="Campaign, ad group and ad looked at">
         {path.map((node, index) => {
           const metric = node.metrics.find((item) => item.status === 'available' && item.value !== null) ?? node.metrics[0]
           const unresolved = node.resolution === 'unresolved'
@@ -242,14 +238,14 @@ function HierarchyStrip({ evidence }: { evidence?: IntelligenceReviewEvidenceBun
               >
                 <div className="flex items-center gap-1.5 text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
                   <HierarchyIcon level={node.level} />
-                  {node.level === 'adset' ? 'Ad set' : plainLabel(node.level)}
+                  {levelLabel(node.level)}
                 </div>
-                <div className="mt-0.5 flex max-w-[240px] items-baseline gap-2">
+                <div className="mt-0.5 flex min-w-0 max-w-[240px] flex-wrap items-baseline gap-2">
                   <span className="truncate text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }} title={node.name}>
                     {node.name}
                   </span>
-                  {target && <span className="chip chip-accent" style={{ fontSize: '9px', padding: '0 6px' }}>Target</span>}
-                  {unresolved && <span className="chip chip-warn" style={{ fontSize: '9px', padding: '0 6px' }}>Unresolved</span>}
+                  {target && <span className="chip chip-accent" style={{ fontSize: '9px', padding: '0 6px' }}>Would change</span>}
+                  {unresolved && <span className="chip chip-warn" style={{ fontSize: '9px', padding: '0 6px' }} title="We could not match this to your ad account.">Not found</span>}
                   {metric && (
                     <span className="shrink-0 text-[10.5px] tabular-nums" style={{ color: 'var(--ink-3)' }}>
                       {metric.label ? `${metric.label} ` : ''}
@@ -266,8 +262,8 @@ function HierarchyStrip({ evidence }: { evidence?: IntelligenceReviewEvidenceBun
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-[10px] font-semibold" style={{ color: 'var(--ink-3)' }}>Compared with</span>
           {comparisons.slice(0, 6).map((node) => (
-            <span key={`${node.level}:${node.id}`} className={`chip ${node.resolution === 'unresolved' ? 'chip-warn' : 'chip-neutral'}`} title={node.name}>
-              {node.level === 'adset' ? 'Ad set' : plainLabel(node.level)} · {node.name}
+            <span key={`${node.level}:${node.id}`} className={`chip max-w-full truncate ${node.resolution === 'unresolved' ? 'chip-warn' : 'chip-neutral'}`} title={node.name}>
+              {levelLabel(node.level)} · {node.name}
             </span>
           ))}
           {comparisons.length > 6 && <span className="chip chip-neutral">+{comparisons.length - 6} more</span>}
@@ -282,22 +278,22 @@ function CompactEvidencePath({ evidence }: { evidence?: IntelligenceReviewEviden
   if (path.length === 0) {
     return (
       <span className="text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
-        Evidence hierarchy unavailable
+        We couldn&apos;t tell which campaign, ad group or ad this is about
       </span>
     )
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Evidence path summary">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="What was looked at">
       {path.map((node, index) => (
         <div key={`${node.level}:${node.id}`} className="contents">
           {index > 0 && <ArrowRight size={11} style={{ color: 'var(--ink-4)' }} aria-hidden="true" />}
           <span
-            className={`chip ${node.role === 'action_target' ? 'chip-accent' : node.resolution === 'unresolved' ? 'chip-warn' : 'chip-neutral'}`}
+            className={`chip max-w-full truncate ${node.role === 'action_target' ? 'chip-accent' : node.resolution === 'unresolved' ? 'chip-warn' : 'chip-neutral'}`}
             style={{ fontSize: '9.5px', padding: '1px 7px' }}
-            title={`${plainLabel(node.level)}: ${node.name}`}
+            title={`${levelLabel(node.level)}: ${node.name}`}
           >
-            {node.level === 'adset' ? 'Ad set' : plainLabel(node.level)} · {node.name}
+            {levelLabel(node.level)} · {node.name}
           </span>
         </div>
       ))}
@@ -305,15 +301,19 @@ function CompactEvidencePath({ evidence }: { evidence?: IntelligenceReviewEviden
   )
 }
 
-function EvidenceRef({ value }: { value: string }) {
+/** Internal evidence references, kept behind a collapsed Details block (never shown as content). */
+function EvidenceRefs({ refs, title = 'Reference' }: { refs: string[]; title?: string }) {
+  if (refs.length === 0) return null
+  if (refs.length === 1) return <Details title={title} reference={refs[0]} className="mt-2" />
   return (
-    <span
-      className="inline-flex max-w-full truncate rounded-md px-1.5 py-0.5 font-mono text-[9.5px]"
-      style={{ color: 'var(--ink-3)', background: 'var(--muted)' }}
-      title={value}
-    >
-      {value}
-    </span>
+    <Details
+      title={`${title}s`}
+      className="mt-2"
+      items={refs.map((ref, index) => ({
+        label: `${index + 1}`,
+        value: <span title={ref}>{shortRef(ref)}</span>,
+      }))}
+    />
   )
 }
 
@@ -331,13 +331,13 @@ function ObservedSection({
     <article
       className="card-inset h-full p-4"
       style={{ background: 'var(--info-bg)', borderColor: 'var(--info-border)' }}
-      aria-label="Observed evidence"
+      aria-label="What the numbers show"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Eye size={16} style={{ color: 'var(--info)' }} aria-hidden="true" />
           <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Observed
+            What the numbers show
           </h3>
         </div>
         <span className="chip chip-info" style={{ fontSize: '10px', padding: '1px 7px' }}>
@@ -345,7 +345,7 @@ function ObservedSection({
         </span>
       </div>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-        Allow-listed facts copied from recorded evidence.
+        Facts read straight from your ad account.
       </p>
 
       {observed.length > 0 ? (
@@ -354,24 +354,22 @@ function ObservedSection({
             const sourceFact = factsByRef.get(fact.evidenceRef)
             return (
               <li key={fact.evidenceRef} className="rounded-lg bg-white/75 px-3 py-2.5" style={{ border: '1px solid var(--info-border)' }}>
-                <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
+                <p className="break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
                   {fact.statement}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <EvidenceRef value={fact.evidenceRef} />
-                  {sourceFact && (
-                    <span className="text-[10px] font-semibold" style={{ color: 'var(--info)' }}>
-                      Step {sourceFact.step} · {plainLabel(sourceFact.source)}
-                    </span>
-                  )}
-                </div>
+                {sourceFact && (
+                  <p className="mt-1.5 text-[10px] font-semibold" style={{ color: 'var(--info)' }}>
+                    From {plainLabel(sourceFact.source).toLowerCase()}
+                  </p>
+                )}
+                <EvidenceRefs refs={[fact.evidenceRef]} />
               </li>
             )
           })}
         </ul>
       ) : (
         <p className="mt-3 rounded-lg bg-white/75 px-3 py-3 text-[12px]" style={{ color: 'var(--ink-3)', border: '1px solid var(--info-border)' }}>
-          No verified observed facts were supplied with this review.
+          No facts from your ad account came with this check.
         </p>
       )}
     </article>
@@ -385,13 +383,13 @@ function DerivedSection({ evidence }: { evidence?: IntelligenceReviewEvidenceBun
     <article
       className="card-inset h-full p-4"
       style={{ background: 'var(--surface-warm)', borderColor: 'var(--hairline)' }}
-      aria-label="Rule-derived evidence"
+      aria-label="Worked out from the numbers"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Activity size={16} style={{ color: 'var(--brand-secondary)' }} aria-hidden="true" />
           <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Rule-derived
+            Worked out from the numbers
           </h3>
         </div>
         <span className="chip chip-neutral" style={{ fontSize: '10px', padding: '1px 7px' }}>
@@ -399,28 +397,26 @@ function DerivedSection({ evidence }: { evidence?: IntelligenceReviewEvidenceBun
         </span>
       </div>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-        Deterministic calculations kept separate from recorded facts.
+        Simple sums done on the facts, kept apart from them.
       </p>
 
       {derived.length > 0 ? (
         <ul className="mt-3 space-y-2.5">
           {derived.map((fact) => (
             <li key={fact.ref} className="rounded-lg bg-white/75 px-3 py-2.5" style={{ border: '1px solid var(--hairline-light)' }}>
-              <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
+              <p className="break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
                 {fact.statement}
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <EvidenceRef value={fact.ref} />
-                <span className="text-[10px] font-semibold" style={{ color: 'var(--brand-secondary)' }}>
-                  Step {fact.step} · {plainLabel(fact.source)}
-                </span>
-              </div>
+              <p className="mt-1.5 text-[10px] font-semibold" style={{ color: 'var(--brand-secondary)' }}>
+                From {plainLabel(fact.source).toLowerCase()}
+              </p>
+              <EvidenceRefs refs={[fact.ref]} />
             </li>
           ))}
         </ul>
       ) : (
         <p className="mt-3 rounded-lg bg-white/75 px-3 py-3 text-[12px]" style={{ color: 'var(--ink-3)', border: '1px solid var(--hairline-light)' }}>
-          No deterministic derived facts were supplied with this review.
+          Nothing was worked out for this check.
         </p>
       )}
     </article>
@@ -438,7 +434,7 @@ function InterpretationSection({ review }: { review?: IntelligenceReviewResult }
         background: fallback ? 'var(--warn-bg)' : 'var(--accent-soft)',
         borderColor: fallback ? 'var(--warn-border)' : 'var(--accent-border)',
       }}
-      aria-label={fallback ? 'Interpretation withheld' : 'OpenAI interpretation'}
+      aria-label={fallback ? 'No AI explanation' : "The AI's explanation"}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -448,26 +444,26 @@ function InterpretationSection({ review }: { review?: IntelligenceReviewResult }
             <Sparkles size={16} style={{ color: 'var(--accent)' }} aria-hidden="true" />
           )}
           <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            {fallback ? 'Interpretation withheld' : 'OpenAI interpretation'}
+            {fallback ? 'No AI explanation' : "The AI's explanation"}
           </h3>
         </div>
         <span className={`chip ${fallback ? 'chip-warn' : 'chip-accent'}`} style={{ fontSize: '10px', padding: '1px 7px' }}>
-          Not causal proof
+          A best guess, not proof
         </span>
       </div>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
         {fallback
-          ? 'No model-authored explanation is accepted in fallback mode.'
-          : 'Bounded hypotheses grounded only in the referenced evidence.'}
+          ? 'The AI check did not run properly, so no AI explanation is shown.'
+          : 'Possible reasons, based only on the facts listed here.'}
       </p>
 
       {fallback ? (
         <div className="mt-3 rounded-lg bg-white/75 px-3 py-3" style={{ border: '1px solid var(--warn-border)' }}>
           <p className="text-[12.5px] font-semibold" style={{ color: 'var(--warn)' }}>
-            Deterministic safety hold
+            Held back to be safe
           </p>
           <p className="mt-1 text-[12px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
-            The recommendation is preserved unchanged, but OpenAI has not endorsed or interpreted it.
+            The suggested change is kept as it was, but the AI has not checked or explained it.
           </p>
         </div>
       ) : hypotheses.length > 0 ? (
@@ -475,35 +471,27 @@ function InterpretationSection({ review }: { review?: IntelligenceReviewResult }
           {hypotheses.map((hypothesis, index) => (
             <li key={`${hypothesis.statement}:${index}`} className="rounded-lg bg-white/75 px-3 py-2.5" style={{ border: '1px solid var(--accent-border)' }}>
               <div className="flex items-start justify-between gap-3">
-                <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
+                <p className="min-w-0 break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>
                   {hypothesis.statement}
                 </p>
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: 'var(--accent-strong)' }}>
-                  {formatConfidence(hypothesis.confidence)}
+                <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: 'var(--accent-strong)' }} title="How sure the AI is">
+                  {formatConfidence(hypothesis.confidence)} sure
                 </span>
               </div>
               {(hypothesis.evidenceRefs.length > 0 || hypothesis.counterevidenceRefs.length > 0) && (
-                <div className="mt-2 space-y-1.5">
-                  {hypothesis.evidenceRefs.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1">
-                      <span className="text-[9.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>Supports</span>
-                      {hypothesis.evidenceRefs.map((ref) => <EvidenceRef key={ref} value={ref} />)}
-                    </div>
-                  )}
-                  {hypothesis.counterevidenceRefs.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1">
-                      <span className="text-[9.5px] font-semibold" style={{ color: 'var(--warn)' }}>Challenges</span>
-                      {hypothesis.counterevidenceRefs.map((ref) => <EvidenceRef key={ref} value={ref} />)}
-                    </div>
-                  )}
-                </div>
+                <p className="mt-1.5 text-[10px]" style={{ color: 'var(--ink-3)' }}>
+                  Backed by {hypothesis.evidenceRefs.length} {hypothesis.evidenceRefs.length === 1 ? 'fact' : 'facts'}
+                  {hypothesis.counterevidenceRefs.length > 0 &&
+                    ` · ${hypothesis.counterevidenceRefs.length} ${hypothesis.counterevidenceRefs.length === 1 ? 'fact points' : 'facts point'} the other way`}
+                </p>
               )}
+              <EvidenceRefs refs={[...hypothesis.evidenceRefs, ...hypothesis.counterevidenceRefs]} />
             </li>
           ))}
         </ul>
       ) : (
         <p className="mt-3 rounded-lg bg-white/75 px-3 py-3 text-[12px]" style={{ color: 'var(--ink-3)', border: '1px solid var(--accent-border)' }}>
-          No interpretation hypotheses were returned.
+          The AI did not suggest any reasons.
         </p>
       )}
     </article>
@@ -525,21 +513,21 @@ function UnknownsSection({
     <article
       className="card-inset h-full p-4"
       style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-border)' }}
-      aria-label="Unknown and withheld evidence"
+      aria-label="What we don't know yet"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle size={16} style={{ color: 'var(--warn)' }} aria-hidden="true" />
           <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Unknown / withheld
+            What we don&apos;t know yet
           </h3>
         </div>
         <span className="chip chip-warn" style={{ fontSize: '10px', padding: '1px 7px' }}>
-          {count} open
+          {count} {count === 1 ? 'gap' : 'gaps'}
         </span>
       </div>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-        Missing evidence stays visible and cannot become a claim.
+        Missing information is listed here so nothing is claimed without it.
       </p>
 
       {count > 0 ? (
@@ -547,24 +535,24 @@ function UnknownsSection({
           {deterministic.map((item) => (
             <li key={item.code} className="rounded-lg bg-white/75 px-3 py-2.5" style={{ border: '1px solid var(--warn-border)' }}>
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{item.statement}</p>
+                <p className="min-w-0 break-words text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{item.statement}</p>
                 <span className="chip chip-warn" style={{ fontSize: '9px', padding: '0 6px' }}>
                   {plainLabel(item.effect)}
                 </span>
               </div>
-              <p className="mt-1.5 font-mono text-[9.5px]" style={{ color: 'var(--warn)' }}>{item.code}</p>
+              <EvidenceRefs refs={[item.code]} />
             </li>
           ))}
           {reviewerUnknowns.map((item, index) => (
             <li key={`${item.question}:${index}`} className="rounded-lg bg-white/75 px-3 py-2.5" style={{ border: '1px solid var(--warn-border)' }}>
-              <p className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{item.question}</p>
-              <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{item.whyItMatters}</p>
+              <p className="break-words text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{item.question}</p>
+              <p className="mt-1 break-words text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{item.whyItMatters}</p>
             </li>
           ))}
         </ul>
       ) : (
         <p className="mt-3 rounded-lg bg-white/75 px-3 py-3 text-[12px]" style={{ color: 'var(--ink-3)', border: '1px solid var(--warn-border)' }}>
-          No unknowns were listed in this payload.
+          Nothing is missing.
         </p>
       )}
     </article>
@@ -576,10 +564,10 @@ function RecommendationMetrics({ action }: { action: IntelligenceReviewActionSna
   const basis = action.expectedImpact.basis ?? 'modeled'
   const impactLabel =
     basis === 'not_estimated'
-      ? `Validation metric · ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
+      ? `What we will watch · ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
       : basis === 'observed_gap'
-        ? `Observed peer gap · ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
-        : `Modeled ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
+        ? `Gap to similar ads · ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
+        : `Expected change in ${plainLabel(action.expectedImpact.metric).toLowerCase()}`
   const impactValue =
     basis === 'not_estimated'
       ? typeof action.expectedImpact.currentValue === 'number'
@@ -592,31 +580,31 @@ function RecommendationMetrics({ action }: { action: IntelligenceReviewActionSna
         )
   const impactDetail =
     basis === 'not_estimated'
-      ? 'Uplift intentionally not estimated'
+      ? 'We do not guess how much it will improve'
       : basis === 'observed_gap'
-        ? 'Measured evidence, not a forecast'
-        : 'Estimate, not observed'
+        ? 'Measured, not a forecast'
+        : 'An estimate, not measured'
   const economicImpactModeled = basis === 'modeled'
   return (
-    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+    <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-3">
       <div className="rounded-lg bg-white/80 px-3 py-2.5" style={{ border: '1px solid var(--hairline-light)' }}>
-        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{impactLabel}</p>
+        <p className="break-words text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{impactLabel}</p>
         <p className="mt-0.5 text-[17px] font-bold tabular-nums" style={{ color: basis === 'observed_gap' ? 'var(--info)' : 'var(--viz-estimate)' }}>{impactValue}</p>
         <p className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{impactDetail}</p>
       </div>
       <div className="rounded-lg bg-white/80 px-3 py-2.5" style={{ border: '1px solid var(--hairline-light)' }}>
-        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{basis === 'modeled' ? 'Model confidence' : 'Evidence confidence'}</p>
+        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{basis === 'modeled' ? 'How sure the estimate is' : 'How solid the facts are'}</p>
         <p className="mt-0.5 text-[17px] font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{formatConfidence(action.expectedImpact.confidence)}</p>
-        <p className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{basis === 'modeled' ? 'Prediction confidence' : 'Rule evidence readiness'}</p>
+        <p className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{basis === 'modeled' ? 'Confidence in the estimate' : 'Enough facts to act on'}</p>
       </div>
       <div className="rounded-lg bg-white/80 px-3 py-2.5" style={{ border: '1px solid var(--hairline-light)' }}>
-        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{economicImpactModeled ? 'Modeled 7-day contribution' : 'Economic impact'}</p>
+        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>{economicImpactModeled ? 'Expected profit over 7 days' : 'Money impact'}</p>
         <p className="mt-0.5 text-[17px] font-bold tabular-nums" style={{ color: 'var(--viz-estimate)' }}>
           {economicImpactModeled
-            ? `${profit < 0 ? '−' : profit > 0 ? '+' : ''}₹${Math.abs(Math.round(profit)).toLocaleString('en-IN')}`
-            : 'Withheld'}
+            ? `${profit < 0 ? '−' : profit > 0 ? '+' : ''}${formatInr(Math.abs(profit))}`
+            : 'Not estimated'}
         </p>
-        <p className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{economicImpactModeled ? 'Estimate, not observed' : 'No financial claim for this goal'}</p>
+        <p className="text-[10px]" style={{ color: 'var(--ink-4)' }}>{economicImpactModeled ? 'An estimate, not measured' : 'We make no money claim for this goal'}</p>
       </div>
     </div>
   )
@@ -632,15 +620,15 @@ function RecommendationSection({
   const recommendation = review?.recommendation
   if (!recommendation) {
     return (
-      <article className="card-inset p-4" aria-label="Immutable recommendation">
+      <article className="card-inset p-4" aria-label="The suggested change">
         <div className="flex items-center gap-2">
           <LockKeyhole size={16} style={{ color: 'var(--ink-3)' }} aria-hidden="true" />
           <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Immutable recommendation
+            The suggested change
           </h3>
         </div>
         <p className="mt-2 text-[12px]" style={{ color: 'var(--ink-3)' }}>
-          No deterministic recommendation was supplied for review.
+          No change was suggested for this check.
         </p>
       </article>
     )
@@ -656,38 +644,38 @@ function RecommendationSection({
         background: safetyHold ? 'var(--warn-bg)' : 'var(--accent-soft)',
         borderColor: safetyHold ? 'var(--warn-border)' : 'var(--accent-border)',
       }}
-      aria-label="Immutable recommendation"
+      aria-label="The suggested change"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <LockKeyhole size={16} style={{ color: safetyHold ? 'var(--warn)' : 'var(--accent)' }} aria-hidden="true" />
             <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-              Immutable recommendation
+              The suggested change
             </h3>
           </div>
           <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-            OpenAI may support, hold, or reject this action. It cannot rewrite it.
+            The AI can agree, ask to wait, or advise against it — it cannot change it.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`chip ${action.risk === 'high' ? 'chip-bad' : action.risk === 'medium' ? 'chip-warn' : 'chip-neutral'}`}>
-            {plainLabel(action.risk)} risk
+          <span className={`chip ${toneChip(plainStatus('risk', action.risk).tone)}`} title={plainStatus('risk', action.risk).meaning || undefined}>
+            {plainStatus('risk', action.risk).label}
           </span>
-          {action.requiresHumanApproval && <span className="chip chip-neutral">Human approval</span>}
-          {action.gatedBy.length > 0 && <span className="chip chip-warn">{action.gatedBy.length} gate{action.gatedBy.length === 1 ? '' : 's'}</span>}
+          {action.requiresHumanApproval && <span className="chip chip-neutral">Needs your approval</span>}
+          {action.gatedBy.length > 0 && <span className="chip chip-warn">{action.gatedBy.length} {action.gatedBy.length === 1 ? 'check' : 'checks'} holding it</span>}
         </div>
       </div>
 
       <div className="mt-4">
-        <p className="text-[17px] font-bold" style={{ color: 'var(--ink)' }}>{plainLabel(action.type)}</p>
+        <p className="text-[17px] font-bold" style={{ color: 'var(--ink)' }}>{plainStatus('actionType', action.type).label}</p>
         <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>
-          {action.targetType === 'adset' ? 'Ad set' : plainLabel(action.targetType)} target ·{' '}
-          <span className="font-mono">{action.targetId}</span>
+          Applies to one {levelLabel(action.targetType).toLowerCase()}
         </p>
-        <p className="mt-2 max-w-4xl text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+        <p className="mt-2 max-w-4xl break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
           {recommendation.interpretation}
         </p>
+        <Details title="Details" reference={action.targetId} />
       </div>
 
       <RecommendationMetrics action={action} />
@@ -695,7 +683,7 @@ function RecommendationSection({
       {parameters.length > 0 && (
         <dl className="mt-3 flex flex-wrap gap-2">
           {parameters.map(([key, value]) => (
-            <div key={key} className="rounded-lg bg-white/80 px-2.5 py-1.5 text-[11px]" style={{ border: '1px solid var(--hairline-light)' }}>
+            <div key={key} className="min-w-0 break-words rounded-lg bg-white/80 px-2.5 py-1.5 text-[11px]" style={{ border: '1px solid var(--hairline-light)' }}>
               <dt className="inline font-semibold" style={{ color: 'var(--ink-3)' }}>{plainLabel(key)}: </dt>
               <dd className="inline" style={{ color: 'var(--ink)' }}>{formatParameter(value)}</dd>
             </div>
@@ -705,7 +693,7 @@ function RecommendationSection({
 
       {action.gatedBy.length > 0 && (
         <div className="mt-3 rounded-lg bg-white/80 px-3 py-2.5" style={{ border: '1px solid var(--warn-border)' }}>
-          <p className="text-[11px] font-semibold" style={{ color: 'var(--warn)' }}>Execution remains withheld</p>
+          <p className="text-[11px] font-semibold" style={{ color: 'var(--warn)' }}>Not done yet — waiting on these checks</p>
           <p className="mt-1 text-[11.5px]" style={{ color: 'var(--ink-2)' }}>
             {action.gatedBy.map(plainLabel).join(' · ')}
           </p>
@@ -719,8 +707,8 @@ function BaselineSummary({ baseline }: { baseline?: IntelligenceReviewBaseline }
   if (!baseline || baseline.value === null) {
     return (
       <div className="rounded-lg px-3 py-2.5" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
-        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--warn)' }}>Baseline unavailable</p>
-        <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--ink-2)' }}>Outcome validation cannot be conclusive until a baseline is recorded.</p>
+        <p className="text-[10.5px] font-semibold" style={{ color: 'var(--warn)' }}>No starting point recorded</p>
+        <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--ink-2)' }}>We can&apos;t say for sure whether the change helped until the &ldquo;before&rdquo; numbers are saved.</p>
       </div>
     )
   }
@@ -729,7 +717,7 @@ function BaselineSummary({ baseline }: { baseline?: IntelligenceReviewBaseline }
     <div className="rounded-lg px-3 py-2.5" style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)' }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-[10.5px] font-semibold" style={{ color: 'var(--info)' }}>Recorded baseline</p>
+          <p className="text-[10.5px] font-semibold" style={{ color: 'var(--info)' }}>Starting point (before the change)</p>
           <p className="mt-0.5 text-[15px] font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
             {plainLabel(baseline.metric)} · {formatEvidenceValue(baseline.value, baseline.unit)}
           </p>
@@ -738,11 +726,7 @@ function BaselineSummary({ baseline }: { baseline?: IntelligenceReviewBaseline }
           {formatTimestamp(baseline.capturedAt)}
         </span>
       </div>
-      {baseline.evidenceRef && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          <EvidenceRef value={baseline.evidenceRef} />
-        </div>
-      )}
+      {baseline.evidenceRef && <EvidenceRefs refs={[baseline.evidenceRef]} />}
     </div>
   )
 }
@@ -758,7 +742,7 @@ function ValidationColumn({
     <div className="card-inset p-3.5">
       <div className="flex items-center gap-2">
         <Clock3 size={15} style={{ color: 'var(--accent)' }} aria-hidden="true" />
-        <h4 className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>After {horizon}</h4>
+        <h4 className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{horizon === '24h' ? 'After 1 day' : 'After 3 days'}</h4>
       </div>
       {checks.length > 0 ? (
         <ul className="mt-3 space-y-2.5">
@@ -767,18 +751,14 @@ function ValidationColumn({
               <CheckCircle2 size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--info)' }} aria-hidden="true" />
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold" style={{ color: 'var(--ink)' }}>{plainLabel(item.metric)}</p>
-                <p className="mt-0.5 text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{item.check}</p>
-                {item.evidenceRefs.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {item.evidenceRefs.map((ref) => <EvidenceRef key={ref} value={ref} />)}
-                  </div>
-                )}
+                <p className="mt-0.5 break-words text-[11.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>{item.check}</p>
+                <EvidenceRefs refs={item.evidenceRefs} />
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>No validation check recorded.</p>
+        <p className="mt-3 text-[11.5px]" style={{ color: 'var(--ink-3)' }}>Nothing planned to check.</p>
       )}
     </div>
   )
@@ -792,20 +772,20 @@ function ValidationSection({
   evidence?: IntelligenceReviewEvidenceBundle
 }) {
   return (
-    <article className="card-inset p-4 sm:p-5" aria-label="24 and 72 hour validation plan">
+    <article className="card-inset p-4 sm:p-5" aria-label="How we will check it worked">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <Activity size={16} style={{ color: 'var(--brand-secondary)' }} aria-hidden="true" />
             <h3 className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-              Measure after action
+              How we will check it worked
             </h3>
           </div>
           <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-            Baseline, then objective-aware checks at 24 and 72 hours.
+            The numbers before the change, then a check after 1 day and after 3 days.
           </p>
         </div>
-        <span className="chip chip-neutral">Validation plan</span>
+        <span className="chip chip-neutral">Follow-up plan</span>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)]">
@@ -815,7 +795,7 @@ function ValidationSection({
       </div>
 
       <p className="mt-3 text-[10.5px]" style={{ color: 'var(--ink-4)' }}>
-        This is a measurement contract, not proof of impact. Prediction accuracy remains unavailable until outcomes are recorded against the same action.
+        This is the plan for checking, not proof that it worked. We&apos;ll know how accurate the estimate was once the results come in.
       </p>
     </article>
   )
@@ -823,7 +803,7 @@ function ValidationSection({
 
 function ReviewLoading() {
   return (
-    <section className="card overflow-hidden" aria-busy="true" aria-label="Loading Meridian evidence review">
+    <section className="card overflow-hidden" aria-busy="true" aria-label="Loading the check on this suggestion">
       <div className="p-5">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -842,7 +822,7 @@ function ReviewLoading() {
           ))}
         </div>
       </div>
-      <span className="sr-only">Building the bounded evidence review…</span>
+      <span className="sr-only">Checking this suggestion…</span>
     </section>
   )
 }
@@ -852,22 +832,22 @@ function ReviewPending({ evidence }: { evidence?: IntelligenceReviewEvidenceBund
     <section
       className="rounded-lg px-3 py-2.5"
       role="status"
-      aria-label="Bounded OpenAI review pending"
+      aria-label="AI check not done yet"
       style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-border)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2">
           <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} aria-hidden="true" />
-          <div>
-            <p className="text-[11.5px] font-semibold" style={{ color: 'var(--ink)' }}>Bounded OpenAI review pending</p>
+          <div className="min-w-0">
+            <p className="text-[11.5px] font-semibold" style={{ color: 'var(--ink)' }}>The AI hasn&apos;t checked this yet</p>
             <p className="mt-0.5 text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
-              The deterministic action remains available as the source recommendation; no model verdict is claimed yet.
+              You can still see the suggested change. A second opinion from the AI will appear here once it is ready.
             </p>
           </div>
         </div>
         {evidence && (
           <span className="chip chip-info" style={{ fontSize: '9.5px', padding: '1px 7px' }}>
-            <Database size={10} aria-hidden="true" /> {evidence.packet.facts.length} bounded facts ready
+            <Database size={10} aria-hidden="true" /> {evidence.packet.facts.length} facts gathered
           </span>
         )}
       </div>
@@ -897,7 +877,7 @@ export function MeridianReviewPanel({
     <FounderVerdict review={review} evidence={evidence} currentDailyBudget={currentDailyBudget}>
       {/* Everything below is the audit trail. It lives inside the evidence
           drawer so the card above can stay in plain language. */}
-      <div aria-label="Meridian evidence review" style={{ background: 'var(--surface)' }}>
+      <div aria-label="The full check" style={{ background: 'var(--surface)' }}>
       <header
         className="px-4 py-4 sm:px-5"
         style={{
@@ -910,27 +890,26 @@ export function MeridianReviewPanel({
           <div className="min-w-0 max-w-4xl">
             <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: 'var(--accent-strong)' }}>
               <Bot size={14} aria-hidden="true" />
-              Meridian evidence review
+              The full check
             </div>
-            <h2 className="mt-1.5 text-[16px] font-bold leading-snug sm:text-[17px]" style={{ color: 'var(--ink)' }}>
-              {review?.headline ?? 'No bounded review is available yet'}
+            <h2 className="mt-1.5 break-words text-[16px] font-bold leading-snug sm:text-[17px]" style={{ color: 'var(--ink)' }}>
+              {review?.headline ?? 'No check is available yet'}
             </h2>
           </div>
 
           <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5">
             {modelFallback ? (
-              <span className="chip chip-warn"><ShieldAlert size={11} aria-hidden="true" /> Fallback · safety hold</span>
+              <span className="chip chip-warn"><ShieldAlert size={11} aria-hidden="true" /> AI unavailable · held back</span>
             ) : review ? (
-              <span className="chip chip-accent"><Sparkles size={11} aria-hidden="true" /> OpenAI</span>
+              <span className="chip chip-accent"><Sparkles size={11} aria-hidden="true" /> Checked by AI</span>
             ) : (
-              <span className="chip chip-neutral">Source unavailable</span>
+              <span className="chip chip-neutral">Not checked</span>
             )}
-            {review?.model && <span className="chip chip-neutral"><Bot size={11} aria-hidden="true" /> {review.model}</span>}
             {review && !fallback && !invalid && (
-              <span className="chip chip-good"><ShieldCheck size={11} aria-hidden="true" /> Validated</span>
+              <span className="chip chip-good"><ShieldCheck size={11} aria-hidden="true" /> Passed our checks</span>
             )}
             {invalid && (
-              <span className="chip chip-warn"><ShieldAlert size={11} aria-hidden="true" /> Validation held</span>
+              <span className="chip chip-warn"><ShieldAlert size={11} aria-hidden="true" /> Failed our checks</span>
             )}
           </div>
         </div>
@@ -944,20 +923,20 @@ export function MeridianReviewPanel({
             border: `1px solid ${presentation.border}`,
           }}
         >
-          <div className="flex items-center gap-2 font-semibold">
+          <div className="flex min-w-0 items-center gap-2 font-semibold">
             <VerdictIcon verdict={verdict} />
             <span className="text-[12.5px]">{presentation.label}</span>
           </div>
           {review && (
-            <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
-              <span>{plainLabel(review.goal.objective)} objective</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--ink-3)' }}>
+              <span>Goal: {plainStatus('objective', review.goal.objective).label}</span>
               <span aria-hidden="true">·</span>
-              <span>{plainLabel(review.goal.primaryKPI)} primary KPI</span>
+              <span>Main measure: {plainLabel(review.goal.primaryKPI).toLowerCase()}</span>
               {review.goal.optimizationGoal && (
                 <>
                   <span aria-hidden="true">·</span>
                   <span>
-                    {plainLabel(review.goal.optimizationGoal)} Meta optimization
+                    Meta aims for: {plainLabel(review.goal.optimizationGoal).toLowerCase()}
                   </span>
                 </>
               )}
@@ -965,7 +944,7 @@ export function MeridianReviewPanel({
                 <>
                   <span aria-hidden="true">·</span>
                   <span>
-                    {plainLabel(review.goal.optimizationMetric)} evidence metric
+                    Judged on: {plainLabel(review.goal.optimizationMetric).toLowerCase()}
                   </span>
                 </>
               )}
@@ -975,7 +954,7 @@ export function MeridianReviewPanel({
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="flex shrink-0 items-center gap-1.5 text-[10.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>
-            <Database size={12} aria-hidden="true" /> Evidence path
+            <Database size={12} aria-hidden="true" /> What was looked at
           </span>
           <CompactEvidencePath evidence={evidence} />
         </div>
@@ -988,19 +967,19 @@ export function MeridianReviewPanel({
         >
           <span className="flex items-center gap-2 text-[12px] font-semibold">
             <ChevronRight size={14} className="transition-transform group-open:rotate-90" aria-hidden="true" />
-            Inspect evidence and validation
+            See the facts and the follow-up plan
           </span>
           <span className="flex flex-wrap justify-end gap-1.5">
-            <span className="chip chip-info" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{review.observedFacts.length} observed</span>
-            <span className="chip chip-neutral" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{derivedCount} derived</span>
-            {unknownCount > 0 && <span className="chip chip-warn" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{unknownCount} unknown</span>}
+            <span className="chip chip-info" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{review.observedFacts.length} facts</span>
+            <span className="chip chip-neutral" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{derivedCount} worked out</span>
+            {unknownCount > 0 && <span className="chip chip-warn" style={{ fontSize: '9.5px', padding: '1px 7px' }}>{unknownCount} not known</span>}
           </span>
         </summary>
 
         <HierarchyStrip evidence={evidence} />
 
         <div className="space-y-4 p-4 sm:p-5">
-          <p className="max-w-4xl text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+          <p className="max-w-4xl break-words text-[12.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
             {review.summary}
           </p>
 
@@ -1019,15 +998,21 @@ export function MeridianReviewPanel({
           className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[10.5px] sm:px-5"
           style={{ color: 'var(--ink-3)', background: 'var(--surface-warm)', borderTop: '1px solid var(--hairline-light)' }}
         >
-          <span>Recorded facts, deterministic calculations, and immutable action fields stay outside model authorship.</span>
+          <span className="min-w-0">The facts, the sums and the suggested change come from your data — the AI cannot edit them.</span>
           <span className="flex flex-wrap items-center gap-2">
-            <span>{formatTimestamp(review.generatedAt)}</span>
-            {invalid && <span>{review.validation.issues.length} validation issue{review.validation.issues.length === 1 ? '' : 's'} withheld</span>}
-            {review?.inputHash && (
-              <span className="font-mono" title={review.inputHash}>Input {review.inputHash.slice(0, 10)}</span>
-            )}
+            <span>Checked {formatTimestamp(review.generatedAt)}</span>
+            {invalid && <span>{review.validation.issues.length} {review.validation.issues.length === 1 ? 'problem' : 'problems'} found in the AI&apos;s answer</span>}
           </span>
         </footer>
+        {(review.model || review.inputHash) && (
+          <div className="px-4 pb-3 sm:px-5" style={{ background: 'var(--surface-warm)' }}>
+            <Details
+              title="Technical details"
+              reference={review.inputHash ?? null}
+              items={review.model ? [{ label: 'AI model', value: review.model }] : []}
+            />
+          </div>
+        )}
       </details>
       </div>
     </FounderVerdict>
