@@ -22,6 +22,10 @@
  *   GET  /brain/:tenantId/pipeline/runs/:runId/creatives
  *   GET  /brain/:tenantId/experiments?view=testing|learned|dropped&product=<productKey>
  *   GET  /brain/:tenantId/experiments/summary
+ *   GET  /brain/:tenantId/experiments?view=…&paged=1  → {experiments, truncated}
+ *   GET  /brain/:tenantId/proven?product=<productKey>&level=<level>
+ *   GET  /brain/:tenantId/campaigns/:metaCampaignId/bets
+ *   GET  /brain/:tenantId/decisions/:decisionId/bets
  *   GET  /brain/:tenantId/runs
  *   GET  /brain/:tenantId/runs/:runId
  *   GET  /brain/:tenantId/runs/:runId/events?after=<cursor>
@@ -72,6 +76,10 @@ import type {
   BrainExperiment,
   BrainExperimentSummary,
   BrainExperimentView,
+  BrainExperimentPage,
+  BrainProvenCatalogue,
+  BrainCampaignBets,
+  BrainDecisionBets,
   BrainGate,
   BrainGateDecisionBody,
   BrainGateDecisionResult,
@@ -199,6 +207,60 @@ export function getExperiments(
   const query = new URLSearchParams({ view })
   if (product) query.set('product', product)
   return apiFetch<BrainExperiment[]>(`${base(tenantId)}/experiments?${query.toString()}`)
+}
+
+/**
+ * One shelf with whether it is all of it. `truncated` means the Brain had more than it could send
+ * in one answer — the page says so instead of implying the list is complete.
+ */
+export async function getExperimentPage(
+  tenantId: string,
+  view: BrainExperimentView,
+  product?: string | null,
+): Promise<BrainExperimentPage> {
+  if (BRAIN_MOCK) {
+    const experiments = await settle(() => readExperiments(view, product))
+    return { experiments, truncated: false }
+  }
+  const query = new URLSearchParams({ view, paged: '1' })
+  if (product) query.set('product', product)
+  const out = await apiFetch<BrainExperimentPage | BrainExperiment[]>(
+    `${base(tenantId)}/experiments?${query.toString()}`,
+  )
+  // An older bridge ignores `paged` and sends the bare array.
+  return Array.isArray(out) ? { experiments: out, truncated: false } : out
+}
+
+/** Ideas that have worked before (and the ones that only ever failed), in words. */
+export function getProvenIdeas(
+  tenantId: string,
+  product?: string | null,
+  level?: string | null,
+): Promise<BrainProvenCatalogue> {
+  if (BRAIN_MOCK) return settle(() => ({ proven: [], refuted: [], empty: true, truncated: false }))
+  const query = new URLSearchParams()
+  if (product) query.set('product', product)
+  if (level) query.set('level', level)
+  const qs = query.toString()
+  return apiFetch<BrainProvenCatalogue>(`${base(tenantId)}/proven${qs ? `?${qs}` : ''}`)
+}
+
+/** The ideas a live campaign is testing, and until when the Brain leaves them running. */
+export function getCampaignBets(tenantId: string, metaCampaignId: string): Promise<BrainCampaignBets> {
+  if (BRAIN_MOCK) {
+    return settle(() => ({ found: false, bets: [], protectedUntil: null, protectedUntilAt: null, note: null }))
+  }
+  return apiFetch<BrainCampaignBets>(
+    `${base(tenantId)}/campaigns/${encodeURIComponent(metaCampaignId)}/bets`,
+  )
+}
+
+/** What one decision is testing, and what it expected. */
+export function getDecisionBets(tenantId: string, decisionId: string): Promise<BrainDecisionBets> {
+  if (BRAIN_MOCK) return settle(() => ({ expected: null, bets: [] }))
+  return apiFetch<BrainDecisionBets>(
+    `${base(tenantId)}/decisions/${encodeURIComponent(decisionId)}/bets`,
+  )
 }
 
 /** How many experiments sit on each shelf, overall and per product. */

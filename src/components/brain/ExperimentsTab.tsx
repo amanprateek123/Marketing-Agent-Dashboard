@@ -12,11 +12,16 @@
  *   1. What we're testing now   — planned + running tests, with progress towards "enough data"
  *   2. What we learned          — tests that worked or didn't, with the figures
  *   3. Tried and dropped        — stopped early or ended without a clear answer
+ *   4. Proven ideas             — the Brain's catalogue of what has worked before (ProvenIdeas)
+ *
+ * A card also says what a new twist changes from the idea it builds on, and how many ads, ad sets
+ * and live campaigns carry it. Long shelves show PAGE_SIZE at a time; when the Brain had more than
+ * it could send, the section says the list is the newest part rather than implying it is all.
  */
 
 import React, { useEffect, useState } from 'react'
 import { Beaker, CircleCheck, Clock, FlaskConical, Loader2, Archive } from 'lucide-react'
-import { getExperimentSummary, getExperiments } from '@/lib/brain-api'
+import { getExperimentPage, getExperimentSummary } from '@/lib/brain-api'
 import type {
   BrainExperiment,
   BrainExperimentSummary,
@@ -33,6 +38,10 @@ import {
 } from '@/lib/plain-language'
 import { Details } from '@/components/plain/Details'
 import { SectionCard } from './shared'
+import { ProvenIdeas } from './ProvenIdeas'
+
+/** Cards shown per shelf before "Show more". */
+const PAGE_SIZE = 10
 
 const TONE_CHIP: Record<BrainExperimentTone, string> = {
   progress: 'chip-accent',
@@ -144,6 +153,8 @@ export function ExperimentsTab({ tenantId }: ExperimentsTabProps) {
       {SECTIONS.map((section) => (
         <ExperimentSection key={section.view} tenantId={tenantId} product={product} {...section} />
       ))}
+
+      <ProvenIdeas tenantId={tenantId} product={product || null} />
     </div>
   )
 }
@@ -168,6 +179,8 @@ function ExperimentSection({
   product: string
 } & (typeof SECTIONS)[number]) {
   const [rows, setRows] = useState<BrainExperiment[] | null>(null)
+  const [truncated, setTruncated] = useState(false)
+  const [shown, setShown] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [slow, setSlow] = useState(false)
   const [reload, setReload] = useState(0)
@@ -179,9 +192,11 @@ function ExperimentSection({
     }, SLOW_MS)
     void (async () => {
       try {
-        const next = await getExperiments(tenantId, view, product || null)
+        const next = await getExperimentPage(tenantId, view, product || null)
         if (cancelled) return
-        setRows(next)
+        setRows(next.experiments)
+        setTruncated(next.truncated)
+        setShown(PAGE_SIZE)
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -209,7 +224,12 @@ function ExperimentSection({
         <span className="inline-flex items-center gap-2">
           <Icon size={16} aria-hidden style={{ color: 'var(--ink-3)' }} />
           {title}
-          {rows && rows.length > 0 && <span className="chip chip-neutral tabular-nums">{rows.length}</span>}
+          {rows && rows.length > 0 && (
+            <span className="chip chip-neutral tabular-nums">
+              {rows.length}
+              {truncated ? '+' : ''}
+            </span>
+          )}
         </span>
       }
       description={description}
@@ -246,13 +266,28 @@ function ExperimentSection({
           <p className="explain mx-auto mt-1 max-w-[46ch]">{emptyText}</p>
         </div>
       ) : (
-        <ul className="flex min-w-0 flex-col gap-3">
-          {rows.map((exp) => (
-            <li key={exp.ref} className="min-w-0">
-              <ExperimentCard exp={exp} />
-            </li>
-          ))}
-        </ul>
+        <div className="flex min-w-0 flex-col gap-3">
+          <ul className="flex min-w-0 flex-col gap-3">
+            {rows.slice(0, shown).map((exp) => (
+              <li key={exp.ref} className="min-w-0">
+                <ExperimentCard exp={exp} />
+              </li>
+            ))}
+          </ul>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {rows.length > shown && (
+              <button type="button" className="btn btn-ghost" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+                Show {Math.min(PAGE_SIZE, rows.length - shown)} more
+              </button>
+            )}
+            {(rows.length > PAGE_SIZE || truncated) && (
+              <span className="explain">
+                Showing {Math.min(shown, rows.length)} of {rows.length}
+                {truncated ? ' — the Brain has more; these are the newest.' : '.'}
+              </span>
+            )}
+          </div>
+        </div>
       )}
     </SectionCard>
   )
@@ -280,6 +315,12 @@ function ExperimentCard({ exp }: { exp: BrainExperiment }) {
         {exp.claim}
       </p>
 
+      {exp.change && (
+        <p className="break-words text-sm" style={{ color: 'var(--ink-2)' }}>
+          {exp.change}
+        </p>
+      )}
+
       {exp.progress && <ProgressBlock progress={exp.progress} />}
 
       {exp.result && (
@@ -296,6 +337,11 @@ function ExperimentCard({ exp }: { exp: BrainExperiment }) {
           <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--ink-3)' }}>
             <Clock size={12} aria-hidden="true" />
             {exp.progress ? 'Started' : 'Decided'} {exp.since}
+          </span>
+        )}
+        {exp.carriedBy && (
+          <span className="min-w-0 break-words text-xs" style={{ color: 'var(--ink-3)' }}>
+            {exp.carriedBy.sentence}
           </span>
         )}
       </div>

@@ -280,6 +280,8 @@ export interface BrainDecision {
     direction: 'up' | 'down' | 'flat'
   } | null
   runId: string | null
+  /** What the decision expected to happen, as a sentence. Absent from an older bridge. */
+  expected?: string | null
 }
 
 // ── The core pipeline ──────────────────────────────────────────────────────
@@ -328,6 +330,8 @@ export interface BrainPipelineRun {
   stages: BrainPipelineStage[]
   /** Which budget governs this run, from the brain. Absent/null from an older bridge or brain. */
   budgetAuthority?: BrainBudgetAuthority | null
+  /** Every bet this run carries. Absent from an older bridge. */
+  bets?: BrainBet[]
 }
 
 /**
@@ -444,6 +448,8 @@ export interface BrainGate {
    * absent on other gates and from an older bridge. `structured: false` → render `summaryText`.
    */
   plan?: BrainPlanView | null
+  /** A build / launch / scale gate's bets: what the run it releases is testing. */
+  bets?: BrainBet[] | null
 }
 
 export type BrainSpendGate = 'plan' | 'build' | 'launch' | 'scale'
@@ -630,6 +636,8 @@ export interface BrainCampaignAudience {
   adsPlanned: number | null
   excludes: string | null
   why: string | null
+  /** The audience bet this ad set tests. Absent from an older bridge. */
+  bet?: BrainBet | null
 }
 
 /** One finished creative: the picture, and the words that ship with it. */
@@ -647,6 +655,8 @@ export interface BrainCampaignCreative {
   score: number | null
   note: string | null
   style: string | null
+  /** The idea this ad is testing. Absent from an older bridge. */
+  bet?: BrainBet | null
 }
 
 /** One of the four steps, named for what it does rather than which agent does it. */
@@ -716,6 +726,78 @@ export interface BrainExperiment {
   since: string | null
   /** ISO — sorting only, never displayed. */
   sinceAt: string | null
+  /** A new twist: what it changes from the idea it builds on. */
+  change?: string | null
+  /** How many ads / ad sets / live campaigns carry it; null when nothing is attached yet. */
+  carriedBy?: BrainBetCarriers | null
+}
+
+export interface BrainBetCarriers {
+  ads: number
+  adSets: number
+  campaigns: number
+  /** "Carried by 3 ads and 1 live campaign." */
+  sentence: string
+}
+
+/** A bet shown beside whatever tests it — a creative, an ad set, a gate, a decision, a campaign. */
+export interface BrainBet {
+  /** Opaque — <Details> only. */
+  ref: string
+  claim: string
+  kind: 'proven' | 'variant' | 'seed' | 'other'
+  kindLabel: string
+  levelLabel: string
+  statusLabel: string
+  statusMeaning: string
+  tone: BrainExperimentTone
+  product: string | null
+  change: string | null
+  carriedBy: BrainBetCarriers | null
+  result: BrainExperimentResult | null
+}
+
+export interface BrainExperimentPage {
+  experiments: BrainExperiment[]
+  /** The brain had more than it could return; the list is the newest part. */
+  truncated: boolean
+}
+
+export interface BrainProvenIdea {
+  ref: string
+  productKey: string | null
+  product: string | null
+  levelLabel: string
+  /** "Ads that open with a question." */
+  idea: string
+  /** "Proven" | "Promising" | "Didn't work". */
+  tierLabel: string
+  tone: BrainExperimentTone
+  /** "Worked in 3 tests, failed in 1." */
+  evidence: string
+  confirmations: number
+  refutations: number
+}
+
+export interface BrainProvenCatalogue {
+  proven: BrainProvenIdea[]
+  refuted: BrainProvenIdea[]
+  empty: boolean
+  truncated: boolean
+}
+
+export interface BrainCampaignBets {
+  found: boolean
+  bets: BrainBet[]
+  /** "Friday, 2 Oct" or null. */
+  protectedUntil: string | null
+  protectedUntilAt: string | null
+  note: string | null
+}
+
+export interface BrainDecisionBets {
+  expected: string | null
+  bets: BrainBet[]
 }
 
 export interface BrainExperimentProductCount {
@@ -731,12 +813,24 @@ export interface BrainExperimentSummary {
   products: BrainExperimentProductCount[]
   /** True when a count is a floor because the brain cut a read short. */
   partial: boolean
+  /** Tests that got an answer in the last 7 days; null/absent when unknown. */
+  learnedThisWeek?: number | null
 }
 
 /* ── A plan gate, as facts ─────────────────────────────────────────────────────── */
 
+export interface BrainPlanAudience {
+  name: string
+  budgetInr: number | null
+  /** The ad set's audience bet as a sentence, or null. */
+  bet: string | null
+}
+
 export interface BrainPlanRun {
   product: string
+  /** Absent from an older bridge. */
+  bets?: BrainPlanClaim[]
+  audiences?: BrainPlanAudience[]
   typeLabel: string
   dailyBudgetInr: number | null
   creatives: number | null
