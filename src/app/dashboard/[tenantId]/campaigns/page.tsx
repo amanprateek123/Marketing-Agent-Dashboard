@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
+import { PlainErrorNote, plainFailure } from '@/components/campaign/PlainErrorNote'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 import { formatCurrency, formatDate, formatRelativeTime, cn } from '@/lib/utils'
 import type { Campaign, CampaignAdSet, CampaignAd } from '@/types'
@@ -690,7 +691,8 @@ function CampaignRow({
                 No ad sets on this campaign yet.
               </div>
             ) : (
-              <table className="w-full" style={{ background: 'var(--accent-bg)' }}>
+              <div className="overflow-x-auto" style={{ background: 'var(--accent-bg)' }}>
+              <table className="w-full min-w-[720px]" style={{ background: 'var(--accent-bg)' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--accent-border)' }}>
                     {[
@@ -725,6 +727,7 @@ function CampaignRow({
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </td>
         </tr>
@@ -809,7 +812,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       setCampaigns(await res.json())
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load campaigns')
+      setError(plainFailure("We couldn't refresh your campaigns. Try again.", err))
     } finally {
       setLoading(false)
     }
@@ -826,7 +829,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
     try {
       await syncCampaigns(tenantId)
     } catch (err) {
-      setSyncError(err instanceof Error ? err.message : 'Failed to start sync')
+      setSyncError(plainFailure("We couldn't fetch the latest numbers from Meta. Try again.", err))
       setSyncing(false)
       return
     }
@@ -901,9 +904,9 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       setAuditResult(parts.length > 0 ? parts.join(', ') : 'Audit complete')
       fetchCampaigns()
       setTimeout(() => { setAuditState('idle'); setAuditResult(null) }, 6000)
-    } catch (err) {
+    } catch {
       setAuditState('error')
-      setAuditResult(err instanceof Error ? err.message : 'Audit failed')
+      setAuditResult("We couldn't check your campaigns. Try again.")
       setTimeout(() => { setAuditState('idle'); setAuditResult(null) }, 5000)
     }
   }
@@ -1074,8 +1077,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
           className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
           style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
-          <AlertCircle size={14} />
-          {syncError}
+          <PlainErrorNote error={syncError} className="flex-1" />
         </div>
       )}
 
@@ -1130,7 +1132,7 @@ export default function CampaignsPage({ params, searchParams }: PageProps) {
       {/* ── Error ────────────────────────────────────────────────── */}
       {error && (
         <div className="rounded-xl p-4 mb-4 flex items-center justify-between gap-3 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
-          <span className="inline-flex items-center gap-2"><AlertCircle size={14} className="shrink-0" /> Campaign data could not be refreshed ({error}).</span>
+          <PlainErrorNote error={error} className="flex-1" />
           <button type="button" onClick={() => { setLoading(true); void fetchCampaigns() }} className="btn btn-ghost shrink-0">
             <RefreshCw size={13} /> Retry
           </button>

@@ -4,7 +4,7 @@ import { useState, useEffect, use, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Loader2, AlertCircle, CheckCircle2, Plus, Trash2,
+  ArrowLeft, Loader2, CheckCircle2, Plus, Trash2,
   Target, Zap, Info, Image as ImageIcon, Video as VideoIcon, X,
   ChevronUp, ChevronDown, Sparkles,
 } from 'lucide-react'
@@ -13,6 +13,7 @@ import type { GalleryTopicSummary, GallerySheetSummary } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CampaignFieldGuide } from '@/components/campaign/CampaignFieldGuide'
 import { CreativeEditor } from '@/components/campaign/CreativeEditor'
+import { PlainErrorNote, plainFailure } from '@/components/campaign/PlainErrorNote'
 import type {
   Company, MetaAdAccount, MetaCustomAudience, MetaInterestOption, MetaGeoOption, ManualAdSetInput, ManualCopyVariant, CreativePackage, AdSetConfig,
 } from '@/types'
@@ -261,7 +262,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
             .catch(() => {})
         }
       })
-      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load campaign for editing') })
+      .catch(e => { if (!cancelled) setError(plainFailure("We couldn't open this campaign for editing. Try again.", e)) })
       .finally(() => { if (!cancelled) setEditLoading(false) })
     return () => { cancelled = true }
     // learnGeoLabels is a useCallback with no deps — stable, so listing it
@@ -277,7 +278,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
     setAudiencesError('')
     getMetaAccountAudiences(tenantId, accountId)
       .then(a => { if (!cancelled) setAccountAudiences(a) })
-      .catch(e => { if (!cancelled) { setAccountAudiences([]); setAudiencesError(e instanceof Error ? e.message : 'Failed to load audiences') } })
+      .catch(e => { if (!cancelled) { setAccountAudiences([]); setAudiencesError(plainFailure("We couldn't load the saved audiences for this ad account. Try again.", e)) } })
       .finally(() => { if (!cancelled) setAudiencesLoading(false) })
     return () => { cancelled = true }
   }, [tenantId, accountId])
@@ -451,7 +452,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
       const res = await createManualCampaign(tenantId, dto)
       router.push(`/dashboard/${tenantId}/campaigns/${res.campaignId}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to ${isEditMode ? 'save' : 'create'} campaign`)
+      setError(plainFailure(`We couldn't ${isEditMode ? 'save' : 'create'} the campaign. Try again.`, e))
       setSubmitting(false)
     }
   }
@@ -498,7 +499,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
 
       {error && (
         <div className="rounded-xl px-4 py-3 mb-6 flex items-start gap-2.5 text-sm" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}>
-          <AlertCircle size={15} className="mt-0.5 shrink-0" /><span>{error}</span>
+          <PlainErrorNote error={error} className="flex-1 text-sm" />
         </div>
       )}
 
@@ -1407,7 +1408,7 @@ function ExclusionPicker({
           Past purchasers are excluded automatically on prospecting ad sets — added on top of anything picked here, not instead of it.
         </p>
       )}
-      {audiencesError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{audiencesError}</p>}
+      {audiencesError && <PlainErrorNote error={audiencesError} compact className="mt-1" />}
     </div>
   )
 }
@@ -1486,7 +1487,7 @@ function AudiencePicker({
           )}
         </div>
       )}
-      {audiencesError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{audiencesError}</p>}
+      {audiencesError && <PlainErrorNote error={audiencesError} compact className="mt-1" />}
       {!audiencesLoading && !audiencesError && audiences.length === 0 && <p className="text-[11px] mt-1" style={{ color: 'var(--ink-4)' }}>No audiences found in this ad account.</p>}
     </div>
   )

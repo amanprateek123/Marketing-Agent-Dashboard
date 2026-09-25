@@ -25,6 +25,8 @@ import {
   FormatBadge,
 } from '@/components/badges'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Details } from '@/components/plain/Details'
+import { errorDetail } from '@/lib/plain-language'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { formatCurrency } from '@/lib/utils'
@@ -99,7 +101,7 @@ export default function ApprovalsPage({ params }: PageProps) {
       setWeeklySpend(spend.weeklySpend)
       getMetaAccounts(tenantId, true).then((res) => setAccountOptions(res.accounts)).catch(() => {})
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load')
+      setError(errorDetail(err))
     } finally {
       setLoading(false)
     }
@@ -204,8 +206,8 @@ export default function ApprovalsPage({ params }: PageProps) {
         >
           <AlertCircle size={14} className="shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">Approval data could not be loaded</p>
-            <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-2)' }}>{error}</p>
+            <p className="font-semibold">We couldn&apos;t load your drafts. Try again.</p>
+            <Details className="mt-1.5" title="What went wrong" items={[{ label: 'Message', value: error }]} />
           </div>
           <button type="button" onClick={load} className="btn btn-ghost">
             <RefreshCw size={12} /> Try again
@@ -430,7 +432,7 @@ function ApprovalCard({
   function accountLabel(id: string) {
     const bare = id.replace(/^act_/, '')
     const found = accountOptions.find((a) => a.id.replace(/^act_/, '') === bare)
-    return found ? found.name : id
+    return found ? found.name : `Ad account ending ${bare.slice(-4)}`
   }
 
   // Custom/lookalike audiences are account-scoped Meta objects — resolve
@@ -476,9 +478,9 @@ function ApprovalCard({
       flash('success', `Budget updated to ${formatCurrency(parsed)}`)
       onChanged()
       setTimeout(() => setBudgetState('idle'), 1200)
-    } catch (err) {
+    } catch {
       setBudgetState('error')
-      flash('error', err instanceof Error ? err.message : 'Failed to update budget')
+      flash('error', "We couldn't change the budget. Try again.")
       setTimeout(() => setBudgetState('idle'), 2500)
     }
   }
@@ -495,9 +497,9 @@ function ApprovalCard({
       flash('success', 'Approved & launching on Meta')
       setApproveOpen(false)
       onChanged()
-    } catch (err) {
+    } catch {
       setApproveState('error')
-      flash('error', err instanceof Error ? err.message : 'Approval failed')
+      flash('error', "We couldn't launch the campaign. Try again.")
       setTimeout(() => setApproveState('idle'), 3000)
     }
   }
@@ -515,9 +517,9 @@ function ApprovalCard({
       setRejectOpen(false)
       setRejectReason('')
       onChanged()
-    } catch (err) {
+    } catch {
       setRejectState('error')
-      flash('error', err instanceof Error ? err.message : 'Reject failed')
+      flash('error', "We couldn't reject the campaign. Try again.")
       setTimeout(() => setRejectState('idle'), 3000)
     }
   }
@@ -530,9 +532,9 @@ function ApprovalCard({
       flash('success', 'Campaign deleted')
       setDeleteOpen(false)
       onChanged()
-    } catch (err) {
+    } catch {
       setDeleteState('error')
-      flash('error', err instanceof Error ? err.message : 'Delete failed')
+      flash('error', "We couldn't delete the draft. Try again.")
       setTimeout(() => setDeleteState('idle'), 3000)
     }
   }
@@ -583,9 +585,9 @@ function ApprovalCard({
             <Link
               href={`/dashboard/${tenantId}/runs/${campaign.runId}`}
               className="chip chip-neutral hover:opacity-75 transition-opacity"
-              title={`Build record ${campaign.runId}`}
+              title="See how this campaign was made"
             >
-              View build record
+              See how it was made
             </Link>
           )}
         </div>
@@ -790,7 +792,6 @@ function ApprovalCard({
                     onClick={() => setAccountId(id)}
                     disabled={accountIds.length === 1}
                     className={`chip transition-all ${accountId === id ? 'chip-accent' : 'chip-neutral'}`}
-                    title={`act_${id}`}
                   >
                     {accountLabel(id)}
                   </button>

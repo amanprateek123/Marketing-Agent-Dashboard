@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, Link2, Sliders, Target } from 'lucide-react'
 import { getCampaignReview } from '@/lib/api'
-import { formatCurrency, formatRelativeTime } from '@/lib/utils'
+import { formatInr, formatRelative, humanise, plainStatus } from '@/lib/plain-language'
+import { Details } from '@/components/plain/Details'
 import type { Campaign, CampaignLaunchReview } from '@/types'
 
 interface SetupMetric {
@@ -70,50 +71,43 @@ export function CampaignSetup({
     bidCap != null && breakevenCPA != null && breakevenCPA > 0 && bidCap > breakevenCPA
 
   const placements = [
-    ...(td.facebookPositions ?? []).map((p: string) => 'FB ' + p.replace(/_/g, ' ')),
-    ...(td.instagramPositions ?? []).map((p: string) => 'IG ' + p.replace(/_/g, ' ')),
+    ...(td.facebookPositions ?? []).map((p: string) => 'Facebook ' + humanise(p).toLowerCase()),
+    ...(td.instagramPositions ?? []).map((p: string) => 'Instagram ' + humanise(p).toLowerCase()),
   ]
   const excluded = (td.excludedCustomAudiences ?? []) as Array<{ id: string; name: string }>
   const attribution = (adSet?.attributionSpec ?? []) as Array<{ event_type: string; window_days: number }>
   const setupMetrics: Array<SetupMetric | null> = [
     product
       ? {
-          k: product.conversionTracking.type === 'custom_conversion' ? 'Buying this conversion'
-            : product.conversionTracking.type === 'custom_event' ? 'Custom event'
-              : product.conversionTracking.type === 'app_event' ? 'App event' : 'Conversion event',
-          v: product.conversionTracking.type === 'custom_conversion' ? product.conversionTracking.id
-            : product.conversionTracking.type === 'custom_event' ? product.conversionTracking.name
-              : product.conversionTracking.event,
-          mono: true,
+          k: 'What counts as a sale',
+          v: product.conversionTracking.type === 'custom_conversion' ? 'A custom conversion set up in Meta'
+            : product.conversionTracking.type === 'custom_event' ? humanise(product.conversionTracking.name)
+              : humanise(product.conversionTracking.event),
+          sub: product.conversionTracking.type === 'app_event' ? 'Counted in the app' : 'Counted on the website',
         }
       : null,
     product
-      ? product.conversionTracking.type === 'app_event'
-        ? { k: 'Meta App ID', v: product.applicationId || '—', sub: 'native app, not a website pixel', mono: true }
-        : { k: 'Meta Pixel', v: product.pixelId || '—', sub: product.pixelSource === 'product' ? 'from this product' : 'company default', mono: true }
-      : null,
-    product
-      ? { k: 'Worth per sale', v: formatCurrency(product.conversionValueNet), sub: product.refundRatePercent ? `after ${product.refundRatePercent}% refunds` : 'no refunds expected' }
+      ? { k: 'Worth per sale', v: formatInr(product.conversionValueNet), sub: product.refundRatePercent ? `after ${product.refundRatePercent}% refunds` : 'no refunds expected' }
       : null,
     breakevenCPA != null
-      ? { k: 'Configured value limit', v: formatCurrency(Math.round(breakevenCPA)) + ' / sale', sub: 'Net configured value × contribution margin' }
+      ? { k: 'Most a sale is worth to you', v: formatInr(Math.round(breakevenCPA)) + ' a sale', sub: 'Worth per sale × your margin' }
       : null,
     bidCap != null
       ? {
-          k: 'Max Meta will pay',
-          v: formatCurrency(bidCap),
-          sub: adSet?.bidStrategy === 'COST_CAP' ? 'cost cap' : (adSet?.bidStrategy ?? '').toLowerCase().replace(/_/g, ' '),
+          k: 'Most Meta will pay',
+          v: formatInr(bidCap),
+          sub: adSet?.bidStrategy === 'COST_CAP' ? 'a cap per sale' : humanise(adSet?.bidStrategy ?? '').toLowerCase(),
           bad: bidOverBreakeven,
         }
       : null,
     adSet?.bidStrategy === 'LOWEST_COST_WITHOUT_CAP'
-      ? { k: 'Bidding', v: 'No cap', sub: 'Meta spends freely' }
+      ? { k: 'Bidding', v: 'No limit', sub: 'Meta spends freely' }
       : null,
-    { k: 'Daily budget', v: formatCurrency(campaign.budget ?? 0), sub: campaign.budgetModel ? campaign.budgetModel.toUpperCase() : undefined },
+    { k: 'Daily budget', v: formatInr(campaign.budget ?? 0), sub: campaign.budgetModel === 'abo' ? 'Set per ad set' : campaign.budgetModel === 'asc' ? "Meta's shopping campaign" : campaign.budgetModel ? 'Meta splits it across ad sets' : undefined },
     attribution.length > 0
       ? {
-          k: 'Attribution',
-          v: attribution.map((a) => `${a.window_days}d ${a.event_type === 'CLICK_THROUGH' ? 'click' : 'view'}`).join(' · '),
+          k: 'Sales counted if they happen within',
+          v: attribution.map((a) => `${a.window_days} day${a.window_days === 1 ? '' : 's'} of a ${a.event_type === 'CLICK_THROUGH' ? 'click' : 'view'}`).join(' · '),
         }
       : null,
   ]
@@ -129,7 +123,7 @@ export function CampaignSetup({
         </p>
         {campaign.syncedAt && (
           <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-            Meta settings as of {formatRelativeTime(campaign.syncedAt)}
+            Settings fetched from Meta {formatRelative(campaign.syncedAt)}
           </span>
         )}
       </div>
@@ -143,13 +137,12 @@ export function CampaignSetup({
           <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--bad)' }} />
           <div>
             <p className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>
-              Cost cap exceeds the configured value limit
+              Meta may pay more for a sale than a sale is worth to you
             </p>
             <p className="text-[13px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
-              Meta may pay up to {formatCurrency(bidCap!)} for one sale, while the configured net
-              value after margin is {formatCurrency(Math.round(breakevenCPA!))}. The cap is{' '}
-              {formatCurrency(Math.round(bidCap! - breakevenCPA!))} higher than that planning
-              estimate. Verify the product inputs, then lower the cap or revise {product?.name}.
+              Meta may pay up to {formatInr(bidCap!)} for one sale, but by your settings a sale is
+              worth {formatInr(Math.round(breakevenCPA!))} after your margin — {formatInr(Math.round(bidCap! - breakevenCPA!))}{' '}
+              less. Check the product&apos;s price and margin, then lower the cap or update {product?.name}.
             </p>
           </div>
         </div>
@@ -162,8 +155,8 @@ export function CampaignSetup({
         </p>
         {product ? (
           <>
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+            <div className="flex min-w-0 items-center gap-2 flex-wrap mb-2">
+              <span className="min-w-0 break-words text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                 {product.name}
               </span>
               {product.resolvedVia !== 'campaign' && (
@@ -174,17 +167,16 @@ export function CampaignSetup({
               href={product.landingUrl}
               target="_blank"
               rel="noreferrer"
-              className="mono text-[13px] flex items-center gap-2 px-3 py-2 rounded-lg hover:opacity-80"
+              className="mono text-[13px] flex min-w-0 items-center gap-2 px-3 py-2 rounded-lg hover:opacity-80"
               style={{
                 background: 'var(--paper)',
                 border: '1px solid var(--hairline)',
                 borderLeft: '3px solid var(--accent)',
                 color: 'var(--ink)',
-                overflowX: 'auto',
-                whiteSpace: 'nowrap',
               }}
+              title={product.landingUrl}
             >
-              {product.landingUrl}
+              <span className="min-w-0 truncate">{product.landingUrl}</span>
               <ArrowUpRight size={12} className="shrink-0" style={{ color: 'var(--ink-3)' }} />
             </a>
           </>
@@ -205,7 +197,7 @@ export function CampaignSetup({
           <div key={cell.k} className="px-4 py-3" style={{ background: 'var(--surface)' }}>
             <p className="micro-label">{cell.k}</p>
             <p
-              className={`text-sm font-semibold mt-0.5 ${cell.mono ? 'mono' : 'tabular-nums'}`}
+              className={`text-sm font-semibold mt-0.5 break-words ${cell.mono ? 'mono' : 'tabular-nums'}`}
               style={{ color: cell.bad ? 'var(--bad)' : 'var(--ink)', overflowWrap: 'anywhere' }}
             >
               {cell.v}
@@ -221,27 +213,27 @@ export function CampaignSetup({
           <p className="micro-label flex items-center gap-1.5 mb-2">
             <Target size={11} /> Who can see it
           </p>
-          <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[13px]" style={{ color: 'var(--ink-2)' }}>
+          <div className="flex min-w-0 flex-wrap gap-x-5 gap-y-1.5 text-[13px]" style={{ color: 'var(--ink-2)' }}>
             {adSet.audienceType && (
-              <span><span className="micro-label mr-1.5">Audience</span>{String(adSet.audienceType).replace(/_/g, ' ')}{td.advantageAudience ? ' · Advantage+ expansion on' : ''}</span>
+              <span><span className="micro-label mr-1.5">Audience</span>{plainStatus('audienceKind', String(adSet.audienceType)).label}{td.advantageAudience ? ' · Meta may widen it' : ''}</span>
             )}
             {adSet.age && <span><span className="micro-label mr-1.5">Age</span>{adSet.age}</span>}
-            {adSet.gender && <span className="capitalize"><span className="micro-label mr-1.5">Gender</span>{adSet.gender}</span>}
-            {adSet.geo && <span><span className="micro-label mr-1.5">Location</span>{adSet.geo}</span>}
+            {adSet.gender && <span><span className="micro-label mr-1.5">Gender</span>{humanise(adSet.gender)}</span>}
+            {adSet.geo && <span className="min-w-0 break-words"><span className="micro-label mr-1.5">Location</span>{adSet.geo}</span>}
             {(adSet.interests ?? []).length > 0 && (
               <span><span className="micro-label mr-1.5">Interests</span>{(adSet.interests as string[]).length} selected</span>
             )}
             {excluded.length > 0 && (
-              <span><span className="micro-label mr-1.5">Excluding</span>{excluded.map((e) => e.name).join(', ')}</span>
+              <span className="min-w-0 break-words"><span className="micro-label mr-1.5">Leaving out</span>{excluded.map((e) => e.name).filter(Boolean).join(', ') || `${excluded.length} saved audience${excluded.length === 1 ? '' : 's'}`}</span>
             )}
           </div>
 
           {placements.length > 0 && (
             <div className="mt-2.5">
-              <p className="micro-label mb-1.5">Placements</p>
+              <p className="micro-label mb-1.5">Where the ads show</p>
               <div className="flex flex-wrap gap-1.5">
                 {placements.map((p) => (
-                  <span key={p} className="chip chip-neutral capitalize">{p}</span>
+                  <span key={p} className="chip chip-neutral">{p}</span>
                 ))}
               </div>
               <p className="explain mt-1.5">
@@ -253,24 +245,30 @@ export function CampaignSetup({
         </div>
       )}
 
-      {/* ── Identifiers ─────────────────────────────────────────────────── */}
+      {/* ── Goal and launch date; Meta ids only inside Details ─────────── */}
       <div
         className="flex flex-wrap gap-x-5 gap-y-1 text-[11px] pt-1"
         style={{ color: 'var(--ink-3)', borderTop: '1px solid var(--hairline-light)', paddingTop: 12 }}
       >
-        {campaign.metaCampaignId && (
-          <span><span className="micro-label mr-1">Meta campaign</span><span className="mono">{campaign.metaCampaignId}</span></span>
-        )}
-        {campaign.metaAccountId && (
-          <span><span className="micro-label mr-1">Ad account</span><span className="mono">{campaign.metaAccountId}</span></span>
-        )}
         {review?.campaign?.objective && (
-          <span className="capitalize"><span className="micro-label mr-1">Objective</span>{review.campaign.objective.replace(/_/g, ' ').toLowerCase()}</span>
+          <span><span className="micro-label mr-1">Goal</span>{plainStatus('objective', review.campaign.objective).label}</span>
         )}
         {campaign.launchedAt && (
-          <span><span className="micro-label mr-1">Launched</span>{formatRelativeTime(campaign.launchedAt)}</span>
+          <span><span className="micro-label mr-1">Launched</span>{formatRelative(campaign.launchedAt)}</span>
         )}
       </div>
+      {(campaign.metaCampaignId || campaign.metaAccountId || product) && (
+        <Details
+          reference={campaign.metaCampaignId}
+          items={[
+            ...(campaign.metaCampaignId ? [{ label: 'Meta campaign', value: campaign.metaCampaignId }] : []),
+            ...(campaign.metaAccountId ? [{ label: 'Meta ad account', value: campaign.metaAccountId }] : []),
+            ...(product && product.conversionTracking.type === 'custom_conversion' ? [{ label: 'Custom conversion', value: product.conversionTracking.id }] : []),
+            ...(product && product.conversionTracking.type === 'app_event' ? [{ label: 'Meta app', value: product.applicationId || '—' }] : []),
+            ...(product && product.conversionTracking.type !== 'app_event' ? [{ label: product.pixelSource === 'product' ? 'Meta Pixel (this product)' : 'Meta Pixel (company default)', value: product.pixelId || '—' }] : []),
+          ]}
+        />
+      )}
     </div>
   )
 }

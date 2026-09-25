@@ -38,6 +38,9 @@ import type {
   IntelligenceDecisionStatus,
 } from '@/types'
 import { IntelligenceCenterNav } from '@/components/intelligence/IntelligenceCenterNav'
+import { PlainErrorNote, plainFailure } from '@/components/campaign/PlainErrorNote'
+import { Details } from '@/components/plain/Details'
+import { humanise } from '@/lib/plain-language'
 import { MeridianReviewPanel } from '@/components/intelligence/MeridianReviewPanel'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
@@ -299,13 +302,13 @@ function cleanText(s: string): string {
  * Extract the campaign name from the decision's reasoning paragraph.
  * The reasoning is written as: "The agent recommends X on <name>. <name> is running…"
  * so the token after " on " up to the first "." is the campaign name.
- * Falls back to the target/campaign id if the pattern isn't found.
+ * Falls back to "Unnamed campaign" — never an id.
  */
 function extractCampaignName(d: IntelligenceDecision): string {
   if (d.campaignName?.trim()) return d.campaignName.trim()
   const m = d.reasoning.match(/ on ([^.]+?)\./)
   if (m?.[1]) return m[1].trim()
-  return d.targetId && d.targetId !== 'unknown' ? d.targetId : 'Campaign'
+  return 'Unnamed campaign'
 }
 
 // Split the reasoning into (headline sentence, condition sentence, mechanics sentence).
@@ -420,7 +423,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
         ),
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load')
+      setError(plainFailure("We couldn't load the suggestions. Try again.", err))
     } finally {
       setLoading(false)
     }
@@ -458,8 +461,8 @@ export default function ProposedActionsPage({ params }: PageProps) {
       }
       setApprovalTarget(null)
       await load()
-    } catch (err) {
-      flash('error', err instanceof Error ? err.message : 'Approve failed')
+    } catch {
+      flash('error', "We couldn't approve this suggestion. Try again.")
     } finally {
       setBusyId(null)
     }
@@ -479,8 +482,8 @@ export default function ProposedActionsPage({ params }: PageProps) {
       setRejectingId(null)
       setRejectReason('')
       await load()
-    } catch (err) {
-      flash('error', err instanceof Error ? err.message : 'Reject failed')
+    } catch {
+      flash('error', "We couldn't dismiss this suggestion. Try again.")
     } finally {
       setBusyId(null)
     }
@@ -493,10 +496,10 @@ export default function ProposedActionsPage({ params }: PageProps) {
         skipSync: true,
         maxCampaigns: 10,
       })
-      flash('success', `${res.message} (${res.totalDecisions} new)`)
+      flash('success', `Analysis finished — ${res.totalDecisions} new suggestion${res.totalDecisions === 1 ? '' : 's'}`)
       await load()
-    } catch (err) {
-      flash('error', err instanceof Error ? err.message : 'Run failed')
+    } catch {
+      flash('error', "We couldn't run the analysis. Try again.")
     } finally {
       setPriming(false)
     }
@@ -689,7 +692,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
                 <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--accent-strong)' }} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>
-                    {c.campaignName || (c.metaCampaignId ? `Meta ID ${c.metaCampaignId}` : 'Campaign')}
+                    {c.campaignName || 'Unnamed campaign'}
                   </p>
                   <p className="mt-0.5" style={{ color: 'var(--ink-2)' }}>
                     {c.summary?.narrative ||
@@ -700,12 +703,12 @@ export default function ProposedActionsPage({ params }: PageProps) {
                           : 'Analysis completed, but no detailed reasoning was captured for this run.')}
                   </p>
                   <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-3)' }}>
-                    {c.campaignName && c.metaCampaignId && <>Meta ID {c.metaCampaignId} · </>}
                     {c.summary
                       ? `${c.summary.decisionsProposed} suggestion${c.summary.decisionsProposed === 1 ? '' : 's'} proposed · `
                       : ''}
                     analyzed {relativeTime(c.completedAt ?? c.startedAt)}
                   </p>
+                    {c.metaCampaignId && <Details className="mt-1.5" reference={c.metaCampaignId} items={[{ label: 'Meta campaign', value: c.metaCampaignId }]} />}
                   {c.status === 'completed' && (
                     <CycleTracePanel tenantId={tenantId} cycleId={c.cycleId} />
                   )}
@@ -750,8 +753,7 @@ export default function ProposedActionsPage({ params }: PageProps) {
           className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3 text-sm"
           style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--bad)' }}
         >
-          <AlertCircle size={14} />
-          <span>{error}</span>
+          <PlainErrorNote error={error} className="flex-1" />
         </div>
       )}
 
@@ -884,11 +886,9 @@ function CampaignBucketCard({
             </h3>
           </div>
           <p className="text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-            {bucket.metaCampaignId && (
-              <>Meta ID {bucket.metaCampaignId} · </>
-            )}
             {bucket.decisions.length} option{bucket.decisions.length === 1 ? '' : 's'} · updated {relativeTime(bucket.createdAtNewest)}
           </p>
+          {bucket.metaCampaignId && <Details className="mt-1.5" reference={bucket.metaCampaignId} items={[{ label: 'Meta campaign', value: bucket.metaCampaignId }]} />}
         </div>
         {/* Deliberately not a hero number. This is a modeled estimate, and the
             forecast layer behind it is not yet calibrated — so it stays small
@@ -1018,7 +1018,7 @@ function ReasoningTracePanel({
     try {
       setTrace(await loadTrace())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the reasoning trace')
+      setError(plainFailure("We couldn't load the reasoning. Try again.", e))
     } finally {
       setLoading(false)
     }
@@ -1138,7 +1138,7 @@ function ReasoningTracePanel({
                 </p>
               )}
               {error && (
-                <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>
+                <PlainErrorNote error={error} compact />
               )}
 
               {trace && (
@@ -1249,7 +1249,7 @@ function ActionOption({
   const [showWhy, setShowWhy] = useState(false)
   const isPending = d.status === 'shadow_review'
   const timer = hoursLeft(d.reviewWindowExpiresAt)
-  const label = ACTION_LABEL[d.actionType] ?? d.actionType
+  const label = ACTION_LABEL[d.actionType] ?? humanise(d.actionType)
   const effect = ACTION_EFFECT[d.actionType] ?? ''
   const parts = splitReasoning(d.reasoning)
   const goalAware = hasGoalAwareContract(d)
@@ -1272,19 +1272,19 @@ function ActionOption({
               {label}
             </p>
             <span className={`chip ${RISK_STYLE[d.risk] ?? 'chip-neutral'}`} style={{ fontSize: '10.5px', padding: '2px 8px' }}>
-              {RISK_LABEL[d.risk] ?? d.risk}
+              {RISK_LABEL[d.risk] ?? humanise(d.risk)}
             </span>
             {/* Target chip — tells the operator whether this hits the whole
                  campaign or a single ad group (and which one, by trailing id). */}
             <span
               className="chip chip-neutral"
               style={{ fontSize: '10.5px', padding: '2px 8px' }}
-              title={d.targetType === 'adset' ? `Ad group Meta ID: ${d.targetId}` : `Campaign target`}
+              title={d.targetType === 'adset' ? 'Applies to one ad group in this campaign' : d.targetType === 'ad' ? 'Applies to one ad in this campaign' : 'Applies to the whole campaign'}
             >
               {d.targetType === 'adset'
-                ? `Ad group · …${(d.targetId || '').slice(-6)}`
+                ? 'One ad group'
                 : d.targetType === 'ad'
-                  ? `Ad · …${(d.targetId || '').slice(-6)}`
+                  ? 'One ad'
                   : 'Whole campaign'}
             </span>
             {readOnlyDiagnostic && (
