@@ -217,7 +217,7 @@ export function SectionCard({
             {title && <h2 className="section-title">{title}</h2>}
             {description && <p className="explain mt-1">{description}</p>}
           </div>
-          {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+          {action && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{action}</div>}
         </header>
       )}
       <div className={padded ? 'p-5' : undefined}>{children}</div>

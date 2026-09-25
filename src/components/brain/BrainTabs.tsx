@@ -12,13 +12,13 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: 'pulse', label: 'Pulse', description: 'What the Brain is doing right now', Icon: Gauge },
+  { key: 'pulse', label: 'Right now', description: 'What the Brain is doing right now', Icon: Gauge },
   { key: 'decisions', label: 'Decisions', description: 'What it decided, and why', Icon: ScrollText },
-  { key: 'pipeline', label: 'Pipeline', description: 'Make ads → pick the best → set up → go live', Icon: Workflow },
+  { key: 'pipeline', label: 'Progress', description: 'Make ads → pick the best → set up → go live', Icon: Workflow },
   { key: 'campaign-run', label: 'Campaigns', description: 'What is being set up, and the ads going out', Icon: Megaphone },
   { key: 'experiments', label: 'Experiments', description: "What we're testing, and what we learned", Icon: FlaskConical },
   { key: 'approvals', label: 'Approvals', description: 'What needs your go-ahead', Icon: Gavel },
-  { key: 'agents', label: 'Agents', description: 'Helpers you can ask to do a job', Icon: Activity },
+  { key: 'agents', label: 'Helpers', description: 'Helpers you can ask to do a job', Icon: Activity },
   { key: 'conversation', label: 'Conversation', description: 'Ask the Brain a question', Icon: MessagesSquare },
 ]
 
@@ -43,7 +43,7 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
       className="grid grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-8"
       style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}
     >
-      {TABS.map(({ key, label, description, Icon }, index) => {
+      {TABS.map(({ key, label, description, Icon }) => {
         const isActive = active === key
         const badge = badges?.[key]
 
@@ -69,7 +69,7 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
           >
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex"
               style={{
                 background: isActive ? 'var(--accent-bg)' : 'var(--muted)',
                 color: isActive ? 'var(--accent-strong)' : 'var(--ink-3)',
@@ -80,14 +80,10 @@ export function BrainTabs({ active, onChange, badges }: BrainTabsProps) {
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2">
                 <span
-                  className="truncate text-sm font-semibold"
-                  title={label}
+                  className="text-sm font-semibold leading-tight break-words"
                   style={{ color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}
                 >
                   {label}
-                </span>
-                <span className="text-[10px] tabular-nums" style={{ color: 'var(--ink-4)' }}>
-                  0{index + 1}
                 </span>
               </span>
               <span
