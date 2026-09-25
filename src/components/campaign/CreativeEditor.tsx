@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, Check, AlertCircle, Plus } from 'lucide-react'
+import { Loader2, Check, Plus } from 'lucide-react'
 import { getCreativePackage, updateCreativePackage, generateCreativeSizes } from '@/lib/api'
 import type { CreativePackage } from '@/types'
+import { PlainErrorNote, plainFailure } from './PlainErrorNote'
 
 const ASPECT_RATIOS = ['9:16', '4:5', '1:1', '16:9'] as const
 type Ratio = typeof ASPECT_RATIOS[number]
@@ -71,7 +72,7 @@ export function CreativeEditor({
     try {
       setPkg(await getCreativePackage(tenantId, packageId))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load creative')
+      setError(plainFailure("We couldn't load this creative. Try again.", e))
     } finally {
       setLoading(false)
     }
@@ -88,7 +89,7 @@ export function CreativeEditor({
       setTimeout(() => setSavedKey(k => (k === key ? '' : k)), 2000)
       await reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(plainFailure("We couldn't save your changes. Try again.", e))
     } finally {
       setSavingKey('')
     }
@@ -115,7 +116,7 @@ export function CreativeEditor({
       setTimeout(() => setGenerated(''), 5000)
       await reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Size generation failed')
+      setError(plainFailure("We couldn't make the other sizes. Try again.", e))
     } finally {
       setGenerating(false)
     }
@@ -146,7 +147,7 @@ export function CreativeEditor({
     <div>
       {error && (
         <div className="rounded-lg px-3 py-2 mb-3 flex items-start gap-2 text-[12px]" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
-          <AlertCircle size={13} className="mt-0.5 shrink-0" />{error}
+          <PlainErrorNote error={error} className="flex-1" />
         </div>
       )}
 
@@ -272,7 +273,7 @@ export function CreativeEditor({
                             key={r}
                             type="button"
                             onClick={() => {
-                              const url = window.prompt(`Public image URL for ${RATIO_LABEL[r]}`)
+                              const url = window.prompt(`Paste a link to the image for the ${RATIO_LABEL[r]} size (it must open in a browser without a login)`)
                               if (url && url.trim()) save(`v${i}-img-${r}`, { variantIndex: i, imageUrl: url.trim(), aspectRatio: r })
                               setAddingFor(null)
                             }}

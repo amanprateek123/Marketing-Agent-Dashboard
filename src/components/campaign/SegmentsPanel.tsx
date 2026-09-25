@@ -171,7 +171,7 @@ export function SegmentsPanel({
       getCampaignTimeseries(tenantId, campaignId),
     ])
       .then(([b, s]) => { if (!cancelled) { setBreakdowns(b); setSeries(s) } })
-      .catch(() => { if (!cancelled) setError('Failed to load segment data') })
+      .catch(() => { if (!cancelled) setError("We couldn't load the audience breakdown. Try again.") })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [tenantId, campaignId])

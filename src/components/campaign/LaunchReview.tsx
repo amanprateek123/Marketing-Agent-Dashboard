@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { getCampaignReview, updateManualCampaignConfig } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
+import { Details } from '@/components/plain/Details'
+import { errorDetail, humanise, PLAIN_ERROR } from '@/lib/plain-language'
 import type { CampaignLaunchReview, LaunchReviewAdSet, Product } from '@/types'
 
 /**
@@ -124,7 +126,7 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
       setReview(data)
       onReview?.(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the review')
+      setError(errorDetail(err) || PLAIN_ERROR)
       onReview?.(null)
     } finally {
       setLoading(false)
@@ -142,7 +144,7 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
       await updateManualCampaignConfig(tenantId, campaignId, { productName })
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not set the product')
+      setError(errorDetail(err) || PLAIN_ERROR)
     } finally {
       setAssigning(false)
     }
@@ -176,11 +178,12 @@ export function LaunchReview({ tenantId, campaignId, products = [], onReview }: 
         style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn)' }}
       >
         <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="font-semibold">The launch preview is temporarily unavailable</p>
           <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
-            {error}. The launch service will still repeat every safety check before creating anything on Meta.
+            We couldn&apos;t load it right now. Launching will still repeat every safety check before anything is created on Meta.
           </p>
+          <Details className="mt-1.5" title="What went wrong" items={[{ label: 'Message', value: error }]} />
         </div>
       </div>
     )
@@ -443,7 +446,7 @@ function IssueRow({
       )}
       <div className="min-w-0">
         <p className="text-sm font-semibold" style={{ color: palette.fg }}>
-          {ISSUE_TITLE[issue.code] ?? issue.code.replace(/_/g, ' ')}
+          {ISSUE_TITLE[issue.code] ?? humanise(issue.code)}
         </p>
         <p className="text-[13px] mt-0.5" style={{ color: 'var(--ink-2)' }}>
           {issue.message}
