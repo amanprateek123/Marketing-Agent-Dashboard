@@ -1,8 +1,15 @@
 import { cn } from '@/lib/utils'
+import { humanise, plainStatus, toneChip, type PlainDomain } from '@/lib/plain-language'
 
 interface StatusBadgeProps {
   status: string
   className?: string
+  /**
+   * The vocabulary domain in `@/lib/plain-language` to read the label from. With it, the chip
+   * shows the plain label and its one-line meaning as a tooltip. Without it, the legacy table
+   * below is used — prefer passing a domain in new code.
+   */
+  domain?: PlainDomain
 }
 
 function getStatusConfig(status: string): {
@@ -38,13 +45,21 @@ function getStatusConfig(status: string): {
     }
   }
 
-  return { label: status.replace(/_/g, ' '), chip: 'chip-neutral' }
+  return { label: humanise(status), chip: 'chip-neutral' }
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = getStatusConfig(status)
+export function StatusBadge({ status, className, domain }: StatusBadgeProps) {
+  const plain = domain ? plainStatus(domain, status) : null
+  const config = plain
+    ? {
+        label: plain.label,
+        chip: toneChip(plain.tone),
+        dot: true,
+        pulse: plain.tone === 'accent' && /running|launching|producing|generating/.test(status),
+      }
+    : getStatusConfig(status)
   return (
-    <span className={cn('chip', config.chip, className)}>
+    <span className={cn('chip', config.chip, className)} title={plain?.meaning || undefined}>
       {config.dot && (
         <span className="relative flex h-1.5 w-1.5 shrink-0">
           {config.pulse && (

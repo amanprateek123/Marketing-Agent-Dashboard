@@ -1,4 +1,5 @@
 import { HelpCircle } from 'lucide-react'
+import { plainStatus, type PlainDomain } from '@/lib/plain-language'
 
 /** Shared plain-English definitions so wording stays consistent everywhere the term appears. */
 export const GLOSSARY = {
@@ -33,4 +34,15 @@ export function Term({ children, help }: Props) {
       <HelpCircle size={11} style={{ color: 'var(--ink-4)' }} />
     </span>
   )
+}
+
+/**
+ * A code from the shared vocabulary as plain words with its meaning on hover:
+ * <PlainTerm domain="runStage" code="curating" /> → "Picking the best" (?) "Scoring every ad…".
+ * An unknown code renders humanised, without the help icon (there is no meaning to show).
+ */
+export function PlainTerm({ domain, code }: { domain: PlainDomain; code: string | null | undefined }) {
+  const plain = plainStatus(domain, code)
+  if (!plain.meaning) return <span>{plain.label}</span>
+  return <Term help={plain.meaning}>{plain.label}</Term>
 }
