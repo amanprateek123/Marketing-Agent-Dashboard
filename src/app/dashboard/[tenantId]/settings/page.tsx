@@ -5,7 +5,7 @@ import {
   Wifi, WifiOff, Package, Users, Bell, Building2, Loader2,
   CheckCircle2, RefreshCw, DollarSign, TrendingUp, TrendingDown, Zap, Plus,
   Trash2, ChevronDown, ChevronUp, AlertCircle, ToggleLeft, ToggleRight,
-  ShieldCheck, Palette, Megaphone, Sparkles, X, FlaskConical, Trophy,
+  ShieldCheck, Palette, Megaphone, Sparkles, X, FlaskConical, Trophy, Swords,
 } from 'lucide-react'
 import type { Company, Product, PromptsHistoryEntry, LandingPageTest, LandingPageTestArm, MetaAdAccount, MetaBusiness, MetaPage } from '@/types'
 import { getCompany, rollbackPrompts, startLandingPageTest, promoteLandingPage, cancelLandingPageTest, getMetaAccounts, syncMetaAccounts, getMetaBusinesses, getMetaPages } from '@/lib/api'
@@ -13,6 +13,9 @@ import { formatInr, formatWhen, humanise, plainStatus, toneChip, errorDetail, PL
 import { Details } from '@/components/plain/Details'
 import { Term, GLOSSARY } from '@/components/plain/Term'
 import { PageSelect } from '@/components/ui/PageSelect'
+import { CompetitorEditor } from '@/components/competitors/CompetitorEditor'
+import { useBrainUnlocked } from '@/lib/use-brain-auth'
+import Link from 'next/link'
 import styles from './settings.module.css'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8082/api/v1'
@@ -547,7 +550,7 @@ interface SettingsData {
   services: Array<{ name: string; description?: string; active?: boolean }>
   activePromotions: Array<{ name: string; details?: string; expiresAt?: string }>
   competitors: { competitors?: string[]; competitorNotes?: string; calendarContext?: string }
-  delivery: { slackWebhook?: string; whatsappNumber?: string; email?: string; notionDatabaseId?: string }
+  delivery: { whatsappNumber?: string; email?: string; notionDatabaseId?: string }
   meta: { accessToken?: string; accountId?: string; accountIds?: string[]; businessId?: string; pixelId?: string; pageId?: string }
   budget: { weeklyBudgetCap?: number; maxBudgetPerCampaign?: number; maxBudgetScalePercent?: number; primaryObjective?: string; targetROAS?: number; targetCPA?: number; pauseIfROASBelow?: number; pauseIfCTRBelow?: number; pauseIfFrequencyAbove?: number; pauseAfterDaysInLearning?: number; scaleIfROASAbove?: number }
   marketing: { platforms?: string[]; preferredFormats?: string[]; forbiddenTopics?: string[]; campaignsPerRun?: number; runFrequency?: string }
@@ -557,6 +560,7 @@ interface SettingsData {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function SettingsPage({ params }: PageProps) {
   const { tenantId } = use(params)
+  const brainUnlocked = useBrainUnlocked()
 
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -587,7 +591,7 @@ export default function SettingsPage({ params }: PageProps) {
   const [budgetFields, setBudgetFields] = useState<Record<string, string>>({})
   const [marketing, setMarketing] = useState({ platforms: [] as string[], preferredFormats: [] as string[], forbiddenTopics: [] as string[], campaignsPerRun: '', runFrequency: '' })
   const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false, teamMode: '' as string })
-  const [delivery, setDelivery] = useState({ slackWebhook: '', whatsappNumber: '', email: '', notionDatabaseId: '' })
+  const [delivery, setDelivery] = useState({ whatsappNumber: '', email: '', notionDatabaseId: '' })
   const [meta, setMeta] = useState({ pixelId: '', businessId: '', pageId: '' })
   const [metaAccounts, setMetaAccounts] = useState<MetaAdAccount[]>([])
   const [metaAccountsState, setMetaAccountsState] = useState<'idle' | 'loading' | 'error'>('idle')
@@ -646,7 +650,7 @@ export default function SettingsPage({ params }: PageProps) {
       setBudgetFields(bf)
       setMarketing({ platforms: data.marketing?.platforms || [], preferredFormats: data.marketing?.preferredFormats || [], forbiddenTopics: data.marketing?.forbiddenTopics || [], campaignsPerRun: data.marketing?.campaignsPerRun != null ? String(data.marketing.campaignsPerRun) : '', runFrequency: data.marketing?.runFrequency || '' })
       setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
-      setDelivery({ slackWebhook: data.delivery?.slackWebhook || '', whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
+      setDelivery({ whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
       setMeta({ pixelId: data.meta?.pixelId || '', businessId: data.meta?.businessId || '', pageId: data.meta?.pageId || '' })
       setSelectedAccountIds(data.meta?.accountIds?.length ? data.meta.accountIds : data.meta?.accountId ? [data.meta.accountId] : [])
       // Handle competitors as either string[] (old) or object (new)
@@ -1071,16 +1075,29 @@ export default function SettingsPage({ params }: PageProps) {
           <div className="mt-5"><SaveBtn state={competitorsState} onClick={() => saveSection({ competitors: competitors.competitors, competitorNotes: competitors.competitorNotes, calendarContext: competitors.calendarContext }, setCompetitorsState)} label="Save competitors" /></div>
         </SectionCard>
 
+        {/* ── Competitors the Brain watches (Brain login) ── */}
+        <SectionCard id="competitor-watch">
+          <SectionHeader icon={Swords} iconBg="var(--accent-bg)" iconColor="var(--accent-strong)" category="Business" title="Competitors the Brain watches" subtitle="The brands whose ads and pages competitor research checks, and which of your products each competes with."
+            right={<Link href={`/dashboard/${tenantId}/competitors`} className="btn btn-ghost">See what they&apos;re running</Link>} />
+          {brainUnlocked ? (
+            <CompetitorEditor tenantId={tenantId} />
+          ) : (
+            <p className="explain">
+              {brainUnlocked === null ? 'Checking your Brain sign-in…' : 'Sign in to the Brain to edit this list.'}{' '}
+              {brainUnlocked === false && <Link href={`/dashboard/${tenantId}/competitors`} className="underline">Sign in</Link>}
+            </p>
+          )}
+        </SectionCard>
+
         {/* ── Notifications ── */}
         <SectionCard>
-          <SectionHeader icon={Bell} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Where we send updates" subtitle="Where daily summaries and “needs your attention” alerts are sent." />
+          <SectionHeader icon={Bell} iconBg="var(--info-bg)" iconColor="var(--info)" category="Business" title="Where we send updates" subtitle="Alerts, questions and reports now appear in Waiting on you and Reports in this dashboard." />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><FieldLabel>Slack link (webhook)</FieldLabel><TextInput value={delivery.slackWebhook} onChange={v => setDelivery(s => ({ ...s, slackWebhook: v }))} placeholder="Stored securely" mono type="password" /></div>
             <div><FieldLabel>Email</FieldLabel><TextInput value={delivery.email} onChange={v => setDelivery(s => ({ ...s, email: v }))} placeholder="team@company.com" type="email" /></div>
             <div><FieldLabel>WhatsApp number</FieldLabel><TextInput value={delivery.whatsappNumber} onChange={v => setDelivery(s => ({ ...s, whatsappNumber: v }))} placeholder="+91..." /></div>
             <div><FieldLabel>Notion database (copy from its link)</FieldLabel><TextInput value={delivery.notionDatabaseId} onChange={v => setDelivery(s => ({ ...s, notionDatabaseId: v }))} placeholder="abc123..." mono /></div>
           </div>
-          <div className="mt-5"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { slackWebhook: delivery.slackWebhook || undefined, email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save where to send updates" /></div>
+          <div className="mt-5"><SaveBtn state={deliveryState} onClick={() => saveSection({ delivery: { email: delivery.email || undefined, whatsappNumber: delivery.whatsappNumber || undefined, notionDatabaseId: delivery.notionDatabaseId || undefined } }, setDeliveryState)} label="Save where to send updates" /></div>
         </SectionCard>
 
         {/* ── Meta Ads ── */}

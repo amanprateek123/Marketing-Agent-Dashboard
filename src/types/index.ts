@@ -386,7 +386,7 @@ export interface Company {
   pauseIfCTRBelow?: number
   pauseIfFrequencyAbove?: number
   scaleIfROASAbove?: number
-  delivery?: { slackWebhook?: string }
+  delivery?: { whatsappNumber?: string; email?: string; notionDatabaseId?: string }
   promptsHistory?: PromptsHistoryEntry[]
   learnings?: {
     updatedAt?: string
