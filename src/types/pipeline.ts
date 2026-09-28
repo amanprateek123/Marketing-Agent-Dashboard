@@ -117,6 +117,8 @@ export type CustomBriefTrack = 'polished' | 'raw'
 export interface CustomBriefImageRef {
   filename: string
   s3_url: string | null
+  /** What the parity routes (badge, research from a PDF) take to name an upload. */
+  upload_id?: string
 }
 
 export interface StartCustomBriefBody {

@@ -4,9 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, PauseCircle } from 'lucide-react'
 import { getCustomBriefEvents, getCustomBriefRun } from '@/lib/api'
 import { Details } from '@/components/plain/Details'
+import { AdCopyPanel } from './AdCopyPanel'
+import { ResearchPanel } from './ResearchPanel'
+import { RunActions } from './RunActions'
 import { errorDetail, plainStatus } from '@/lib/plain-language'
 import type {
   CustomBriefEvent,
+  CustomBriefOptions,
   CustomBriefRun,
   CustomBriefRunNode,
   CustomBriefWaiting,
@@ -31,6 +35,9 @@ const MAX_TICKS = 180 // ~30 min; long enough for a 5-creative batch
 /** Statuses that mean a human has to act — but there is no Slack thread to act
  *  in, so these are dead ends and must not be shown as "working". */
 const BLOCKED = new Set([
+  'awaiting_offering',
+  'awaiting_logo_choice',
+  'awaiting_automotive_gates',
   'awaiting_language',
   'awaiting_image_kind',
   'awaiting_badge_image',
@@ -41,6 +48,13 @@ const BLOCKED = new Set([
   'validation_failed',
 ])
 const FAILED = new Set(['error', 'cancelled'])
+
+/** A child tile whose run is waiting on a button — its controls are listed under the grid. */
+const ACTIONABLE = new Set([...BLOCKED, 'brief_ready', 'layout_ready', 'awaiting_logo_choice', 'awaiting_automotive_gates', 'awaiting_offering', 'error'])
+
+function isResearch(node: CustomBriefRunNode): boolean {
+  return node.mode === 'research' || /research/.test(node.status)
+}
 
 /**
  * The best image a run can show right now.
@@ -127,6 +141,7 @@ export function CustomBriefProgress({
   tenantId,
   runId,
   statusPhases,
+  options,
   onFinished,
   onDismiss,
 }: {
@@ -134,6 +149,8 @@ export function CustomBriefProgress({
   runId: number
   /** `status_phases` from GET /v1/options — the pipeline's own status→phase vocabulary. */
   statusPhases?: Record<string, string>
+  /** GET /v1/options — languages, products and small print for the questions a run stops to ask. */
+  options?: CustomBriefOptions | null
   /** Fired once when the run settles, so the page can reload the library. */
   onFinished?: () => void
   /** Close the panel and forget the run. Only offered once it has settled — dismissing a live run
@@ -179,6 +196,14 @@ export function CustomBriefProgress({
     }
   }, [tenantId, runId, onFinished])
 
+  // An action (retry, approve, answer) can wake a settled or given-up run, so it restarts the loop.
+  const [pollGen, setPollGen] = useState(0)
+  const restart = useCallback(() => {
+    finished.current = false
+    setGaveUp(false)
+    setPollGen(n => n + 1)
+  }, [])
+
   useEffect(() => {
     let ticks = 0
     let cancelled = false
@@ -199,7 +224,7 @@ export function CustomBriefProgress({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [poll])
+  }, [poll, pollGen])
 
   useEffect(() => {
     logEnd.current?.scrollIntoView({ block: 'nearest' })
@@ -348,6 +373,37 @@ export function CustomBriefProgress({
           })}
         </div>
       )}
+
+      {/* The buttons Slack used to carry. A single run is its own creative; a batch lists only the
+          ads that are waiting on something, so a healthy batch shows just Cancel. */}
+      {run && children.length === 0 && (
+        <RunActions tenantId={tenantId} runId={run.run_id} status={run.status} options={options}
+          onChanged={restart} />
+      )}
+      {run && children.length > 0 && (
+        <>
+          <RunActions tenantId={tenantId} runId={run.run_id} status={run.status} gates={false}
+            onChanged={restart} />
+          {children
+            .filter(c => ACTIONABLE.has(c.status))
+            .map((c, i) => (
+              <div key={c.run_id} className="mt-2 pt-2" style={{ borderTop: '1px solid var(--hairline)' }}>
+                <p className="text-[11.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>Ad {c.item_index ?? i + 1}</p>
+                <RunActions tenantId={tenantId} runId={c.run_id} status={c.status} options={options}
+                  label={`Ad ${c.item_index ?? i + 1}`} onChanged={restart} />
+              </div>
+            ))}
+        </>
+      )}
+      {run && isResearch(run) && (
+        <ResearchPanel tenantId={tenantId} researchId={run.run_id} status={run.status}
+          onChanged={restart} />
+      )}
+      {run && children.length === 0 && run.status === 'done' && !isResearch(run) && (
+        <AdCopyPanel tenantId={tenantId} runId={run.run_id} />
+      )}
+
+      <div className="mb-4" />
 
       {/* Narration. This is the same text the pipeline posts into Slack —
           recorded as events so it can be read here too. */}

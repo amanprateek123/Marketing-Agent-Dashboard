@@ -8,6 +8,8 @@ import {
 import { getCreativePackage, updateCreativePackage, regenerateCreativeImage, rewriteCreativeImagePrompt, editCreativeImage, generateCreativeSizes, regenerateCreativeVideo, rewriteCreativeVideoPrompt, rehostCreativeMedia, planHiggsfieldScenes, generateHiggsfieldScenes, regenerateHiggsfieldScene, mergeHiggsfieldScenes, addHiggsfieldVoiceover, getPackageAssetLocations, rejectAsset, restoreAsset, resizeCustomBriefPackage, getCustomBriefPackage, reviseCustomBriefPackage, regenerateCustomBriefPackage, clarifyCustomBriefRun } from '@/lib/api'
 import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolution, GalleryAssetLocations } from '@/lib/api'
 import type { CreativeImage, CreativePackage, CustomBriefRun } from '@/types'
+import { RunActions } from '@/components/creative/RunActions'
+import { AdCopyPanel } from '@/components/creative/AdCopyPanel'
 import { creativePackageStatus } from '@/lib/utils'
 import { Details } from '@/components/plain/Details'
 import { PLAIN_ERROR, errorDetail, humanise, plainStatus, toneChip } from '@/lib/plain-language'
@@ -674,6 +676,17 @@ export default function CreativeDetailPage({ params }: PageProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* The pipeline's own controls for the run behind this creative — retry, run anyway, the
+          layout go-ahead — and the ad copy that goes out with it. Slack used to be the only door. */}
+      {pipelineRun && (
+        <section className="card p-5 mb-6 min-w-0">
+          <p className="micro-label mb-1">Made by the creative pipeline</p>
+          <RunActions tenantId={tenantId} runId={pipelineRun.run_id} status={pipelineRun.status}
+            gates={(pipelineRun.children ?? []).length === 0} onChanged={() => void load()} />
+          <AdCopyPanel tenantId={tenantId} runId={pipelineRun.run_id} />
+        </section>
       )}
 
       {isCarousel ? (

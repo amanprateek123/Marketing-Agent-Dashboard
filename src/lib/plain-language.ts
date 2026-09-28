@@ -332,6 +332,13 @@ const VOCAB = {
     awaiting_research_confirm: ['Check the research', 'Confirm the research before it continues.', 'warn'],
     awaiting_research_rerun: ['Research needs redoing', 'Decide whether to run the research again.', 'warn'],
     validation_failed: ['Did not pass checks', 'The result failed a quality check.', 'bad'],
+    brief_ready: ['Brief ready', 'The brief is written — preview the layout or make it in full.', 'warn'],
+    layout_ready: ['Layout ready', 'Waiting for your go-ahead to make the final image.', 'warn'],
+    awaiting_logo_choice: ['Needs a logo choice', 'Choose whether the ad carries the logo.', 'warn'],
+    awaiting_automotive_gates: ['Needs a logo choice', 'Choose whether the ad carries the logo.', 'warn'],
+    awaiting_offering: ['Needs a product', 'Choose which product this ad is for.', 'warn'],
+    researching: ['Researching', 'Reading the sources and finding directions.', 'accent'],
+    research_ready: ['Research ready', 'Directions are ready — pick one to make ads from.', 'good'],
   },
 
   /** Campaign copilot session status. */
