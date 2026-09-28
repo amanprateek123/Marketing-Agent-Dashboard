@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { getCompany, listCreativePackages, generateProductCreative, getCreativeLanguages, getCreativeFormats, getHookStyles, getHiggsfieldModels, getHiggsfieldModel, getRejectedAssets, restoreAsset, getCustomBriefOptions, startCustomBriefRun, uploadCustomBriefImages, addCustomBriefOffering } from '@/lib/api'
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
+import { ResearchFromPdf } from '@/components/creative/ResearchFromPdf'
 import { ImageDirectionModal } from '@/components/creative/ImageDirectionModal'
 import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef,
   AddCustomBriefOfferingResult } from '@/types'
@@ -1015,6 +1016,14 @@ export default function CreativesPage({ params }: PageProps) {
                 </label>
               </div>
 
+              {cbMethod === 'research' && (
+                <ResearchFromPdf
+                  tenantId={tenantId}
+                  offerings={cbOptions?.offerings ?? []}
+                  onStarted={id => rememberRun(id)}
+                />
+              )}
+
               <p className="text-[12px] mt-3" style={{ color: 'var(--ink-3)' }}>
                 Everything below is optional — leave it all unpicked and we decide for you from
                 your description alone.
@@ -1515,6 +1524,7 @@ export default function CreativesPage({ params }: PageProps) {
           tenantId={tenantId}
           runId={cbRunId}
           statusPhases={cbOptions?.status_phases}
+          models={cbOptions?.models}
           onFinished={() => { void loadPackages() }}
           onDismiss={() => rememberRun(null)}
         />
