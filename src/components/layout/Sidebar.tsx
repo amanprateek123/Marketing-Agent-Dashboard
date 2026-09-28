@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Activity,
+  BellRing,
   BookOpen,
+  FileText,
   Brain,
   BrainCircuit,
   Home,
@@ -19,15 +21,18 @@ import {
   MessageCircleMore,
   Settings,
   Sparkles,
+  Swords,
   X,
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCampaigns, getIntelligenceDecisionsSummary } from '@/lib/api'
-import { getBrainGates } from '@/lib/brain-api'
+import { getBrainGates, getInbox } from '@/lib/brain-api'
 import { logout } from '@/lib/auth'
 import { useBrainUnlocked } from '@/lib/use-brain-auth'
 import { MeridianGlyph } from '@/components/ui/MeridianMark'
+import { INBOX_CHANGED, InboxBell } from '@/components/inbox/InboxBell'
+import type { BrainInboxCounts } from '@/types/brain'
 import styles from './Sidebar.module.css'
 
 interface SidebarProps {
@@ -55,6 +60,7 @@ function navGroups(
   proposedCount: number,
   openGateCount: number,
   brainLocked: boolean,
+  waitingCount: number,
 ): NavGroup[] {
   const root = `/dashboard/${tenantId}`
 
@@ -63,6 +69,14 @@ function navGroups(
       label: 'Grow',
       items: [
         { href: root, label: 'Overview', hint: 'Your spend, results and what needs a decision', icon: Home },
+        {
+          href: `${root}/waiting`,
+          label: 'Waiting on you',
+          hint: 'Approvals, questions and alerts that need you',
+          icon: BellRing,
+          badge: brainLocked ? undefined : waitingCount,
+          locked: brainLocked,
+        },
         {
           href: `${root}/campaign-copilot`,
           label: 'Plan a campaign',
@@ -116,6 +130,20 @@ function navGroups(
           hint: 'The AI marketing lead: its plans, decisions and questions for you',
           icon: BrainCircuit,
           badge: brainLocked ? undefined : openGateCount,
+          locked: brainLocked,
+        },
+        {
+          href: `${root}/reports`,
+          label: 'Reports',
+          hint: 'Daily briefs, performance reports and incidents',
+          icon: FileText,
+          locked: brainLocked,
+        },
+        {
+          href: `${root}/competitors`,
+          label: 'Competitors',
+          hint: 'What competitors are running, and ideas to test from it',
+          icon: Swords,
           locked: brainLocked,
         },
         {
@@ -178,6 +206,7 @@ interface SidebarContentProps {
   proposedCount: number
   openGateCount: number
   brainLocked: boolean
+  inboxCounts: BrainInboxCounts | null
   reachable: boolean | null
   onNavigate?: () => void
   onClose?: () => void
@@ -190,12 +219,20 @@ function SidebarContent({
   proposedCount,
   openGateCount,
   brainLocked,
+  inboxCounts,
   reachable,
   onNavigate,
   onClose,
 }: SidebarContentProps) {
   const root = `/dashboard/${tenantId}`
-  const groups = navGroups(tenantId, pendingCount, proposedCount, openGateCount, brainLocked)
+  const groups = navGroups(
+    tenantId,
+    pendingCount,
+    proposedCount,
+    openGateCount,
+    brainLocked,
+    inboxCounts?.total ?? 0,
+  )
   const status = reachable === null
     ? { label: 'Checking data', className: styles.statusConnecting }
     : reachable
@@ -207,6 +244,9 @@ function SidebarContent({
       <div className={styles.sidebarHeader}>
         <div className={styles.brandRow}>
           <MeridianBrand tenantId={tenantId} onNavigate={onNavigate} />
+          {!onClose && (
+            <InboxBell tenantId={tenantId} counts={brainLocked ? null : inboxCounts} onNavigate={onNavigate} />
+          )}
           {onClose && (
             <button
               type="button"
@@ -304,6 +344,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
   const [pendingCount, setPendingCount] = useState(0)
   const [proposedCount, setProposedCount] = useState(0)
   const [openGateCount, setOpenGateCount] = useState(0)
+  const [inboxCounts, setInboxCounts] = useState<BrainInboxCounts | null>(null)
   // Unknown (before hydration) draws as unlocked, so the lock never flickers on for a Brain that is open.
   const brainLocked = useBrainUnlocked() === false
   const [reachable, setReachable] = useState<boolean | null>(null)
@@ -346,20 +387,34 @@ export function Sidebar({ tenantId }: SidebarProps) {
     if (brainLocked) return
     let cancelled = false
 
+    // One read for the bell, the Waiting on you badge and the Brain badge. An older bridge without
+    // the inbox route falls back to the gate list, so the Brain badge keeps working.
     async function tick() {
       try {
-        const gates = await getBrainGates(tenantId)
-        if (!cancelled) setOpenGateCount(gates.length)
+        const inbox = await getInbox(tenantId)
+        if (cancelled) return
+        setInboxCounts(inbox.counts)
+        setOpenGateCount(inbox.counts.gates)
       } catch {
-        if (!cancelled) setOpenGateCount(0)
+        try {
+          const gates = await getBrainGates(tenantId)
+          if (cancelled) return
+          setOpenGateCount(gates.length)
+          setInboxCounts(null)
+        } catch {
+          if (!cancelled) setOpenGateCount(0)
+        }
       }
     }
 
     void tick()
     const id = window.setInterval(tick, 60_000)
+    const onChanged = () => void tick()
+    window.addEventListener(INBOX_CHANGED, onChanged)
     return () => {
       cancelled = true
       window.clearInterval(id)
+      window.removeEventListener(INBOX_CHANGED, onChanged)
     }
   }, [tenantId, brainLocked])
 
@@ -406,6 +461,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
     proposedCount,
     openGateCount,
     brainLocked,
+    inboxCounts,
     reachable,
   }
 
@@ -418,6 +474,7 @@ export function Sidebar({ tenantId }: SidebarProps) {
       <header className={styles.mobileHeader}>
         <MeridianBrand tenantId={tenantId} />
         <div className={styles.mobileActions}>
+          <InboxBell tenantId={tenantId} counts={brainLocked ? null : inboxCounts} />
           <span
             className={cn(
               styles.mobileStatus,

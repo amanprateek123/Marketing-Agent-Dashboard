@@ -469,6 +469,8 @@ export interface BrainGateDecisionBody {
    * What actually happened comes back on `BrainGateDecisionResult`.
    */
   amountOverrideInr?: number
+  /** "Approve <product> only": the product keys the approval covers. Approvals only. */
+  scopeSlugs?: string[]
 }
 
 /** One contract the brain rescaled because an approval carried an amount. */
@@ -828,6 +830,8 @@ export interface BrainPlanAudience {
 
 export interface BrainPlanRun {
   product: string
+  /** The product's key, for "approve this product only". Never shown. Absent from an older bridge. */
+  productKey?: string | null
   /** Absent from an older bridge. */
   bets?: BrainPlanClaim[]
   audiences?: BrainPlanAudience[]
@@ -859,4 +863,193 @@ export interface BrainPlanView {
   structured: boolean
   /** The gate text without the Slack reply line or internal ids. Always present. */
   summaryText: string
+}
+
+/* ── Waiting on you: inbox, reports, questions, alerts ─────────────────────── */
+
+/**
+ * Whether one section of a page could be read.
+ *
+ * - `ok` — read; an empty list means there is nothing.
+ * - `not_available_yet` — the brain has no such tool yet (not deployed, or the dashboard token is
+ *   not issued). The page says "not available yet" in plain words.
+ * - `could_not_load` — the brain or the creative pipeline did not answer.
+ */
+export type BrainSectionState = 'ok' | 'not_available_yet' | 'could_not_load'
+
+export interface BrainInboxCounts {
+  gates: number
+  questions: number
+  reports: number
+  alerts: number
+  waiting: number
+  /** Everything above, for the bell and the sidebar badge. */
+  total: number
+  /** False when none of the counts could be read at all. */
+  known: boolean
+}
+
+export interface BrainInboxGate {
+  /** The gate id the Approvals tab decides on. Opaque. */
+  ref: string
+  title: string
+  summary: string
+  kindLabel: string
+  product: string | null
+  askedAt: string | null
+  expiresAt: string | null
+}
+
+export interface BrainInboxQuestion {
+  ref: string
+  question: string
+  /** "The Brain", "You", "The creative pipeline", or a person's name. */
+  askedBy: string
+  /** "Stalled campaign", "Missing plan", … — null when the question has no kind. */
+  kindLabel: string | null
+  statusLabel: string
+  /** True while nobody has answered it. */
+  open: boolean
+  answer: string | null
+  askedAt: string | null
+  answeredAt: string | null
+}
+
+export type BrainAlertSeverity = 'info' | 'warn' | 'critical'
+
+export interface BrainInboxAlert {
+  ref: string
+  severity: BrainAlertSeverity
+  /** "For your information" | "Needs a look" | "Urgent". */
+  severityLabel: string
+  title: string
+  body: string
+  /** Where it came from, in words ("Creative pipeline", "Spend monitor"). */
+  sourceLabel: string | null
+  raisedAt: string | null
+  acknowledged: boolean
+}
+
+export interface BrainReportFigure {
+  label: string
+  value: string
+}
+
+export interface BrainReport {
+  ref: string
+  /** A stable key for filtering (`performance`, `daily_brief`, …). Never shown. */
+  kind: string
+  kindLabel: string
+  /** The day the report covers, YYYY-MM-DD — the page formats it. */
+  reportDate: string | null
+  headline: string
+  verdictLabel: string | null
+  verdictTone: 'good' | 'watch' | 'bad' | 'neutral'
+  body: string
+  needsAttention: boolean
+  /** The full report on the panels site, when there is one. */
+  panelUrl: string | null
+  figures: BrainReportFigure[]
+  deliveredAt: string | null
+  read: boolean
+}
+
+export interface BrainWaitingRun {
+  /** The creative run id the existing clarify route answers. Opaque. */
+  runRef: string
+  product: string | null
+  question: string
+  since: string | null
+}
+
+export interface BrainInbox {
+  counts: BrainInboxCounts
+  gates: BrainInboxGate[]
+  questions: BrainInboxQuestion[]
+  alerts: BrainInboxAlert[]
+  reports: BrainReport[]
+  waiting: BrainWaitingRun[]
+  /** Per section, whether it could be read — so "nothing here" is never shown for "not read". */
+  availability: {
+    gates: BrainSectionState
+    questions: BrainSectionState
+    alerts: BrainSectionState
+    reports: BrainSectionState
+    waiting: BrainSectionState
+  }
+}
+
+export interface BrainReportPage {
+  state: BrainSectionState
+  reports: BrainReport[]
+  page: number
+  hasMore: boolean
+  /** The kinds present, for the filter chips. */
+  kinds: Array<{ key: string; label: string }>
+}
+
+export interface BrainQuestionList {
+  state: BrainSectionState
+  questions: BrainInboxQuestion[]
+}
+
+/* ── Competitors ──────────────────────────────────────────────────────────── */
+
+export interface BrainProductOption {
+  /** Offering slug. Sent back on save; never shown. */
+  key: string
+  name: string
+}
+
+export interface BrainCompetitor {
+  name: string
+  website: string | null
+  facebookPage: string | null
+  products: BrainProductOption[]
+}
+
+export interface BrainCompetitorList {
+  state: BrainSectionState
+  competitors: BrainCompetitor[]
+  /** Every product a competitor can be tied to. */
+  products: BrainProductOption[]
+}
+
+export interface BrainCompetitorFinding {
+  ref: string
+  competitor: string
+  /** "Ad" | "Web page". */
+  kindLabel: string
+  headline: string | null
+  hook: string | null
+  angle: string | null
+  offer: string | null
+  cta: string | null
+  imageUrl: string | null
+  link: string | null
+  firstSeen: string | null
+  lastSeen: string | null
+  /** Running long enough that the competitor is probably getting results from it. */
+  longRunning: boolean
+}
+
+export interface BrainCompetitorFindingList {
+  state: BrainSectionState
+  findings: BrainCompetitorFinding[]
+}
+
+export interface BrainCompetitorCandidate {
+  ref: string
+  /** The idea, as a sentence. */
+  claim: string
+  product: string | null
+  competitor: string | null
+  /** What it rests on, in words. */
+  evidence: string | null
+  proposedAt: string | null
+}
+
+export interface BrainCompetitorCandidateList {
+  state: BrainSectionState
+  candidates: BrainCompetitorCandidate[]
 }

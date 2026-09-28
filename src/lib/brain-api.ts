@@ -36,6 +36,16 @@
  *   PATCH /brain/:tenantId/agents/:agentKey/triggers/:triggerId
  *   GET  /brain/:tenantId/conversation/:sessionId
  *   POST /brain/:tenantId/conversation/:sessionId/messages
+ *   GET  /brain/:tenantId/inbox
+ *   GET  /brain/:tenantId/reports?kind=&page=
+ *   POST /brain/:tenantId/reports/:id/read
+ *   GET  /brain/:tenantId/questions          POST (same) {text}
+ *   POST /brain/:tenantId/alerts/:id/ack
+ *   GET  /brain/:tenantId/competitors        PUT (same) {competitors}
+ *   GET  /brain/:tenantId/competitors/findings
+ *   GET  /brain/:tenantId/competitors/candidates
+ *   POST /brain/:tenantId/competitors/candidates/:id/decision
+ *   POST /brain/:tenantId/competitors/run
  *
  * The Foundry run token is never sent from the browser. It is held by the
  * bridge, exactly as the creative pipeline's token is today.
@@ -89,6 +99,13 @@ import type {
   BrainRunSummary,
   BrainState,
   BrainTrigger,
+  BrainInbox,
+  BrainReportPage,
+  BrainQuestionList,
+  BrainCompetitor,
+  BrainCompetitorList,
+  BrainCompetitorFindingList,
+  BrainCompetitorCandidateList,
 } from '@/types/brain'
 
 /**
@@ -471,4 +488,147 @@ export function setAgentTriggerEnabled(
     `${base(tenantId)}/agents/${agentKey}/triggers/${encodeURIComponent(trigger)}`,
     { method: 'PATCH', body: JSON.stringify({ enabled }) },
   )
+}
+
+// ── Waiting on you, reports, alerts, competitors ───────────────────────────
+//
+// The bridge answers these from brain tools that ship alongside it. Until the brain is updated a
+// read comes back with its section marked `not_available_yet`, and a write answers 501 — which
+// `isNotAvailableYet` recognises so the page can say so in words.
+
+/** True for the bridge's "this isn't available yet" answer (HTTP 501). */
+export function isNotAvailableYet(err: unknown): boolean {
+  return err instanceof Error && /^501\b/.test(err.message)
+}
+
+/**
+ * The server's own plain sentence from a refused write ("Say why…", "…listed twice."), or null.
+ * A 4xx body from Nest is `{"message": "...", ...}`; anything else stays in Details.
+ */
+export function refusalMessage(err: unknown): string | null {
+  if (!(err instanceof Error)) return null
+  const m = /^(4\d\d|501) ([\s\S]*)$/.exec(err.message)
+  if (!m) return null
+  try {
+    const body = JSON.parse(m[2]) as { message?: unknown }
+    if (typeof body.message === 'string') return body.message
+    if (Array.isArray(body.message) && typeof body.message[0] === 'string') return body.message[0]
+  } catch {
+    return null
+  }
+  return null
+}
+
+const EMPTY_INBOX: BrainInbox = {
+  counts: { gates: 0, questions: 0, reports: 0, alerts: 0, waiting: 0, total: 0, known: false },
+  gates: [],
+  questions: [],
+  alerts: [],
+  reports: [],
+  waiting: [],
+  availability: {
+    gates: 'ok',
+    questions: 'not_available_yet',
+    alerts: 'not_available_yet',
+    reports: 'not_available_yet',
+    waiting: 'not_available_yet',
+  },
+}
+
+export function getInbox(tenantId: string): Promise<BrainInbox> {
+  if (BRAIN_MOCK) return settle(() => EMPTY_INBOX)
+  return apiFetch<BrainInbox>(`${base(tenantId)}/inbox`)
+}
+
+export function getReports(
+  tenantId: string,
+  kind?: string | null,
+  page = 1,
+): Promise<BrainReportPage> {
+  if (BRAIN_MOCK) {
+    return settle(() => ({ state: 'not_available_yet' as const, reports: [], page: 1, hasMore: false, kinds: [] }))
+  }
+  const query = new URLSearchParams({ page: String(page) })
+  if (kind) query.set('kind', kind)
+  return apiFetch<BrainReportPage>(`${base(tenantId)}/reports?${query.toString()}`)
+}
+
+export function markReportRead(tenantId: string, ref: string): Promise<{ ok: true }> {
+  if (BRAIN_MOCK) return settle(() => ({ ok: true as const }), 120)
+  return apiFetch<{ ok: true }>(`${base(tenantId)}/reports/${encodeURIComponent(ref)}/read`, {
+    method: 'POST',
+  })
+}
+
+export function getQuestions(tenantId: string): Promise<BrainQuestionList> {
+  if (BRAIN_MOCK) return settle(() => ({ state: 'not_available_yet' as const, questions: [] }))
+  return apiFetch<BrainQuestionList>(`${base(tenantId)}/questions`)
+}
+
+export function askBrainQuestion(tenantId: string, text: string): Promise<{ ok: true }> {
+  if (BRAIN_MOCK) return settle(() => ({ ok: true as const }), 300)
+  return apiFetch<{ ok: true }>(`${base(tenantId)}/questions`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
+}
+
+export function acknowledgeAlert(tenantId: string, ref: string): Promise<{ ok: true }> {
+  if (BRAIN_MOCK) return settle(() => ({ ok: true as const }), 200)
+  return apiFetch<{ ok: true }>(`${base(tenantId)}/alerts/${encodeURIComponent(ref)}/ack`, {
+    method: 'POST',
+  })
+}
+
+export function getCompetitors(tenantId: string): Promise<BrainCompetitorList> {
+  if (BRAIN_MOCK) return settle(() => ({ state: 'not_available_yet' as const, competitors: [], products: [] }))
+  return apiFetch<BrainCompetitorList>(`${base(tenantId)}/competitors`)
+}
+
+/** Replaces the whole list. Products are sent back as their keys. */
+export function saveCompetitors(
+  tenantId: string,
+  competitors: BrainCompetitor[],
+): Promise<BrainCompetitorList> {
+  const body = {
+    competitors: competitors.map((c) => ({
+      name: c.name,
+      website: c.website ?? '',
+      facebookPage: c.facebookPage ?? '',
+      products: c.products.map((p) => p.key),
+    })),
+  }
+  if (BRAIN_MOCK) return settle(() => ({ state: 'ok' as const, competitors, products: [] }), 300)
+  return apiFetch<BrainCompetitorList>(`${base(tenantId)}/competitors`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export function getCompetitorFindings(tenantId: string): Promise<BrainCompetitorFindingList> {
+  if (BRAIN_MOCK) return settle(() => ({ state: 'not_available_yet' as const, findings: [] }))
+  return apiFetch<BrainCompetitorFindingList>(`${base(tenantId)}/competitors/findings`)
+}
+
+export function getCompetitorCandidates(tenantId: string): Promise<BrainCompetitorCandidateList> {
+  if (BRAIN_MOCK) return settle(() => ({ state: 'not_available_yet' as const, candidates: [] }))
+  return apiFetch<BrainCompetitorCandidateList>(`${base(tenantId)}/competitors/candidates`)
+}
+
+export function decideCompetitorCandidate(
+  tenantId: string,
+  ref: string,
+  decision: 'accept' | 'reject',
+  reason: string,
+): Promise<{ ok: true }> {
+  if (BRAIN_MOCK) return settle(() => ({ ok: true as const }), 300)
+  return apiFetch<{ ok: true }>(
+    `${base(tenantId)}/competitors/candidates/${encodeURIComponent(ref)}/decision`,
+    { method: 'POST', body: JSON.stringify({ decision, reason }) },
+  )
+}
+
+export function runCompetitorResearch(tenantId: string): Promise<{ runId: string }> {
+  if (BRAIN_MOCK) return settle(() => ({ runId: 'run_example' }), 400)
+  return apiFetch<{ runId: string }>(`${base(tenantId)}/competitors/run`, { method: 'POST' })
 }
