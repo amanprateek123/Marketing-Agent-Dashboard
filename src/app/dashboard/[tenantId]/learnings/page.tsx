@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect, use, useRef } from 'react'
 import {
   BookOpen,
@@ -773,6 +774,10 @@ export default function LearningsPage({ params }: PageProps) {
                 <span className="ml-1">· Updated {formatRelative(updatedAt)}</span>
               )}
             </p>
+            <Link href={`/dashboard/${tenantId}/brain/lessons`} className="mt-1 inline-block text-[12.5px] underline"
+              style={{ color: 'var(--accent-strong)' }}>
+              Lessons waiting for review (Brain sign-in)
+            </Link>
           </div>
           <button
             onClick={handleImport}
