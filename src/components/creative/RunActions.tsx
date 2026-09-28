@@ -1,10 +1,17 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Ban, CheckCircle2, Eye, ImagePlus, Loader2, Play, RotateCcw, ShieldAlert } from 'lucide-react'
+import { Ban, CheckCircle2, Eye, ImagePlus, Loader2, Play, RotateCcw, ShieldAlert, Trash2 } from 'lucide-react'
 import { uploadCustomBriefImages } from '@/lib/api'
 import {
   approveRunStage,
+  discardIdea,
+  OVERRIDE_MODELS,
+  setRunDisclaimer,
+  setRunImageKind,
+  setRunLanguage,
+  setRunOffering,
+  type ImageKind,
   cancelRun,
   retryRun,
   runAnyway,
@@ -12,6 +19,7 @@ import {
   setRunLogo,
   setRunModel,
 } from '@/lib/creative-parity-api'
+import type { CustomBriefOptions } from '@/types'
 import { OutcomeLine, useParityAction } from './parity-shared'
 
 /**
@@ -27,11 +35,27 @@ import { OutcomeLine, useParityAction } from './parity-shared'
 const TERMINAL = new Set(['done', 'error', 'cancelled'])
 const LOGO_CHOICE = new Set(['awaiting_logo_choice', 'awaiting_automotive_gates'])
 
+const IMAGE_KINDS: { kind: ImageKind; label: string; hint: string }[] = [
+  { kind: 'overlay', label: 'Words over a picture', hint: 'A picture with the message written on it.' },
+  { kind: 'product', label: 'Product photo', hint: 'The product itself is the picture.' },
+  { kind: 'imitate', label: 'Copy the look', hint: 'Match the style of your reference image.' },
+  { kind: 'imitate_text', label: 'Copy the look, with my words', hint: 'Match the style, using the words below.' },
+]
+
+/** Used when the pipeline's options have not loaded; creativebot refuses anything else with the list. */
+const ASTRO_SMALL_PRINT = [
+  { value: 'none', label: 'No small print' },
+  { value: 'guidance', label: '“For guidance only”' },
+  { value: 'tnc', label: '“T&C apply”' },
+  { value: 'guidance_tnc', label: '“For guidance only. T&C apply”' },
+  { value: 'results_vary', label: '“Results may vary”' },
+]
+
 export function RunActions({
   tenantId,
   runId,
   status,
-  models,
+  options,
   label,
   gates = true,
   onChanged,
@@ -39,8 +63,8 @@ export function RunActions({
   tenantId: string
   runId: number
   status: string
-  /** `models` from the pipeline's options — what the final image can be made with. */
-  models?: { model: string; quality: string }[]
+  /** The pipeline's options — languages, products and small-print wording for the questions a run asks. */
+  options?: CustomBriefOptions | null
   /** "Ad 2" on a batch tile; omitted on a single run. */
   label?: string
   /** False for a batch parent: it sits at `brief_ready` for good, so its gate buttons would lie. */
@@ -50,6 +74,14 @@ export function RunActions({
   const { busy, outcome, run } = useParityAction()
   const [model, setModel] = useState('')
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [dropping, setDropping] = useState(false)
+  const [reason, setReason] = useState('')
+  const [disclaimer, setDisclaimer] = useState('')
+  const [langs, setLangs] = useState<string[]>([])
+  const [langText, setLangText] = useState('')
+  const [kindText, setKindText] = useState('')
+  const [offering, setOffering] = useState('')
+  const [astroNote, setAstroNote] = useState('')
   const badgeInput = useRef<HTMLInputElement | null>(null)
 
   const act = async <T,>(key: string, fn: () => Promise<T>, ok: string) => {
@@ -63,9 +95,9 @@ export function RunActions({
       'badge',
       async () => {
         const { refs } = await uploadCustomBriefImages(tenantId, [file])
-        const ref = refs[0] as { filename: string; upload_id?: string } | undefined
-        if (!ref) throw new Error('No upload came back')
-        return setRunBadge(tenantId, runId, ref.upload_id ?? ref.filename)
+        const uploadId = refs[0]?.upload_id
+        if (!uploadId) throw new Error('The upload did not come back with a reference')
+        return setRunBadge(tenantId, runId, uploadId)
       },
       'Badge image added — it will continue from here.',
     )
@@ -102,7 +134,6 @@ export function RunActions({
             The layout is ready. Happy with it? Approve to make the final image.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {models && models.length > 0 && (
               <label className="flex min-w-0 items-center gap-2 text-[12px]" style={{ color: 'var(--ink-3)' }}>
                 Image model
                 <select
@@ -113,21 +144,119 @@ export function RunActions({
                   onChange={e => {
                     const next = e.target.value
                     setModel(next)
-                    if (next) void act('model', () => setRunModel(tenantId, runId, next), 'Model changed.')
+                    const choice = OVERRIDE_MODELS.find(m => `${m.model}|${m.quality}` === next)
+                    if (choice) {
+                      void act('model', () => setRunModel(tenantId, runId, choice.model, choice.quality), `Will be made with ${choice.label}.`)
+                    }
                   }}
                 >
-                  <option value="">Let it choose</option>
-                  {models.map(m => (
-                    <option key={`${m.model}:${m.quality}`} value={m.model}>
-                      {m.model}{m.quality ? ` (${m.quality})` : ''}
-                    </option>
+                  <option value="">Keep its choice</option>
+                  {OVERRIDE_MODELS.map(m => (
+                    <option key={`${m.model}|${m.quality}`} value={`${m.model}|${m.quality}`}>{m.label}</option>
                   ))}
                 </select>
               </label>
-            )}
             <button type="button" className="btn btn-primary" disabled={disabled}
               onClick={() => void act('approve', () => approveRunStage(tenantId, runId, 'full'), 'Approved — making the final image.')}>
               {spin('approve') ?? <CheckCircle2 size={13} />} Approve and make it
+            </button>
+            {!dropping && (
+              <button type="button" className="btn btn-ghost" disabled={disabled} onClick={() => { setDropping(true); setReason('') }}>
+                <Trash2 size={13} /> Drop this idea
+              </button>
+            )}
+          </div>
+          {dropping && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 min-w-0">
+              <input className="input min-w-0 flex-1" value={reason} onChange={e => setReason(e.target.value)}
+                placeholder="Why drop it? It won't be suggested again" aria-label="Why drop this idea" />
+              <button type="button" className="btn btn-danger" disabled={disabled}
+                onClick={() => { setDropping(false); void act('discard', () => discardIdea(tenantId, runId, reason.trim()), 'Idea dropped — it will not be suggested again.') }}>
+                {spin('discard')} Drop it
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setDropping(false)}>Keep it</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {gates && status === 'awaiting_language' && (
+        <div className="mb-2">
+          <p className="text-[12px] mb-1.5" style={{ color: 'var(--ink-2)' }}>
+            Which language should the ad be in? Pick more than one to get one ad per language.
+          </p>
+          {(options?.languages ?? []).length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {(options?.languages ?? []).map(l => {
+                const on = langs.includes(l)
+                return (
+                  <button key={l} type="button" aria-pressed={on} className={`chip ${on ? 'chip-accent' : ''}`}
+                    onClick={() => setLangs(v => (on ? v.filter(x => x !== l) : [...v, l]))}>
+                    {l}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <input className="input mb-2" value={langText} onChange={e => setLangText(e.target.value)}
+              placeholder="e.g. Hindi, English" aria-label="Languages" />
+          )}
+          {(() => {
+            const chosen = langs.length ? langs : langText.split(',').map(l => l.trim()).filter(Boolean)
+            return (
+              <button type="button" className="btn btn-primary" disabled={disabled || chosen.length === 0}
+                onClick={() => void act('language', () => setRunLanguage(tenantId, runId, chosen), 'Language set — carrying on.')}>
+                {spin('language')} Continue{chosen.length > 1 ? ` in ${chosen.length} languages` : ''}
+              </button>
+            )
+          })()}
+        </div>
+      )}
+
+      {gates && status === 'awaiting_image_kind' && (
+        <div className="mb-2">
+          <p className="text-[12px] mb-1.5" style={{ color: 'var(--ink-2)' }}>What kind of picture should it use?</p>
+          <input className="input mb-2" value={kindText} onChange={e => setKindText(e.target.value)}
+            placeholder="Words to use (optional)" aria-label="Words to use" />
+          <div className="grid gap-2 sm:grid-cols-2">
+            {IMAGE_KINDS.map(k => (
+              <button key={k.kind} type="button" className="btn btn-ghost justify-start text-left" disabled={disabled}
+                title={k.hint}
+                onClick={() => void act(`kind:${k.kind}`, () => setRunImageKind(tenantId, runId, k.kind, kindText.trim() || undefined), `${k.label} — carrying on.`)}>
+                {spin(`kind:${k.kind}`)} {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {gates && status === 'awaiting_offering' && (
+        <div className="mb-2">
+          <p className="text-[12px] mb-1.5" style={{ color: 'var(--ink-2)' }}>
+            Which product is this ad for, and what small print should it carry?
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="input" style={{ width: 'auto', minWidth: 0 }} value={offering} disabled={disabled}
+              onChange={e => setOffering(e.target.value)} aria-label="Product">
+              <option value="">Which product?</option>
+              {(options?.offerings ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select className="input" style={{ width: 'auto', minWidth: 0 }} value={astroNote} disabled={disabled}
+              onChange={e => setAstroNote(e.target.value)} aria-label="Small print">
+              <option value="">Small print…</option>
+              {(options?.disclaimers?.astro?.length ? options.disclaimers.astro : ASTRO_SMALL_PRINT).map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-primary" disabled={disabled || (!offering && !astroNote)}
+              onClick={() => void act('offering', async () => {
+                // One gate on creativebot's side: it holds until both are answered and says which is missing.
+                let last: unknown = null
+                if (offering) last = await setRunOffering(tenantId, runId, offering)
+                if (astroNote) last = await setRunDisclaimer(tenantId, runId, astroNote)
+                return last
+              }, 'Saved — carrying on.')}>
+              {spin('offering')} Continue
             </button>
           </div>
         </div>
@@ -136,13 +265,21 @@ export function RunActions({
       {gates && LOGO_CHOICE.has(status) && (
         <div className="mb-2">
           <p className="text-[12px] mb-1.5" style={{ color: 'var(--ink-2)' }}>Should the ad carry the logo?</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {status === 'awaiting_automotive_gates' && (
+              <select className="input" style={{ width: 'auto', minWidth: 0 }} value={disclaimer} disabled={disabled}
+                onChange={e => setDisclaimer(e.target.value)} aria-label="Small print">
+                <option value="">No small print</option>
+                <option value="tnc">&ldquo;T&amp;C apply&rdquo;</option>
+                <option value="ex_showroom">&ldquo;Ex-showroom price&rdquo;</option>
+              </select>
+            )}
             <button type="button" className="btn btn-ghost" disabled={disabled}
-              onClick={() => void act('logo-on', () => setRunLogo(tenantId, runId, true), 'The logo will be included.')}>
+              onClick={() => void act('logo-on', () => setRunLogo(tenantId, runId, true, disclaimer || undefined), 'The logo will be included.')}>
               {spin('logo-on')} Include the logo
             </button>
             <button type="button" className="btn btn-ghost" disabled={disabled}
-              onClick={() => void act('logo-off', () => setRunLogo(tenantId, runId, false), 'The logo will be left off.')}>
+              onClick={() => void act('logo-off', () => setRunLogo(tenantId, runId, false, disclaimer || undefined), 'The logo will be left off.')}>
               {spin('logo-off')} Leave it off
             </button>
           </div>
@@ -177,8 +314,14 @@ export function RunActions({
         )}
         {(status === 'error' || status === 'cancelled') && (
           <button type="button" className="btn btn-ghost" disabled={disabled}
-            onClick={() => void act('retry', () => retryRun(tenantId, runId), 'Trying again.')}>
+            onClick={() => void act('retry', () => retryRun(tenantId, runId, 'preview'), 'Trying again with a layout preview.')}>
             {spin('retry') ?? <RotateCcw size={13} />} Try again
+          </button>
+        )}
+        {(status === 'error' || status === 'cancelled') && (
+          <button type="button" className="btn btn-ghost" disabled={disabled}
+            onClick={() => void act('retry-full', () => retryRun(tenantId, runId, 'full'), 'Trying the full ad again.')}>
+            {spin('retry-full') ?? <Play size={13} />} Try again in full
           </button>
         )}
         {!terminal && !confirmCancel && (

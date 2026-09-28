@@ -10,6 +10,7 @@ import { RunActions } from './RunActions'
 import { errorDetail, plainStatus } from '@/lib/plain-language'
 import type {
   CustomBriefEvent,
+  CustomBriefOptions,
   CustomBriefRun,
   CustomBriefRunNode,
   CustomBriefWaiting,
@@ -34,6 +35,9 @@ const MAX_TICKS = 180 // ~30 min; long enough for a 5-creative batch
 /** Statuses that mean a human has to act — but there is no Slack thread to act
  *  in, so these are dead ends and must not be shown as "working". */
 const BLOCKED = new Set([
+  'awaiting_offering',
+  'awaiting_logo_choice',
+  'awaiting_automotive_gates',
   'awaiting_language',
   'awaiting_image_kind',
   'awaiting_badge_image',
@@ -46,7 +50,7 @@ const BLOCKED = new Set([
 const FAILED = new Set(['error', 'cancelled'])
 
 /** A child tile whose run is waiting on a button — its controls are listed under the grid. */
-const ACTIONABLE = new Set([...BLOCKED, 'brief_ready', 'layout_ready', 'awaiting_logo_choice', 'awaiting_automotive_gates', 'error'])
+const ACTIONABLE = new Set([...BLOCKED, 'brief_ready', 'layout_ready', 'awaiting_logo_choice', 'awaiting_automotive_gates', 'awaiting_offering', 'error'])
 
 function isResearch(node: CustomBriefRunNode): boolean {
   return node.mode === 'research' || /research/.test(node.status)
@@ -137,7 +141,7 @@ export function CustomBriefProgress({
   tenantId,
   runId,
   statusPhases,
-  models,
+  options,
   onFinished,
   onDismiss,
 }: {
@@ -145,8 +149,8 @@ export function CustomBriefProgress({
   runId: number
   /** `status_phases` from GET /v1/options — the pipeline's own status→phase vocabulary. */
   statusPhases?: Record<string, string>
-  /** `models` from GET /v1/options — offered when a run waits for the go-ahead on its layout. */
-  models?: { model: string; quality: string }[]
+  /** GET /v1/options — languages, products and small print for the questions a run stops to ask. */
+  options?: CustomBriefOptions | null
   /** Fired once when the run settles, so the page can reload the library. */
   onFinished?: () => void
   /** Close the panel and forget the run. Only offered once it has settled — dismissing a live run
@@ -373,7 +377,7 @@ export function CustomBriefProgress({
       {/* The buttons Slack used to carry. A single run is its own creative; a batch lists only the
           ads that are waiting on something, so a healthy batch shows just Cancel. */}
       {run && children.length === 0 && (
-        <RunActions tenantId={tenantId} runId={run.run_id} status={run.status} models={models}
+        <RunActions tenantId={tenantId} runId={run.run_id} status={run.status} options={options}
           onChanged={restart} />
       )}
       {run && children.length > 0 && (
@@ -385,7 +389,7 @@ export function CustomBriefProgress({
             .map((c, i) => (
               <div key={c.run_id} className="mt-2 pt-2" style={{ borderTop: '1px solid var(--hairline)' }}>
                 <p className="text-[11.5px] font-semibold" style={{ color: 'var(--ink-3)' }}>Ad {c.item_index ?? i + 1}</p>
-                <RunActions tenantId={tenantId} runId={c.run_id} status={c.status} models={models}
+                <RunActions tenantId={tenantId} runId={c.run_id} status={c.status} options={options}
                   label={`Ad ${c.item_index ?? i + 1}`} onChanged={restart} />
               </div>
             ))}

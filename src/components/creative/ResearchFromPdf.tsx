@@ -34,9 +34,9 @@ export function ResearchFromPdf({
       'pdf',
       async () => {
         const { refs } = await uploadCustomBriefImages(tenantId, [file])
-        const ref = refs[0] as { filename: string; upload_id?: string } | undefined
-        if (!ref) throw new Error('No upload came back')
-        return startResearchFromPdf(tenantId, ref.upload_id ?? ref.filename, product)
+        const uploadId = refs[0]?.upload_id
+        if (!uploadId) throw new Error('The upload did not come back with a reference')
+        return startResearchFromPdf(tenantId, uploadId, product)
       },
       'Research has started from your PDF.',
     )

@@ -1524,7 +1524,7 @@ export default function CreativesPage({ params }: PageProps) {
           tenantId={tenantId}
           runId={cbRunId}
           statusPhases={cbOptions?.status_phases}
-          models={cbOptions?.models}
+          options={cbOptions}
           onFinished={() => { void loadPackages() }}
           onDismiss={() => rememberRun(null)}
         />

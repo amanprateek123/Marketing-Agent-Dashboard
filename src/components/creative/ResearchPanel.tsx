@@ -7,11 +7,11 @@ import {
   chooseResearchRerun,
   confirmResearchSources,
   discardIdea,
-  expandDirection,
+  expandConcept,
   getResearchDirections,
   getResearchSources,
   ParityError,
-  type ResearchDirection,
+  type ResearchDirectionsResult,
   type ResearchSourcesResult,
 } from '@/lib/creative-parity-api'
 import { formatWhen } from '@/lib/plain-language'
@@ -27,6 +27,15 @@ function toLoad<T>(e: unknown): Load<T> {
   return e instanceof ParityError && e.notAvailable ? { state: 'unavailable' } : { state: 'error' }
 }
 
+interface Pool {
+  directions: NonNullable<ResearchDirectionsResult['directions']>
+  concepts: NonNullable<ResearchDirectionsResult['concepts']>
+}
+
+function toPool(res: ResearchDirectionsResult | null): Pool {
+  return { directions: res?.directions ?? [], concepts: res?.concepts ?? [] }
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -39,7 +48,8 @@ function hostOf(url: string): string {
  * The research half of a run, in the order Slack asked it:
  *  1. if this product was researched before — reuse that, or research again;
  *  2. the sources it plans to read — confirm them, or give your own;
- *  3. the directions it came back with — build ads from one, develop one further, or drop it.
+ *  3. the directions it came back with — make ads from one (or drop its idea), and develop any
+ *     idea from the pool that did not make the cut.
  */
 export function ResearchPanel({
   tenantId,
@@ -56,7 +66,7 @@ export function ResearchPanel({
   const [sources, setSources] = useState<Load<ResearchSourcesResult> | null>(null)
   const [override, setOverride] = useState(false)
   const [urls, setUrls] = useState('')
-  const [directions, setDirections] = useState<Load<ResearchDirection[]> | null>(null)
+  const [directions, setDirections] = useState<Load<Pool> | null>(null)
   const [discarding, setDiscarding] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [gone, setGone] = useState<Set<string>>(new Set())
@@ -80,7 +90,7 @@ export function ResearchPanel({
     setDirections({ state: 'loading' })
     try {
       const res = await getResearchDirections(tenantId, researchId)
-      setDirections({ state: 'ready', data: res?.directions ?? [] })
+      setDirections({ state: 'ready', data: toPool(res) })
     } catch (e) {
       setDirections(toLoad(e))
     }
@@ -100,7 +110,7 @@ export function ResearchPanel({
     if (!hasDirections) return
     let live = true
     getResearchDirections(tenantId, researchId).then(
-      res => { if (live) setDirections({ state: 'ready', data: res?.directions ?? [] }) },
+      res => { if (live) setDirections({ state: 'ready', data: toPool(res) }) },
       e => { if (live) setDirections(toLoad(e)) },
     )
     return () => { live = false }
@@ -235,56 +245,98 @@ export function ResearchPanel({
         </p>
       )}
       {directions?.state === 'ready' && (
-        directions.data.length === 0 ? (
+        directions.data.directions.length === 0 && directions.data.concepts.length === 0 ? (
           <p className="text-[12px]" style={{ color: 'var(--ink-3)' }}>No directions yet.</p>
         ) : (
-          <ol className="grid gap-2">
-            {directions.data
-              .filter(d => !gone.has(String(d.id)))
-              .map((d, i) => {
-                const key = String(d.id)
-                return (
-                  <li key={key} className="card px-3 py-2.5 min-w-0">
-                    <p className="text-[12.5px] font-semibold break-words" style={{ color: 'var(--ink)' }}>
-                      {i + 1}. {d.title?.trim() || `Direction ${i + 1}`}
-                    </p>
-                    {d.summary && (
-                      <p className="text-[12px] mt-0.5 break-words" style={{ color: 'var(--ink-3)' }}>{d.summary}</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className="btn btn-primary" disabled={disabled}
-                        onClick={async () => after(await run(`build:${key}`, () => buildDirection(tenantId, researchId, d.id), 'Making ads from this direction.'))}>
-                        {spin(`build:${key}`, <Hammer size={13} />)} Make ads from this
-                      </button>
-                      <button type="button" className="btn btn-ghost" disabled={disabled}
-                        onClick={async () => after(await run(`expand:${key}`, () => expandDirection(tenantId, researchId, d.id), 'Developing this direction further.'))}>
-                        {spin(`expand:${key}`, <Maximize2 size={13} />)} Develop it further
-                      </button>
-                      {discarding !== key && (
-                        <button type="button" className="btn btn-ghost" disabled={disabled}
-                          onClick={() => { setDiscarding(key); setReason('') }}>
-                          <Trash2 size={13} /> Drop this idea
-                        </button>
-                      )}
-                    </div>
-                    {discarding === key && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 min-w-0">
-                        <input className="input min-w-0 flex-1" value={reason} onChange={e => setReason(e.target.value)}
-                          placeholder="Why drop it? e.g. off brand" aria-label="Why drop this idea" />
-                        <button type="button" className="btn btn-danger" disabled={disabled || !reason.trim()}
-                          onClick={async () => {
-                            const res = await run(`discard:${key}`, () => discardIdea(tenantId, d.idea_id ?? d.id, reason.trim()), 'Idea dropped.')
-                            if (res !== undefined) { setGone(g => new Set(g).add(key)); setDiscarding(null) }
-                          }}>
-                          {spin(`discard:${key}`, null)} Drop it
-                        </button>
-                        <button type="button" className="btn btn-ghost" onClick={() => setDiscarding(null)}>Keep it</button>
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-          </ol>
+          <>
+            {directions.data.directions.length > 0 && (
+              <>
+                <p className="micro-label mt-1 mb-1.5">Directions ready to make</p>
+                <ol className="grid gap-2">
+                  {directions.data.directions
+                    .filter(d => !gone.has(String(d.id)))
+                    .map((d, i) => {
+                      const key = String(d.id)
+                      // Dropping an idea is addressed by the run that shows it; a direction nobody
+                      // has made ads from yet has no such run, so it cannot be dropped from here.
+                      const shownBy = d.used_by_run_id ?? null
+                      return (
+                        <li key={key} className="card px-3 py-2.5 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="min-w-0 flex-1 text-[12.5px] font-semibold break-words" style={{ color: 'var(--ink)' }}>
+                              {i + 1}. {d.title?.trim() || `Direction ${i + 1}`}
+                            </p>
+                            {d.status === 'used' && <span className="chip">Ads made</span>}
+                          </div>
+                          {d.summary && (
+                            <p className="text-[12px] mt-0.5 break-words" style={{ color: 'var(--ink-3)' }}>{d.summary}</p>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" className="btn btn-primary" disabled={disabled}
+                              onClick={async () => after(await run(`build:${key}`, () => buildDirection(tenantId, researchId, d.id), 'Making ads from this direction.'))}>
+                              {spin(`build:${key}`, <Hammer size={13} />)} Make ads from this
+                            </button>
+                            {shownBy !== null && discarding !== key && (
+                              <button type="button" className="btn btn-ghost" disabled={disabled}
+                                onClick={() => { setDiscarding(key); setReason('') }}>
+                                <Trash2 size={13} /> Drop this idea
+                              </button>
+                            )}
+                          </div>
+                          {shownBy !== null && discarding === key && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 min-w-0">
+                              <input className="input min-w-0 flex-1" value={reason} onChange={e => setReason(e.target.value)}
+                                placeholder="Why drop it? e.g. off brand" aria-label="Why drop this idea" />
+                              <button type="button" className="btn btn-danger" disabled={disabled}
+                                onClick={async () => {
+                                  const res = await run(`discard:${key}`, () => discardIdea(tenantId, shownBy, reason.trim()), 'Idea dropped — it will not be suggested again.')
+                                  if (res !== undefined) { setGone(g => new Set(g).add(key)); setDiscarding(null) }
+                                }}>
+                                {spin(`discard:${key}`, null)} Drop it
+                              </button>
+                              <button type="button" className="btn btn-ghost" onClick={() => setDiscarding(null)}>Keep it</button>
+                            </div>
+                          )}
+                        </li>
+                      )
+                    })}
+                </ol>
+              </>
+            )}
+            {directions.data.concepts.length > 0 && (
+              <>
+                <p className="micro-label mt-3 mb-1">Other ideas in the pool</p>
+                <p className="text-[11.5px] mb-1.5" style={{ color: 'var(--ink-4)' }}>
+                  These didn&rsquo;t make the cut. Develop one to turn it into a direction you can make ads from.
+                </p>
+                <ul className="grid gap-2">
+                  {directions.data.concepts.map(c => {
+                    const key = `c${c.index}`
+                    return (
+                      <li key={key} className="card-inset flex flex-wrap items-center gap-2 px-3 py-2 min-w-0">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[12.5px] font-semibold break-words" style={{ color: 'var(--ink)' }}>
+                            {c.title?.trim() || `Idea ${c.index + 1}`}
+                          </p>
+                          {c.summary && (
+                            <p className="text-[12px] break-words" style={{ color: 'var(--ink-3)' }}>{c.summary}</p>
+                          )}
+                        </div>
+                        {c.expanded ? (
+                          <span className="chip chip-good">Developed</span>
+                        ) : (
+                          <button type="button" className="btn btn-ghost" disabled={disabled}
+                            onClick={async () => after(await run(`expand:${key}`, () => expandConcept(tenantId, researchId, c.index), 'Developing this idea into a direction.'))}>
+                            {spin(`expand:${key}`, <Maximize2 size={13} />)} Develop
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
+            )}
+          </>
         )
       )}
       <OutcomeLine outcome={outcome} />

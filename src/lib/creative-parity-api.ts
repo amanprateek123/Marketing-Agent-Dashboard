@@ -55,10 +55,22 @@ export interface ResearchDirection {
   /** The idea this direction stands for, when creativebot has filed it on the board. */
   idea_id?: string | number | null
   status?: string | null
+  /** The run making ads from this direction — discarding the idea is addressed by THIS run. */
+  used_by_run_id?: number | null
+}
+
+/** An idea in the research pool that did not make the cut. Addressed by `index` only. */
+export interface ResearchConcept {
+  index: number
+  title?: string | null
+  summary?: string | null
+  score?: number | null
+  expanded?: boolean | null
 }
 
 export interface ResearchDirectionsResult extends ParityResult {
   directions?: ResearchDirection[] | null
+  concepts?: ResearchConcept[] | null
 }
 
 export interface LearnProposal {
@@ -120,7 +132,14 @@ async function send<T>(path: string, init: RequestInit, token: string | null): P
   const body = await res.text()
   if (!res.ok) throw new ParityError(res.status, plainRefusal(res.status, body), body)
   if (!body) return null as T
-  return JSON.parse(body) as T
+  const parsed = JSON.parse(body) as T
+  // creativebot's refusals carry { ok: false, message } — show that message, even on a 2xx.
+  const refusal = parsed as { ok?: unknown; message?: unknown } | null
+  if (refusal && refusal.ok === false) {
+    const said = typeof refusal.message === 'string' && refusal.message.trim()
+    throw new ParityError(422, said || "That didn't work. Try again.", body)
+  }
+  return parsed
 }
 
 function call<T = ParityResult>(path: string, method = 'POST', body?: unknown): Promise<T> {
@@ -140,18 +159,48 @@ const researchPath = (tenantId: string, researchId: number | string, suffix: str
 // ── Run controls ────────────────────────────────────────────────────────────
 
 export const cancelRun = (t: string, runId: number | string) => call(runPath(t, runId, 'cancel'))
-export const retryRun = (t: string, runId: number | string) => call(runPath(t, runId, 'retry'))
+export const retryRun = (t: string, runId: number | string, step?: 'preview' | 'full') =>
+  call(runPath(t, runId, 'retry'), 'POST', step ? { step } : undefined)
 export const runAnyway = (t: string, runId: number | string) => call(runPath(t, runId, 'run-anyway'))
-export const setRunModel = (t: string, runId: number | string, model: string) =>
-  call(runPath(t, runId, 'model'), 'POST', { model })
+/**
+ * The models Slack's "Switch model" menu offered — creativebot accepts only these (it refuses
+ * anything else and names the list). Kept here because /v1/options lists a different set.
+ */
+export const OVERRIDE_MODELS: { label: string; model: string; quality: string }[] = [
+  { label: 'GPT — best quality', model: 'gpt-image-2', quality: 'high' },
+  { label: 'GPT — faster', model: 'gpt-image-2', quality: 'medium' },
+  { label: 'Riverflow', model: 'sourceful/riverflow-v2.5-fast', quality: 'high' },
+]
+
+export const setRunModel = (t: string, runId: number | string, model: string, quality?: string) =>
+  call(runPath(t, runId, 'model'), 'POST', { model, ...(quality ? { quality } : {}) })
 export const approveRunStage = (t: string, runId: number | string, stage: 'preview' | 'full') =>
   call(runPath(t, runId, 'approve'), 'POST', { stage })
-export const setRunLogo = (t: string, runId: number | string, include: boolean) =>
-  call(runPath(t, runId, 'logo'), 'POST', { include })
+export const setRunLogo = (t: string, runId: number | string, include: boolean, disclaimer?: string) =>
+  call(runPath(t, runId, 'logo'), 'POST', { include, ...(disclaimer ? { disclaimer } : {}) })
 export const setRunBadge = (t: string, runId: number | string, uploadId: string) =>
   call(runPath(t, runId, 'badge'), 'POST', { upload_id: uploadId })
-export const discardIdea = (t: string, ideaId: number | string, reason: string) =>
-  call(`${bridge(t)}/ideas/${encodeURIComponent(String(ideaId))}/discard`, 'POST', { reason })
+// ── The questions a run stops to ask (were Slack buttons) ─────────────────
+
+/** `awaiting_language`: one language, or several to split the run. */
+export const setRunLanguage = (t: string, runId: number | string, languages: string[]) =>
+  call(runPath(t, runId, 'language'), 'POST', languages.length > 1 ? { languages } : { language: languages[0] })
+
+export type ImageKind = 'overlay' | 'product' | 'imitate' | 'imitate_text'
+export const setRunImageKind = (t: string, runId: number | string, kind: ImageKind, text?: string) =>
+  call(runPath(t, runId, 'image-kind'), 'POST', { kind, ...(text ? { text } : {}) })
+
+/** `awaiting_offering`: which product — a slug from the pipeline's options. */
+export const setRunOffering = (t: string, runId: number | string, offering: string) =>
+  call(runPath(t, runId, 'offering'), 'POST', { offering })
+
+/** The small print. Astro answers it with the product (same gate); automotive with the logo. */
+export const setRunDisclaimer = (t: string, runId: number | string, choice: string) =>
+  call(runPath(t, runId, 'disclaimer'), 'POST', { choice })
+
+/** Addressed by the RUN showing the idea (as Slack's Delete idea button was), not an idea id. */
+export const discardIdea = (t: string, runId: number | string, reason: string) =>
+  call(`${bridge(t)}/ideas/${encodeURIComponent(String(runId))}/discard`, 'POST', { reason })
 
 // ── Ad copy ─────────────────────────────────────────────────────────────────
 
@@ -182,8 +231,9 @@ export const getResearchDirections = (t: string, researchId: number | string) =>
   call<ResearchDirectionsResult>(researchPath(t, researchId, 'directions'), 'GET')
 export const buildDirection = (t: string, researchId: number | string, d: string | number) =>
   call(researchPath(t, researchId, `directions/${encodeURIComponent(String(d))}/build`))
-export const expandDirection = (t: string, researchId: number | string, d: string | number) =>
-  call(researchPath(t, researchId, `directions/${encodeURIComponent(String(d))}/expand`))
+/** Develop a pool idea further — by the concept's `index` (culled concepts have no id). */
+export const expandConcept = (t: string, researchId: number | string, index: number) =>
+  call(researchPath(t, researchId, `directions/${index}/expand`))
 export const startResearchFromPdf = (t: string, uploadId: string, product: string) =>
   call(`${bridge(t)}/research/pdf`, 'POST', { upload_id: uploadId, product })
 
