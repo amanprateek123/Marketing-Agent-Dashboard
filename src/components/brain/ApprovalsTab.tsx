@@ -175,6 +175,11 @@ function GateCard({
 
   const selectable = gate.selection !== 'none'
 
+  // "Approve <product> only": a plan covering two or more products can be approved for some of
+  // them. Empty = the whole plan.
+  const planProducts = planProductOptions(gate)
+  const [onlyProducts, setOnlyProducts] = useState<string[]>([])
+
   function toggle(id: string) {
     setSelected((current) => {
       if (gate.selection === 'single') return current[0] === id ? [] : [id]
@@ -213,6 +218,7 @@ function GateCard({
         selectedIds: selectable ? selected : undefined,
         // Only on approve: an amount attached to a rejection would record a number nobody authorised.
         amountOverrideInr: amountInr,
+        scopeSlugs: action === 'approve' && onlyProducts.length ? onlyProducts : undefined,
       })
       if (amountInr !== undefined) {
         onOutcome({
@@ -336,6 +342,37 @@ function GateCard({
           </label>
         )}
 
+        {planProducts.length > 1 && (
+          <fieldset className="min-w-0">
+            <legend className="micro-label">Approve only some products (optional)</legend>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {planProducts.map((p) => {
+                const on = onlyProducts.includes(p.key)
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={pending != null}
+                    className={`chip max-w-full truncate ${on ? 'chip-accent' : 'chip-neutral'}`}
+                    title={p.name}
+                    onClick={() =>
+                      setOnlyProducts((cur) => (on ? cur.filter((k) => k !== p.key) : [...cur, p.key]))
+                    }
+                  >
+                    {p.name}
+                  </button>
+                )
+              })}
+            </div>
+            <span className="explain mt-1 block">
+              {onlyProducts.length
+                ? `Approving goes ahead for ${onlyProducts.length === 1 ? 'this product' : 'these products'} only; the rest of the plan is left out.`
+                : 'Leave all unselected to approve the whole plan.'}
+            </span>
+          </fieldset>
+        )}
+
         <label className="block">
           <span className="micro-label">Note to the Brain</span>
           <textarea
@@ -402,6 +439,15 @@ function GateCard({
       </footer>
     </section>
   )
+}
+
+/** The distinct products a plan gate's runs cover, for "approve <product> only". */
+function planProductOptions(gate: BrainGate): Array<{ key: string; name: string }> {
+  const seen = new Map<string, string>()
+  for (const run of gate.plan?.runs ?? []) {
+    if (run.productKey && !seen.has(run.productKey)) seen.set(run.productKey, run.product)
+  }
+  return [...seen].map(([key, name]) => ({ key, name }))
 }
 
 /**
