@@ -1033,6 +1033,52 @@ function AdSetCard({
         </label>
       )}
 
+      <label className="block mb-3">
+        <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Placements</span>
+        <select value={adSet.placementPreset ?? 'vertical'} onChange={e => onChange({ placementPreset: e.target.value as ManualAdSetInput['placementPreset'] })} className="input">
+          {PLACEMENT_PRESET_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </label>
+
+      {['image', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
+        <details className="mb-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+          <summary className="cursor-pointer text-xs font-semibold">Image sizes · {Object.keys(adSet.imagePlacementOverrides ?? {}).length ? 'Custom mapping' : 'Automatic mapping'}</summary>
+          <p className="text-xs mt-2 mb-3" style={{ color: 'var(--ink-3)' }}>The tool chooses a size for each placement group. Override it below for every image creative in this ad set. Missing sizes are prepared at launch. Video and carousel sizing are separate.</p>
+          {([
+            ['vertical', 'Stories and Reels', '9:16'],
+            ['feed', 'Facebook and Instagram feeds', '4:5'],
+            ['landscape', 'Facebook right column, search and in-stream', '16:9'],
+            ['other', 'Other selected placements', '1:1'],
+          ] as const).filter(([group]) => group === 'vertical' ||
+            ((adSet.placementPreset ?? 'vertical') !== 'vertical' && group === 'feed') ||
+            adSet.placementPreset === 'everywhere').map(([group, label, ratio]) => (
+            <label key={group} className="block mb-2 text-xs">
+              <span className="block mb-1">{label}</span>
+              <select className="input" value={adSet.imagePlacementOverrides?.[group] ?? ''} onChange={event => {
+                const next = { ...adSet.imagePlacementOverrides }
+                const value = event.target.value
+                if (value) next[group] = value as '4:5' | '9:16' | '1:1' | '16:9'
+                else delete next[group]
+                onChange({ imagePlacementOverrides: next })
+              }}>
+                <option value="">Automatic ({ratio}{group === 'feed' ? ', or 1:1' : ''})</option>
+                {['4:5', '9:16', '1:1', '16:9'].map(size => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
+          ))}
+          {Object.keys(adSet.imagePlacementOverrides ?? {}).length > 0 && <>
+            <p className="text-xs mb-2" style={{ color: 'var(--ink-3)' }}>A different ratio may be cropped by the placement. Check the ad preview before activating.</p>
+            <button type="button" className="text-xs underline" onClick={() => onChange({ imagePlacementOverrides: {} })}>Reset to automatic</button>
+          </>}
+        </details>
+      )}
+
+      {['video', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
+        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Video formats default to Stories and Reels, using the 9:16 video when available. You can change Placements above; videos currently use one size across the selected placements and may be cropped.</p>
+      )}
+
       {showTargeting && (
         <>
           <label className="block mb-3">
@@ -1048,48 +1094,6 @@ function AdSetCard({
               <option value="advantage_plus">Advantage+ (Meta finds the audience)</option>
             </select>
           </label>
-
-          <label className="block mb-3">
-            <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Placements</span>
-            <select value={adSet.placementPreset ?? 'vertical'} onChange={e => onChange({ placementPreset: e.target.value as ManualAdSetInput['placementPreset'] })} className="input">
-              {PLACEMENT_PRESET_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-
-          {['image', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
-            <details className="mb-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-              <summary className="cursor-pointer text-xs font-semibold">Image sizes · {Object.keys(adSet.imagePlacementOverrides ?? {}).length ? 'Custom mapping' : 'Automatic mapping'}</summary>
-              <p className="text-xs mt-2 mb-3" style={{ color: 'var(--ink-3)' }}>The tool chooses a size for each placement group. Override it below for every image creative in this ad set. Missing sizes are prepared at launch. Video and carousel sizing are separate.</p>
-              {([
-                ['vertical', 'Stories and Reels', '9:16'],
-                ['feed', 'Facebook and Instagram feeds', '4:5'],
-                ['landscape', 'Facebook right column, search and in-stream', '16:9'],
-                ['other', 'Other selected placements', '1:1'],
-              ] as const).filter(([group]) => group === 'vertical' ||
-                ((adSet.placementPreset ?? 'vertical') !== 'vertical' && group === 'feed') ||
-                adSet.placementPreset === 'everywhere').map(([group, label, ratio]) => (
-                <label key={group} className="block mb-2 text-xs">
-                  <span className="block mb-1">{label}</span>
-                  <select className="input" value={adSet.imagePlacementOverrides?.[group] ?? ''} onChange={event => {
-                    const next = { ...adSet.imagePlacementOverrides }
-                    const value = event.target.value
-                    if (value) next[group] = value as '4:5' | '9:16' | '1:1' | '16:9'
-                    else delete next[group]
-                    onChange({ imagePlacementOverrides: next })
-                  }}>
-                    <option value="">Automatic ({ratio}{group === 'feed' ? ', or 1:1' : ''})</option>
-                    {['4:5', '9:16', '1:1', '16:9'].map(size => <option key={size} value={size}>{size}</option>)}
-                  </select>
-                </label>
-              ))}
-              {Object.keys(adSet.imagePlacementOverrides ?? {}).length > 0 && <>
-                <p className="text-xs mb-2" style={{ color: 'var(--ink-3)' }}>A different ratio may be cropped by the placement. Check the ad preview before activating.</p>
-                <button type="button" className="text-xs underline" onClick={() => onChange({ imagePlacementOverrides: {} })}>Reset to automatic</button>
-              </>}
-            </details>
-          )}
 
           {needsAudience && (
             <label className="block mb-3">
@@ -1274,12 +1278,16 @@ function AdSetCard({
         </label>
         <label className="block">
           <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Creative format</span>
-          <select value={adSet.creativeFormat ?? 'image'} onChange={e => onChange({ creativeFormat: e.target.value as ManualAdSetInput['creativeFormat'] })} className="input">
+          <select value={adSet.creativeFormat ?? 'image'} onChange={e => {
+            const creativeFormat = e.target.value as ManualAdSetInput['creativeFormat']
+            onChange({ creativeFormat, placementPreset: creativeFormat === 'image' ? 'everywhere' : 'vertical' })
+          }} className="input">
             <option value="image">Image (all variants)</option>
             <option value="video">Video (variant 1 only)</option>
             <option value="both">Both</option>
             <option value="mixed">Mixed (splits into video + image ad sets)</option>
           </select>
+          <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>Changing format resets Placements: Everywhere for images, Stories and Reels for video formats. Review the selection above.</p>
         </label>
       </div>
 
