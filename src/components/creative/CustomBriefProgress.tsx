@@ -7,6 +7,7 @@ import { Details } from '@/components/plain/Details'
 import { AdCopyPanel } from './AdCopyPanel'
 import { ResearchPanel } from './ResearchPanel'
 import { RunActions } from './RunActions'
+import { CreativeSlotFacts, hasSlotFacts } from './CreativeSlotFacts'
 import { errorDetail, plainStatus } from '@/lib/plain-language'
 import type {
   CustomBriefEvent,
@@ -334,6 +335,13 @@ export function CustomBriefProgress({
         </div>
       )}
 
+      {/* A single creative's plan and writer, when the pipeline reports them (newer runs only). */}
+      {children.length === 0 && run && hasSlotFacts(run) && (
+        <div className="mb-4 mx-auto" style={{ maxWidth: 320 }}>
+          <CreativeSlotFacts node={run} angleLabels={options?.angles} />
+        </div>
+      )}
+
       {/* One tile per creative. A batch parent stays at brief_ready forever, so
           the children are the only honest view of what is happening. */}
       {children.length > 0 && (
@@ -363,6 +371,8 @@ export function CustomBriefProgress({
                   Ad {n}
                 </p>
                 <span className={`chip ${chip.cls}`}>{chip.label}</span>
+                {/* What this creative was planned to be, and who wrote it — absent on older runs. */}
+                <CreativeSlotFacts node={child} angleLabels={options?.angles} compact />
                 {BLOCKED.has(child.status) && (
                   <p className="flex items-center gap-1 text-[10.5px] mt-1.5" style={{ color: 'var(--warn)' }}>
                     <PauseCircle size={10} /> waiting for you
