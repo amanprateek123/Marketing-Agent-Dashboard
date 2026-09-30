@@ -1721,6 +1721,7 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [approveState, setApproveState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [approvalError, setApprovalError] = useState<string | null>(null)
   const [pauseState, setPauseState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [syncing, setSyncing] = useState(false)
   const [viewAd, setViewAd] = useState<CampaignAd | null>(null)
@@ -1994,7 +1995,39 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
   /* ─── Campaign actions ─── */
   async function doPause() { const reason = window.prompt('Reason for pausing?', 'Manual pause'); if (!reason?.trim()) return; setPauseState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) }); if (!r.ok) throw new Error(); setPauseState('success'); flash('Campaign paused', 'success'); fetchCampaign() } catch (e) { setPauseState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setPauseState('idle'), 3000) } }
   async function doResume() { try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/resume`, { method: 'POST' }); if (!r.ok) throw new Error(); flash('Campaign resumed', 'success'); fetchCampaign() } catch (e) { flash(e instanceof Error ? e.message : 'Failed', 'error') } }
-  async function doApprove() { if (!selectedAccountId) { flash('Select a Meta ad account', 'error'); return }; setApproveState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: selectedAccountId.startsWith('act_') ? selectedAccountId : `act_${selectedAccountId}` }) }); if (!r.ok) throw new Error(); const d = await r.json(); setApproveState('success'); flash(`Launched! Meta ID: ${d.metaCampaignId || 'assigned'}`, 'success'); fetchCampaign() } catch (e) { setApproveState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setApproveState('idle'), 3000) } }
+  async function doApprove() {
+    if (!selectedAccountId) { flash('Select a Meta ad account', 'error'); return }
+    setApprovalError(null)
+    setApproveState('loading')
+    try {
+      const response = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: selectedAccountId.startsWith('act_') ? selectedAccountId : `act_${selectedAccountId}` }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        const detail = Array.isArray(data?.message) ? data.message.join('; ') : data?.message
+        throw new Error(typeof detail === 'string' && detail.trim() ? detail :
+          `Approval returned HTTP ${response.status}. Refresh the campaign status before retrying; the server may still be processing the launch.`)
+      }
+      if (!data?.metaCampaignId) {
+        throw new Error('The server did not return a Meta campaign ID. Refresh the campaign status before retrying.')
+      }
+      setApproveState('success')
+      flash(`${data.status === 'active' ? 'Launched' : 'Created paused'}! Meta ID: ${data.metaCampaignId}`, 'success')
+      await fetchCampaign()
+    } catch (error) {
+      const message = error instanceof TypeError
+        ? 'Connection interrupted. The server may still be launching. Refresh the campaign status before retrying.'
+        : error instanceof Error && error.message ? error.message : 'Approval failed. Refresh the campaign status before retrying.'
+      setApprovalError(message)
+      setApproveState('error')
+      flash(message, 'error')
+      await fetchCampaign()
+      setApproveState('idle')
+    }
+  }
   async function doReject() { setRejectState('loading'); try { const r = await fetch(`${API}/campaigns/${tenantId}/${campaignId}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: rejectReason }) }); if (!r.ok) throw new Error(); setRejectState('success'); flash('Rejected', 'success'); setRejectOpen(false); setRejectReason(''); fetchCampaign() } catch (e) { setRejectState('error'); flash(e instanceof Error ? e.message : 'Failed', 'error'); setTimeout(() => setRejectState('idle'), 3000) } }
 
   /* ─── Guards ─── */
@@ -2083,6 +2116,8 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
   return (
     <div className="min-h-screen">
       {/* Toast */}
+      {approvalError && <div role="alert" className="mb-4 rounded-xl p-4 text-sm" style={{ background: C.redBg, border: `1px solid ${C.redBorder}`, color: C.red }}>{approvalError}</div>}
+      {approveState === 'loading' && <div role="status" className="mb-4 rounded-xl p-4 text-sm" style={{ background: C.surfaceMuted, color: C.text }}>Launching: uploading assets and waiting for Meta to process videos. This can take several minutes. Keep this page open.</div>}
       {toast && <div className="fixed top-5 right-5 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl" style={toast.type === 'success' ? { background: C.greenBg, border: `1px solid ${C.greenBorder}`, color: C.green } : { background: C.redBg, border: `1px solid ${C.redBorder}`, color: C.red }}>{toast.message}</div>}
 
       <AdMediaModal tenantId={tenantId} ad={viewAd} onClose={() => setViewAd(null)} />
