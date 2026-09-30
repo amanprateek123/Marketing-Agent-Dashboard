@@ -10,6 +10,7 @@ import type { CreativeAspectRatio, CreativeImageResolution, CreativeVideoResolut
 import type { CreativeImage, CreativePackage, CustomBriefRun } from '@/types'
 import { RunActions } from '@/components/creative/RunActions'
 import { AdCopyPanel } from '@/components/creative/AdCopyPanel'
+import { CreativeSlotFacts } from '@/components/creative/CreativeSlotFacts'
 import { creativePackageStatus } from '@/lib/utils'
 import { Details } from '@/components/plain/Details'
 import { PLAIN_ERROR, errorDetail, humanise, plainStatus, toneChip } from '@/lib/plain-language'
@@ -683,6 +684,8 @@ export default function CreativeDetailPage({ params }: PageProps) {
       {pipelineRun && (
         <section className="card p-5 mb-6 min-w-0">
           <p className="micro-label mb-1">Made by the creative pipeline</p>
+          {/* Its planned angle / look and who wrote it, when the pipeline reports them. */}
+          <CreativeSlotFacts node={pipelineRun} />
           <RunActions tenantId={tenantId} runId={pipelineRun.run_id} status={pipelineRun.status}
             gates={(pipelineRun.children ?? []).length === 0} onChanged={() => void load()} />
           <AdCopyPanel tenantId={tenantId} runId={pipelineRun.run_id} />

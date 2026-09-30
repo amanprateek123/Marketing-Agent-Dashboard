@@ -626,6 +626,46 @@ const VOCAB = {
     raw: ['Quick version', 'An organic-looking post or meme, made fast.', 'neutral'],
   },
 
+  /** Custom-brief message angle (creativebot api_options.ANGLES) — what the ad leads with. */
+  creativeAngle: {
+    pain_point: ['Pain point', 'Opens with the exact problem your audience feels right now.', 'neutral'],
+    bold_claim: ['Bold claim', 'Leads with a specific, provable promise.', 'neutral'],
+    price_led: ['Price-led', 'Leads with the price itself as the hook.', 'neutral'],
+    social_proof: ['Social proof', 'Opens with a real customer result.', 'neutral'],
+    curiosity: ['Curiosity', 'Teases something the viewer needs to know.', 'neutral'],
+    before_after: ['Before / after', 'Shows a transformation over time.', 'neutral'],
+    urgency: ['Urgency', 'Leads with a real deadline or limited slots.', 'neutral'],
+  },
+
+  /** Custom-brief "look" (raw visual direction) — what the quick version looks like. */
+  creativeLook: {
+    notes_app_screenshot: ['Notes-app screenshot', 'Looks like a note someone typed on their phone.', 'neutral'],
+    text_over_photo_meme: ['Meme over a photo', 'A photo with one bold line of text on it.', 'neutral'],
+    candid_photo_one_caption: ['Candid photo, one caption', 'An everyday photo with a single short caption.', 'neutral'],
+    zero_text_photo: ['Photo, no text', 'Just a photo — the words live in the post, not the picture.', 'neutral'],
+    chat_screenshot: ['Chat screenshot', 'Looks like a screenshot of a real chat.', 'neutral'],
+    pov_caption: ['"POV" caption', 'A point-of-view caption over a scene.', 'neutral'],
+    mundane_object_closeup: ['Everyday object close-up', 'A close-up of an ordinary object that tells the story.', 'neutral'],
+    screenshot_of_a_post: ['Screenshot of a post', 'Looks like a screenshot of someone else’s post.', 'neutral'],
+  },
+
+  /** Custom-brief opening hook — how the first line grabs attention. */
+  hookType: {
+    question: ['A question', 'Opens by asking the viewer something.', 'neutral'],
+    statistic: ['A number', 'Opens with a striking figure.', 'neutral'],
+    story: ['A story', 'Opens with a short personal story.', 'neutral'],
+    problem: ['A problem', 'Opens by naming a problem.', 'neutral'],
+    promise: ['A promise', 'Opens with what the viewer will get.', 'neutral'],
+    contrast: ['A contrast', 'Opens by setting two things side by side.', 'neutral'],
+    fear: ['A worry', 'Opens on something the viewer is afraid of.', 'neutral'],
+  },
+
+  /** Who wrote a creative's brief — Foundry's authoring agent, or the pipeline's own fallback. */
+  authoringEngine: {
+    foundry: ['Written by Foundry', 'Foundry’s writing agent wrote this ad’s brief.', 'info'],
+    native: ['Written by backup writer', 'Foundry did not write this one, so the pipeline’s own backup writer did.', 'neutral'],
+  },
+
   /** Custom-brief job type — what the creative team is asked to do. */
   briefMethod: {
     create: ['Make ads', 'Write briefs and make finished ads.', 'neutral'],
