@@ -121,6 +121,28 @@ export interface CustomBriefImageRef {
   upload_id?: string
 }
 
+/**
+ * One creative's place in a batch — the per-creative slot plan (SLOT-CONTRACT.md, 2026-09-30).
+ *
+ * Explicit fields win verbatim on the pipeline side; anything omitted is filled by its own rules
+ * (angles cycle, raw looks spread, languages round-robin). `angle` is a `value` from
+ * `CustomBriefOptions.angles`; `visual_direction` (the "look") is one of
+ * `CustomBriefOptions.raw_visual_directions` for a quick (raw) creative.
+ */
+export interface CustomBriefSlot {
+  /** 1-based position in the batch. */
+  slot: number
+  track?: CustomBriefTrack
+  language?: string
+  angle?: string
+  hook_type?: string
+  visual_direction?: string
+  hypothesis_id?: number
+  hypothesis_kind?: 'proven' | 'variant' | 'seed'
+  hypothesis_statement?: string
+  note?: string
+}
+
 export interface StartCustomBriefBody {
   method: CustomBriefMethod
   prompt: string
@@ -153,7 +175,13 @@ export interface StartCustomBriefBody {
   format?: string
   /** Multi-select formats; supersedes the single `format`. */
   formats?: string[]
+  /** The legacy unordered pick. Still sent so an older pipeline without `slots` behaves as before. */
   angles?: string[]
+  /**
+   * The explicit per-creative plan for a batch, one entry per creative in order. Sent when more than
+   * one creative is asked for; the pipeline authors creative N exactly as `slots[N-1]` says.
+   */
+  slots?: CustomBriefSlot[]
   image_refs?: CustomBriefImageRef[]
   /** Required whenever `image_refs` is set — the pipeline has no follow-up turn to ask in. */
   image_direction?: string
@@ -211,6 +239,20 @@ export interface CustomBriefRunNode {
   heartbeat_at?: string | null
   updated_at?: string | null
   artifacts?: CustomBriefArtifacts
+  /*
+   * What this creative was planned to be, and who wrote it (SLOT-CONTRACT.md "Where it comes back").
+   * All optional: runs started before the slot plan existed carry none of them.
+   */
+  /** 1-based position in the batch. */
+  slot?: number | null
+  angle?: string | null
+  hook_type?: string | null
+  /** The "look" — a raw visual direction or a polished treatment slug. */
+  visual_direction?: string | null
+  /** The brain hypothesis this creative tests. An internal id: never shown, only kept for Details. */
+  hypothesis_id?: number | null
+  /** 'foundry' = Foundry's writing agent; 'native' = the pipeline's own backup writer. */
+  authoring_engine?: string | null
 }
 
 export interface CustomBriefRun extends CustomBriefRunNode {
