@@ -702,6 +702,7 @@ export interface AdSetConfig {
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed' | 'carousel'
   placementPreset?: PlacementPreset
+  imagePlacementOverrides?: Partial<Record<'feed' | 'vertical' | 'landscape' | 'other', '4:5' | '9:16' | '1:1' | '16:9'>>
   ads?: number[]
 }
 
@@ -1106,6 +1107,7 @@ export interface ManualAdSetInput {
   optimizationGoal?: string
   creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
   placementPreset?: PlacementPreset
+  imagePlacementOverrides?: Partial<Record<'feed' | 'vertical' | 'landscape' | 'other', '4:5' | '9:16' | '1:1' | '16:9'>>
   /** Which copy-variant indices this ad set ships as ads. Omit/empty = all variants (default, unchanged behavior). Every variant must be covered by at least one ad set across the campaign. */
   ads?: number[]
 }

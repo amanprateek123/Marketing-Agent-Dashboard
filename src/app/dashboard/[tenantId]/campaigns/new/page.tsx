@@ -31,7 +31,7 @@ const OBJECTIVE_LABELS: Record<string, string> = {
 }
 
 function emptyAdSet(name = ''): ManualAdSetInput {
-  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image', placementPreset: 'vertical' }
+  return { name, budgetPercent: 100, audienceType: 'custom', ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], optimizationGoal: 'OFFSITE_CONVERSIONS', creativeFormat: 'image', placementPreset: 'everywhere' }
 }
 function emptyCopy(): ManualCopyVariant {
   return { primaryText: '', headline: '', cta: 'LEARN_MORE' }
@@ -229,6 +229,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
             interests: (a.interests ?? []).map(id => ({ id, name: id })),
             optimizationGoal: a.optimizationGoal,
             creativeFormat: a.creativeFormat === 'carousel' ? 'both' : a.creativeFormat,
+            placementPreset: a.placementPreset ?? 'vertical',
+            imagePlacementOverrides: a.imagePlacementOverrides,
             ads: a.ads,
           })))
 
@@ -642,10 +644,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 <CreativeEditor
                   tenantId={tenantId}
                   packageId={editCreativePackageId}
-                  // Ad sets ship Stories/Reels-only unless publisherPlatforms is
-                  // overridden, which this form doesn't expose — so the "ships"
-                  // badge assumes vertical, matching what launch actually does.
-                  verticalPlacements
+                  verticalPlacements={adSets.every(adSet => (adSet.placementPreset ?? 'vertical') === 'vertical')}
                 />
               ) : (
                 <div className="rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm" style={{ background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--info)' }}>
@@ -1058,6 +1057,39 @@ function AdSetCard({
               ))}
             </select>
           </label>
+
+          {['image', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
+            <details className="mb-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+              <summary className="cursor-pointer text-xs font-semibold">Image sizes · {Object.keys(adSet.imagePlacementOverrides ?? {}).length ? 'Custom mapping' : 'Automatic mapping'}</summary>
+              <p className="text-xs mt-2 mb-3" style={{ color: 'var(--ink-3)' }}>The tool chooses a size for each placement group. Override it below for every image creative in this ad set. Missing sizes are prepared at launch. Video and carousel sizing are separate.</p>
+              {([
+                ['vertical', 'Stories and Reels', '9:16'],
+                ['feed', 'Facebook and Instagram feeds', '4:5'],
+                ['landscape', 'Facebook right column, search and in-stream', '16:9'],
+                ['other', 'Other selected placements', '1:1'],
+              ] as const).filter(([group]) => group === 'vertical' ||
+                ((adSet.placementPreset ?? 'vertical') !== 'vertical' && group === 'feed') ||
+                adSet.placementPreset === 'everywhere').map(([group, label, ratio]) => (
+                <label key={group} className="block mb-2 text-xs">
+                  <span className="block mb-1">{label}</span>
+                  <select className="input" value={adSet.imagePlacementOverrides?.[group] ?? ''} onChange={event => {
+                    const next = { ...adSet.imagePlacementOverrides }
+                    const value = event.target.value
+                    if (value) next[group] = value as '4:5' | '9:16' | '1:1' | '16:9'
+                    else delete next[group]
+                    onChange({ imagePlacementOverrides: next })
+                  }}>
+                    <option value="">Automatic ({ratio}{group === 'feed' ? ', or 1:1' : ''})</option>
+                    {['4:5', '9:16', '1:1', '16:9'].map(size => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
+              ))}
+              {Object.keys(adSet.imagePlacementOverrides ?? {}).length > 0 && <>
+                <p className="text-xs mb-2" style={{ color: 'var(--ink-3)' }}>A different ratio may be cropped by the placement. Check the ad preview before activating.</p>
+                <button type="button" className="text-xs underline" onClick={() => onChange({ imagePlacementOverrides: {} })}>Reset to automatic</button>
+              </>}
+            </details>
+          )}
 
           {needsAudience && (
             <label className="block mb-3">
