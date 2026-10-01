@@ -1076,7 +1076,7 @@ function AdSetCard({
       )}
 
       {['video', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
-        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Video formats default to Stories and Reels, using the 9:16 video when available. You can change Placements above; videos currently use one size across the selected placements and may be cropped.</p>
+        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Videos use one size across the selected placements and may be cropped. For vertical video, you can select Stories and Reels above; that setting prefers the 9:16 video when available.</p>
       )}
 
       {showTargeting && (
@@ -1280,14 +1280,14 @@ function AdSetCard({
           <span className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--ink-3)' }}>Creative format</span>
           <select value={adSet.creativeFormat ?? 'image'} onChange={e => {
             const creativeFormat = e.target.value as ManualAdSetInput['creativeFormat']
-            onChange({ creativeFormat, placementPreset: creativeFormat === 'image' ? 'everywhere' : 'vertical' })
+            onChange({ creativeFormat })
           }} className="input">
             <option value="image">Image (all variants)</option>
             <option value="video">Video (variant 1 only)</option>
             <option value="both">Both</option>
             <option value="mixed">Mixed (splits into video + image ad sets)</option>
           </select>
-          <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>Changing format resets Placements: Everywhere for images, Stories and Reels for video formats. Review the selection above.</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>Changing format keeps your selected placements. Review Placements above before launching.</p>
         </label>
       </div>
 
