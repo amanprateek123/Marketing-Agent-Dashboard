@@ -10,6 +10,8 @@ import { getCompany, listCreativePackages, generateProductCreative, getCreativeL
 import { CustomBriefProgress } from '@/components/creative/CustomBriefProgress'
 import { ResearchFromPdf } from '@/components/creative/ResearchFromPdf'
 import { ImageDirectionModal } from '@/components/creative/ImageDirectionModal'
+import { SlotPlanEditor } from '@/components/creative/SlotPlanEditor'
+import { allowedAngles, planSlots, resolveCount, toSlotBody, type SlotOverride } from '@/lib/creative-slots'
 import type { CustomBriefOptions, CustomBriefMethod, CustomBriefTrack, CustomBriefImageRef,
   AddCustomBriefOfferingResult } from '@/types'
 import type { Company, CreativeImage, CreativePackage } from '@/types'
@@ -214,6 +216,10 @@ export default function CreativesPage({ params }: PageProps) {
   // left unpicked means "the pipeline decides", which is its normal behaviour.
   const [cbFormats, setCbFormats] = useState<string[]>([])
   const [cbAngles, setCbAngles] = useState<string[]>([])
+  // Per-creative changes the operator made to the suggested plan, keyed by 1-based slot. Anything
+  // not here follows the suggestion (the Angles pick above, cycled), so changing the picks still
+  // re-flows every row the operator has not touched.
+  const [cbSlotOverrides, setCbSlotOverrides] = useState<Record<number, SlotOverride>>({})
   const [cbLanguages, setCbLanguages] = useState<string[]>([])
   // Free write-in, for a language that isn't on the served list.
   const [cbLanguageWriteIn, setCbLanguageWriteIn] = useState('')
@@ -266,6 +272,27 @@ export default function CreativesPage({ params }: PageProps) {
     ...cbLanguages,
     ...cbLanguageWriteIn.split(',').map(s => s.trim()).filter(Boolean),
   ]
+  // The per-creative plan (SLOT-CONTRACT.md). Only for a batch of creatives: one creative has
+  // nothing to plan across, and research makes ideas, not creatives.
+  const cbCountN = resolveCount(cbCount, cbOptions?.count)
+  const cbStandardAngles = (cbOptions?.angles ?? []).map(a => a.value)
+  // Only quick (raw) creatives have a served list of looks; a polished look is the author's call.
+  const cbLooks = cbTrack === 'raw' ? (cbOptions?.raw_visual_directions ?? []) : []
+  const cbPlan = cbMethod === 'create' && cbCountN > 1 && cbStandardAngles.length
+    ? planSlots({
+        count: cbCountN,
+        picked: cbAngles,
+        standard: cbStandardAngles,
+        track: cbTrack,
+        languages: cbSelectedLanguages,
+        looks: cbLooks,
+        overrides: cbSlotOverrides,
+      })
+    : []
+  const cbPlanAngles = (cbOptions?.angles ?? [])
+    .filter(a => allowedAngles(cbStandardAngles, cbTrack).includes(a.value))
+    .map(a => ({ value: a.value, label: a.label }))
+
   // What the count field produces for the selected method — creatives fan out into one run each,
   // research runs once and adds that many ideas to the board. Served by the pipeline so the two
   // sides can't drift.
@@ -525,7 +552,10 @@ export default function CreativesPage({ params }: PageProps) {
         // Several languages SPLIT the run round-robin rather than multiplying it.
         languages: cbSelectedLanguages.length ? cbSelectedLanguages : undefined,
         formats: cbFormats.length ? cbFormats : undefined,
+        // Still sent: an older pipeline without `slots` keeps behaving exactly as before.
         angles: cbAngles.length ? cbAngles : undefined,
+        // The explicit per-creative plan; the pipeline makes creative N exactly as row N says.
+        slots: cbPlan.length ? toSlotBody(cbPlan, cbTrack) : undefined,
         image_refs: imageRefs,
         image_direction: imageRefs ? cbImageDirection : undefined,
       })
@@ -534,6 +564,7 @@ export default function CreativesPage({ params }: PageProps) {
       setCbPrompt('')
       setCbFiles([])
       setCbImageDirection('')
+      setCbSlotOverrides({})
     } catch (e) {
       {
         const plain = "We couldn't start making your ads. Try again."
@@ -1109,6 +1140,18 @@ export default function CreativesPage({ params }: PageProps) {
                   )
                 })}
               </div>
+
+              {/* Per-creative plan, pre-filled from the picks above; each row is sent as that
+                  creative's slot. */}
+              <SlotPlanEditor
+                rows={cbPlan}
+                angles={cbPlanAngles}
+                looks={cbLooks}
+                edited={cbPlan.some(r => cbSlotOverrides[r.slot] !== undefined)}
+                onChange={(slot, change) =>
+                  setCbSlotOverrides(o => ({ ...o, [slot]: { ...o[slot], ...change } }))}
+                onReset={() => setCbSlotOverrides({})}
+              />
 
               {/* Reference image. The direction is asked in a popup the moment a file is chosen —
                   Slack asks it with buttons on a follow-up message, but this form has no second
