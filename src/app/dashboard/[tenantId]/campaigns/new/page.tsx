@@ -431,9 +431,21 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                 // grouping: different variantIndex = fully separate ads), so
                 // every selected video survives as its own variant, not just
                 // the first one.
-                videos: gallerySelection
-                  .map((a, i) => (a.assetType === 'video' ? { variantIndex: i, videoUrl: a.assetUrl, videoThumbnailUrl: '', aspectRatio: toManualAspectRatio(a.aspectRatio) } : null))
-                  .filter(Boolean) as { variantIndex: number; videoUrl: string; videoThumbnailUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }[],
+                // Primary PLUS every other uploaded size of each video, all under
+                // the same variantIndex, so launch maps each size to its placements.
+                videos: gallerySelection.flatMap((a, i) =>
+                  a.assetType !== 'video'
+                    ? []
+                    : [
+                        { variantIndex: i, videoUrl: a.assetUrl, videoThumbnailUrl: '', aspectRatio: toManualAspectRatio(a.aspectRatio) },
+                        ...a.siblingSizes.map(sib => ({
+                          variantIndex: i,
+                          videoUrl: sib.imageUrl,
+                          videoThumbnailUrl: '',
+                          aspectRatio: toManualAspectRatio(sib.aspectRatio),
+                        })),
+                      ],
+                ) as { variantIndex: number; videoUrl: string; videoThumbnailUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }[],
               },
             }
           : {
@@ -1045,12 +1057,11 @@ function AdSetCard({
       {['image', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
         <details className="mb-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
           <summary className="cursor-pointer text-xs font-semibold">Image sizes · {Object.keys(adSet.imagePlacementOverrides ?? {}).length ? 'Custom mapping' : 'Automatic mapping'}</summary>
-          <p className="text-xs mt-2 mb-3" style={{ color: 'var(--ink-3)' }}>The tool chooses a size for each placement group. Override it below for every image creative in this ad set. Missing sizes are prepared at launch. Video and carousel sizing are separate.</p>
+          <p className="text-xs mt-2 mb-3" style={{ color: 'var(--ink-3)' }}>Placements are grouped the way Ads Manager groups them, and the tool chooses a size for each group. Override it below for every image creative in this ad set. Missing sizes are prepared at launch. Video and carousel sizing are separate.</p>
           {([
-            ['vertical', 'Stories and Reels', '9:16'],
-            ['feed', 'Facebook and Instagram feeds', '4:5'],
-            ['landscape', 'Facebook right column, search and in-stream', '16:9'],
-            ['other', 'Other selected placements', '1:1'],
+            ['vertical', 'Stories, Reels, Facebook in-stream and Instagram search', '9:16'],
+            ['feed', 'Feeds and all other placements', '4:5'],
+            ['other', 'Facebook right column and search', '1:1'],
           ] as const).filter(([group]) => group === 'vertical' ||
             ((adSet.placementPreset ?? 'vertical') !== 'vertical' && group === 'feed') ||
             adSet.placementPreset === 'everywhere').map(([group, label, ratio]) => (
@@ -1076,7 +1087,7 @@ function AdSetCard({
       )}
 
       {['video', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
-        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Videos use one size across the selected placements and may be cropped. For vertical video, you can select Stories and Reels above; that setting prefers the 9:16 video when available.</p>
+        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Videos are mapped from the sizes you upload: 9:16 for Stories, Reels, in-stream and Instagram search, 4:5 or 1:1 for feeds and everything else. Each video is measured at launch, and a missing size uses the closest one you uploaded, so a single video still launches everywhere.</p>
       )}
 
       {showTargeting && (
@@ -1920,6 +1931,7 @@ interface GalleryPickedAsset {
    * and 16:9 alongside it — those sizes were already generated and stored,
    * then silently left behind when the campaign was built.
    */
+  /** Other uploaded sizes; for a video, `imageUrl` holds that size's video URL. */
   siblingSizes: Array<{ aspectRatio?: string; imageUrl: string }>
   assetType: 'image' | 'video'
   assetUrl: string
@@ -2032,7 +2044,13 @@ function GalleryPicker({
         // Every OTHER stored size for this variant, keyed off the source
         // package we already fetched above for the headline. Excludes the
         // asset's own URL so it isn't emitted twice.
-        const siblingSizes = (pkg?.images ?? [])
+        const siblingSizes = a.assetType === 'video'
+          // Every other uploaded size of this video. Untagged ones are kept:
+          // launch measures each video, so they still map to the right placements.
+          ? (pkg?.videos ?? [])
+              .filter(v => (v.variantIndex ?? 0) === a.variantIndex && !!v.videoUrl && v.videoUrl !== a.assetUrl)
+              .map(v => ({ aspectRatio: v.aspectRatio, imageUrl: v.videoUrl as string }))
+          : (pkg?.images ?? [])
           .filter(
             (im) =>
               (im.variantIndex ?? 0) === a.variantIndex &&
