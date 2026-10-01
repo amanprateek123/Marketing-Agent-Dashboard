@@ -39,6 +39,7 @@ export interface Product {
   metaAppStoreUrlIos?: string     // App Store URL — used when an ad set's userOs targets iOS only
   metaAppStoreUrlAndroid?: string // Play Store URL — used when an ad set's userOs targets Android only
   pageId?: string                // Per-product Facebook Page override (blank = use company default) — which Page this product's ads post as
+  offeringSlug?: string          // The Brain product this is linked to (set by the product sync, or by hand)
   conversionValue?: number
   // Decimal 0-1 (e.g. 0.97 = 97% margin after COGS/fulfilment/fees). Drives
   // breakeven ROAS = 1 / contributionMargin in the auditor's loss detection.

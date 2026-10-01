@@ -265,6 +265,10 @@ function ConversionTracking({ product, onChange, metaPages }: { product: Product
             <TextInput value={product.pageId || ''} onChange={v => onChange({ ...product, pageId: v || undefined })} placeholder="No Pages found yet — paste the Page number" mono />
           )}
         </div>
+        <div>
+          <FieldLabel>Linked Brain product <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(filled in when you save; change only to link a different one)</span></FieldLabel>
+          <TextInput value={product.offeringSlug || ''} onChange={v => onChange({ ...product, offeringSlug: v.trim() || undefined })} placeholder="Linked automatically by name" mono />
+        </div>
       </div>
       {mode === 'app_event' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -424,6 +428,41 @@ function LandingPageTestSection({ tenantId, productName, defaultControlUrl }: { 
   )
 }
 
+/** What POST /companies/:tenantId/product-sync answers. */
+interface ProductSyncResult {
+  tenantId: string
+  skipped?: string
+  linked: Array<{ product: string; slug: string; how: string; recorded: string[]; warnings: string[] }>
+  registered: string[]
+  unlinked: Array<{ product: string; reason: string }>
+  errors: string[]
+}
+
+const RECORDED_LABEL: Record<string, string> = {
+  page_id: 'Page', instagram_actor_id: 'Instagram', pixel_id: 'pixel', custom_conversion_id: 'sale tracking',
+}
+
+function ProductSyncSummary({ result }: { result: ProductSyncResult }) {
+  return (
+    <div className="mt-3 space-y-1.5 text-sm" style={{ color: 'var(--ink-2)' }}>
+      {result.linked.map(l => (
+        <p key={l.product} className="break-words">
+          <span className="font-medium">{l.product}</span>
+          {result.registered.includes(l.slug) ? ' — added to the Brain' : ' — linked'}
+          {l.recorded.length > 0 ? `; ${l.recorded.map(k => RECORDED_LABEL[k] ?? k).join(', ')} updated` : '; already up to date'}
+          {l.warnings.length > 0 && <span style={{ color: 'var(--warn, var(--ink-3))' }}> ({l.warnings.join('; ')})</span>}
+        </p>
+      ))}
+      {result.unlinked.map(u => (
+        <p key={u.product} className="break-words" style={{ color: 'var(--ink-3)' }}>
+          <span className="font-medium">{u.product}</span> — not linked: {u.reason}
+        </p>
+      ))}
+      {result.errors.map(e => <p key={e} className="break-words" style={{ color: 'var(--danger, var(--ink-3))' }}>{e}</p>)}
+    </div>
+  )
+}
+
 function ProductCard({ product, index, onChange, onRemove, tenantId, metaPages }: { product: Product; index: number; onChange: (p: Product) => void; onRemove: () => void; tenantId: string; metaPages: MetaPage[] }) {
   const [open, setOpen] = useState(index === 0)
   const isActive = product.active !== false
@@ -571,6 +610,8 @@ export default function SettingsPage({ params }: PageProps) {
   const [infoState, setInfoState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [brandState, setBrandState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [productsState, setProductsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [brainSyncState, setBrainSyncState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [brainSync, setBrainSync] = useState<ProductSyncResult | null>(null)
   const [budgetState, setBudgetState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [marketingState, setMarketingState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [pipelineState, setPipelineState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -777,6 +818,21 @@ export default function SettingsPage({ params }: PageProps) {
     finally { setTimeout(() => setState('idle'), 3000) }
   }
 
+  // Carry the product list (and each product's Page) to the Brain now, and show what happened.
+  async function syncProductsToBrain() {
+    setBrainSyncState('loading')
+    try {
+      const res = await fetch(`${API_BASE}/companies/${tenantId}/product-sync`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = (await res.json()) as ProductSyncResult
+      setBrainSync(result)
+      setBrainSyncState('success')
+      showToast(result.skipped ? `Not synced: ${result.skipped}` : 'Products sent to the Brain.', result.skipped ? 'error' : 'success')
+      fetchSettings()
+    } catch { setBrainSyncState('error'); showToast("We couldn't reach the Brain. Try again.", 'error') }
+    finally { setTimeout(() => setBrainSyncState('idle'), 3000) }
+  }
+
   async function handleRegen() {
     setRegenState('loading')
     try {
@@ -971,7 +1027,8 @@ export default function SettingsPage({ params }: PageProps) {
               {products.map((p, i) => <ProductCard key={i} product={p} index={i} tenantId={tenantId} metaPages={metaPages} onChange={u => setProducts(ps => ps.map((x, j) => j === i ? u : x))} onRemove={() => setProducts(ps => ps.filter((_, j) => j !== i))} />)}
             </div>
           )}
-          {products.length > 0 && <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save products" /></div>}
+          {products.length > 0 && <div className="mt-5 pt-4 flex flex-wrap items-center gap-2" style={{ borderTop: '1px solid var(--hairline-light)' }}><SaveBtn state={productsState} onClick={() => { if (products.some(p => !p.name.trim())) { showToast('All products need a name', 'error'); return }; saveSection({ products }, setProductsState) }} label="Save products" /><SaveBtn state={brainSyncState} onClick={syncProductsToBrain} label="Sync to Brain" /></div>}
+          {brainSync && !brainSync.skipped && <ProductSyncSummary result={brainSync} />}
         </SectionCard>
 
         {/* ── Budget & Rules ── */}
