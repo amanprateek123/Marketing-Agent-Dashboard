@@ -266,8 +266,8 @@ function ConversionTracking({ product, onChange, metaPages }: { product: Product
           )}
         </div>
         <div>
-          <FieldLabel>Linked Brain product <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(filled in when you save; change only to link a different one)</span></FieldLabel>
-          <TextInput value={product.offeringSlug || ''} onChange={v => onChange({ ...product, offeringSlug: v.trim() || undefined })} placeholder="Linked automatically by name" mono />
+          <FieldLabel>Linked Brain product <span className="font-normal normal-case" style={{ color: 'var(--ink-3)' }}>(an existing Brain slug links it; a new one, e.g. rudrabhishek_pooja, adds it to the Brain once it has a landing page)</span></FieldLabel>
+          <TextInput value={product.offeringSlug || ''} onChange={v => onChange({ ...product, offeringSlug: v.trim() || undefined })} placeholder="Linked by exact name, else left unlinked" mono />
         </div>
       </div>
       {mode === 'app_event' && (
