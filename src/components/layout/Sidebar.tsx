@@ -8,6 +8,7 @@ import {
   BellRing,
   BookOpen,
   FileText,
+  Gauge,
   Brain,
   BrainCircuit,
   Home,
@@ -131,6 +132,12 @@ function navGroups(
           icon: BrainCircuit,
           badge: brainLocked ? undefined : openGateCount,
           locked: brainLocked,
+        },
+        {
+          href: `${root}/performance-marketeer`,
+          label: 'Performance Marketeer',
+          hint: 'Meta spend vs real orders: what pays back and why',
+          icon: Gauge,
         },
         {
           href: `${root}/reports`,
