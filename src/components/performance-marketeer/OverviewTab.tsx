@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChevronRight, LineChart, TriangleAlert, X } from 'lucide-react'
-import { PM_QUEUE_MAX, getPmChanges, getPmDecompose, getPmEntities, getPmSummary, getPmTrend, productLabel } from '@/lib/performance-marketeer-api'
+import { PM_QUEUE_MAX, getPmChanges, getPmDecompose, getPmEntities, getPmSummary, getPmTargets, getPmTrend, productLabel, setPmTarget } from '@/lib/performance-marketeer-api'
 import type { PmDecomposeResponse, PmEntityRow, PmQuery } from '@/types/performance-marketeer'
 import {
   Caveat,
@@ -21,6 +21,7 @@ import {
   compare,
   fmt,
   lowConfProps,
+  serverMessage,
   useLoad,
   type SortState,
 } from './shared'
@@ -454,6 +455,7 @@ function PanelBody({ tenantId, q, row, onAnalyse }: { tenantId: string; q: PmQue
           </div>
         )}
       </div>
+      {row.level === 'campaign' && <PurchaseTarget tenantId={tenantId} campaignId={row.id} />}
       <div className="grid grid-cols-2 gap-2.5">
         <KpiTile label="Spend" source="meta" value={fmt.inr(m.spend)} />
         <KpiTile label={<T k="roas">ROAS</T>} source="fp" value={fmt.roas(m.firstPartyRoas)} muted={row.target.confidence === 'low'} />
@@ -491,6 +493,76 @@ function PanelBody({ tenantId, q, row, onAnalyse }: { tenantId: string; q: PmQue
         )}
       </SectionCard>
     </div>
+  )
+}
+
+/** The owner's lifetime purchase target; the AI analyst plans towards it. */
+function PurchaseTarget({ tenantId, campaignId }: { tenantId: string; campaignId: string }) {
+  const list = useLoad(`targets${tenantId}`, () => getPmTargets(tenantId))
+  const current = list.data?.find((x) => x.campaignId === campaignId)?.targetPurchases ?? null
+  const [draft, setDraft] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const value = draft ?? (current == null ? '' : String(current))
+
+  async function save(next: number | null) {
+    setSaving(true)
+    setMsg('')
+    try {
+      await setPmTarget(tenantId, campaignId, next)
+      setDraft(null)
+      list.reload()
+      setMsg(next == null ? 'Target removed.' : 'Target saved.')
+    } catch (err) {
+      setMsg(`Couldn’t save the target: ${serverMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const n = Number(value)
+    if (!Number.isInteger(n) || n < 1 || n > 1_000_000) return setMsg('Enter a whole number from 1 to 1,000,000.')
+    void save(n)
+  }
+
+  return (
+    <SectionCard title="Purchase target" description="Total first-party purchases you want from this campaign over its lifetime. The AI analyst plans towards it and can raise the budget up to 2× in a day to get there. Change it any time.">
+      {list.error ? (
+        <LoadError message={list.error} onRetry={list.reload} />
+      ) : (
+        <form className="flex flex-wrap items-end gap-2" onSubmit={submit}>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            Lifetime purchases
+            <input
+              className="input !min-h-[38px] w-[160px] font-normal tabular-nums"
+              type="number"
+              inputMode="numeric"
+              name="targetPurchases"
+              min={1}
+              max={1_000_000}
+              step={1}
+              autoComplete="off"
+              placeholder="e.g. 500"
+              disabled={!list.data}
+              value={value}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="btn btn-primary !min-h-[38px] !py-2" disabled={saving || !list.data}>
+            {saving ? 'Saving…' : current == null ? 'Set Target' : 'Update Target'}
+          </button>
+          {current != null && (
+            <button type="button" className="btn btn-ghost !min-h-[38px] !py-2" disabled={saving} onClick={() => void save(null)}>
+              Remove
+            </button>
+          )}
+        </form>
+      )}
+      <p aria-live="polite" className="explain mt-2 empty:hidden">
+        {msg}
+      </p>
+    </SectionCard>
   )
 }
 

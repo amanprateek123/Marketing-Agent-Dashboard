@@ -17,6 +17,7 @@ import type {
   PmAgentQueue,
   PmAgentRollup,
   PmAgentRun,
+  PmCampaignTarget,
   PmLesson,
   PmLessonProposal,
   PmLessonScope,
@@ -141,6 +142,17 @@ export const cancelPmAgentQueued = (t: string, campaignId: string, date: string)
   PM_MOCK
     ? mock((f) => f.fixtureCancelQueued(campaignId, date))
     : apiFetch<PmAgentCancelResult>(`/performance-marketeer/${encodeURIComponent(t)}/agent/queue/${encodeURIComponent(campaignId)}/cancel`, { method: 'POST', body: JSON.stringify({ date }) })
+
+// ── Lifetime purchase targets (any logged-in user; the AI analyst plans towards them) ──
+
+export const getPmTargets = (t: string) =>
+  PM_MOCK ? mock((f) => f.fixtureTargets()) : get<PmCampaignTarget[]>(t, 'agent/targets', {})
+
+/** null removes the target. */
+export const setPmTarget = (t: string, campaignId: string, targetPurchases: number | null) =>
+  PM_MOCK
+    ? mock((f) => f.fixtureSetTarget(campaignId, targetPurchases))
+    : apiFetch<PmCampaignTarget>(`/performance-marketeer/${encodeURIComponent(t)}/agent/targets/${encodeURIComponent(campaignId)}`, { method: 'PUT', body: JSON.stringify({ targetPurchases }) })
 
 // ── Lessons (the weekly curator proposes; you approve, edit, retire) ──
 

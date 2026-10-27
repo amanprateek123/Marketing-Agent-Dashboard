@@ -9,6 +9,7 @@
  */
 
 import type {
+  PmCampaignTarget,
   PmAgentAction,
   PmAgentCancelResult,
   PmAgentEnqueueRequest,
@@ -1094,6 +1095,20 @@ export function fixtureCancelQueued(campaignId: string, date: string): PmAgentCa
   if (it.status !== 'queued') throw new Error(`409 {"message":"This analysis is ${it.status === 'running' ? 'already running' : 'already finished'} and can’t be cancelled"}`)
   items.splice(items.indexOf(it), 1)
   return { campaignId, date, cancelled: 'deleted' }
+}
+
+// ── Purchase targets (agent/targets) ──
+
+const targets = new Map<string, PmCampaignTarget>()
+
+export function fixtureTargets(): PmCampaignTarget[] {
+  return [...targets.values()].filter((x) => x.targetPurchases != null)
+}
+
+export function fixtureSetTarget(campaignId: string, targetPurchases: number | null): PmCampaignTarget {
+  const t = { campaignId, targetPurchases, updatedBy: 'you', updatedAt: new Date().toISOString() }
+  targets.set(campaignId, t)
+  return t
 }
 
 // ── Lessons (lessons/*) — mutable in-memory state so approve/edit/retire work ──

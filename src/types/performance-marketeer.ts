@@ -472,6 +472,14 @@ export interface PmFinishedItem {
 }
 
 /** GET /agent/queue?date= — queued/running span all dates; finished is only `date`. */
+/** Owner's lifetime purchase target for a campaign (first-party orders since launch). */
+export interface PmCampaignTarget {
+  campaignId: string
+  targetPurchases: number | null
+  updatedBy: string
+  updatedAt: string | null
+}
+
 export interface PmAgentQueue {
   date: string;
   /** false = this server doesn't process the queue. */
