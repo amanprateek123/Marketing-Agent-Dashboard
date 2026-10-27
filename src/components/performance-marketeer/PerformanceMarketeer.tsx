@@ -10,6 +10,8 @@ import { OverviewTab } from './OverviewTab'
 import { ReportTab } from './ReportTab'
 import { FunnelTab } from './FunnelTab'
 import { BudgetGeoTab, CreativesTab, DataChecksTab } from './AnalysisTabs'
+import { AgentTab } from './AgentTab'
+import { LessonsTab } from './LessonsTab'
 import { fmt } from './shared'
 
 export type { PmView }
@@ -65,59 +67,61 @@ export function PerformanceMarketeer({ tenantId, initial, yesterday }: { tenantI
         </div>
       </header>
 
-      <form className="card flex flex-wrap items-end gap-3 px-4 py-3.5 sm:px-5" onSubmit={(e) => e.preventDefault()} aria-label="Filters">
-        <fieldset className="flex min-w-0 flex-col gap-1">
-          <legend className="mb-1 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>Date range (IST)</legend>
-          <div className="flex flex-wrap gap-1.5" role="group">
-            {PRESETS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                aria-pressed={preset === n}
-                className={`btn !min-h-[38px] !px-3 !py-2 ${preset === n ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => {
-                  setCustom(false)
-                  update({ from: addDays(yesterday, -(n - 1)), to: yesterday })
-                }}
-              >
-                Last {n} Days
+      {view.tab !== 'agent' && view.tab !== 'lessons' && (
+        <form className="card flex flex-wrap items-end gap-3 px-4 py-3.5 sm:px-5" onSubmit={(e) => e.preventDefault()} aria-label="Filters">
+          <fieldset className="flex min-w-0 flex-col gap-1">
+            <legend className="mb-1 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>Date range (IST)</legend>
+            <div className="flex flex-wrap gap-1.5" role="group">
+              {PRESETS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  aria-pressed={preset === n}
+                  className={`btn !min-h-[38px] !px-3 !py-2 ${preset === n ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => {
+                    setCustom(false)
+                    update({ from: addDays(yesterday, -(n - 1)), to: yesterday })
+                  }}
+                >
+                  Last {n} Days
+                </button>
+              ))}
+              <button type="button" aria-pressed={preset == null} className={`btn !min-h-[38px] !px-3 !py-2 ${preset == null ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setCustom(true)}>
+                Custom
               </button>
-            ))}
-            <button type="button" aria-pressed={preset == null} className={`btn !min-h-[38px] !px-3 !py-2 ${preset == null ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setCustom(true)}>
-              Custom
-            </button>
-          </div>
-        </fieldset>
-        {preset == null && (
-          <div className="flex flex-wrap gap-2">
-            <DateInput
-              label="From"
-              name="from"
-              value={view.from}
-              min={maxDay(PM_DATA_START, addDays(view.to, -(PM_MAX_SPAN_DAYS - 1)))}
-              max={view.to}
-              onCommit={(v) => update({ from: v })}
-            />
-            <DateInput
-              label="To"
-              name="to"
-              value={view.to}
-              min={view.from}
-              max={minDay(yesterday, addDays(view.from, PM_MAX_SPAN_DAYS - 1))}
-              onCommit={(v) => update({ to: v })}
-            />
-          </div>
-        )}
-        <label className="flex min-w-[180px] flex-col gap-1 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
-          Product
-          <select className="input !min-h-[38px] !py-1.5" name="product" value={view.product} onChange={(e) => update({ product: e.target.value, campaign: '', adset: '', sel: '', ad: '' })}>
-            <option value="">All products</option>
-            {PM_PRODUCTS.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-        </label>
-      </form>
+            </div>
+          </fieldset>
+          {preset == null && (
+            <div className="flex flex-wrap gap-2">
+              <DateInput
+                label="From"
+                name="from"
+                value={view.from}
+                min={maxDay(PM_DATA_START, addDays(view.to, -(PM_MAX_SPAN_DAYS - 1)))}
+                max={view.to}
+                onCommit={(v) => update({ from: v })}
+              />
+              <DateInput
+                label="To"
+                name="to"
+                value={view.to}
+                min={view.from}
+                max={minDay(yesterday, addDays(view.from, PM_MAX_SPAN_DAYS - 1))}
+                onCommit={(v) => update({ to: v })}
+              />
+            </div>
+          )}
+          <label className="flex min-w-[180px] flex-col gap-1 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>
+            Product
+            <select className="input !min-h-[38px] !py-1.5" name="product" value={view.product} onChange={(e) => update({ product: e.target.value, campaign: '', adset: '', sel: '', ad: '' })}>
+              <option value="">All products</option>
+              {PM_PRODUCTS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </label>
+        </form>
+      )}
 
       <Tabs.Root value={view.tab} onValueChange={(t) => update({ tab: t as PmTab })} className="flex min-w-0 flex-col gap-5">
         <Tabs.List aria-label="Analysis views" className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0" style={{ borderBottom: '1px solid var(--hairline)' }}>
@@ -149,6 +153,12 @@ export function PerformanceMarketeer({ tenantId, initial, yesterday }: { tenantI
         </Tabs.Content>
         <Tabs.Content value="checks" className={PANEL}>
           <DataChecksTab tenantId={tenantId} q={q} />
+        </Tabs.Content>
+        <Tabs.Content value="agent" className={PANEL}>
+          <AgentTab tenantId={tenantId} view={view} update={update} />
+        </Tabs.Content>
+        <Tabs.Content value="lessons" className={PANEL}>
+          <LessonsTab tenantId={tenantId} view={view} update={update} />
         </Tabs.Content>
       </Tabs.Root>
     </div>

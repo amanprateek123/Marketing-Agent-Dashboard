@@ -17,10 +17,14 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 }
 
+/** Today in IST — the date an admin-queued AI run is filed under. */
+export function istToday(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now)
+}
+
 /** Yesterday in IST — the last complete day the backend would have. */
 export function istYesterday(now = new Date()): string {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now)
-  return addDays(today, -1)
+  return addDays(istToday(now), -1)
 }
 
 /** A valid, in-bounds date, or null. */

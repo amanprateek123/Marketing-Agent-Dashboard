@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChevronRight, LineChart, TriangleAlert, X } from 'lucide-react'
-import { getPmChanges, getPmDecompose, getPmEntities, getPmSummary, getPmTrend, productLabel } from '@/lib/performance-marketeer-api'
+import { PM_QUEUE_MAX, getPmChanges, getPmDecompose, getPmEntities, getPmSummary, getPmTrend, productLabel } from '@/lib/performance-marketeer-api'
 import type { PmDecomposeResponse, PmEntityRow, PmQuery } from '@/types/performance-marketeer'
 import {
   Caveat,
@@ -25,6 +25,7 @@ import {
   type SortState,
 } from './shared'
 import { TrendChart } from './TrendChart'
+import { AnalyseButton, AnalyseDialog, type AnalyseTarget } from './AnalyseDialog'
 import type { PmView } from './PerformanceMarketeer'
 
 export function OverviewTab({ tenantId, q, view, update }: { tenantId: string; q: PmQuery; view: PmView; update: (p: Partial<PmView>) => void }) {
@@ -177,6 +178,9 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
   const ads = useLoad(`ent-a${qk}${view.adset}`, () => (view.adset ? getPmEntities(tenantId, { ...q, level: 'ad', parentId: view.adset }) : Promise.resolve(null)))
   const current = level === 'campaign' ? campaigns : level === 'adset' ? adsets : ads
   const [sort, setSort] = useState<SortState<SortKey>>({ key: 'spend', dir: 'desc' })
+  // Campaigns ticked for "Analyse selected"; ids that leave the table (filter change) just drop out.
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  const [analyse, setAnalyse] = useState<AnalyseTarget[] | null>(null)
 
   const rows = useMemo(() => [...(current.data?.rows ?? [])].sort((a, b) => compare(sortValue(a, sort.key), sortValue(b, sort.key), sort.dir)), [current.data, sort])
   const campaignName = campaigns.data?.rows.find((r) => r.id === view.campaign)?.name ?? 'Campaign'
@@ -186,6 +190,17 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
   const selId = dot > 0 ? view.sel.slice(dot + 1) : null
   const selRow = [...(campaigns.data?.rows ?? []), ...(adsets.data?.rows ?? []), ...(ads.data?.rows ?? [])].find((r) => r.level === selLevel && r.id === selId) ?? null
   const levelWord = level === 'campaign' ? 'campaigns' : level === 'adset' ? 'ad sets' : 'ads'
+  const pickable = level === 'campaign'
+  const pickedRows = pickable ? rows.filter((r) => picked.has(r.id)) : []
+  const allPicked = rows.length > 0 && rows.slice(0, PM_QUEUE_MAX).every((r) => picked.has(r.id))
+  const toggle = (id: string) =>
+    setPicked((p) => {
+      const n = new Set([...p].filter((x) => rows.some((r) => r.id === x)))
+      if (n.has(id)) n.delete(id)
+      else if (n.size < PM_QUEUE_MAX) n.add(id)
+      return n
+    })
+  const target = (r: PmEntityRow): AnalyseTarget => ({ id: r.id, name: r.name })
 
   // After a drill (or breadcrumb jump), move focus to the breadcrumb so keyboard
   // and screen-reader users land on the new level instead of a removed button.
@@ -234,9 +249,38 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
           <Empty title={`No ${levelWord} with delivery in this range`} hint="Try a longer date range or a different product." />
         ) : (
           <div className={current.loading ? 'opacity-60' : undefined} aria-busy={current.loading}>
+            {pickable && (
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2" role="toolbar" aria-label="AI analysis">
+                <button type="button" className="btn btn-primary !min-h-[38px] !py-2" disabled={!pickedRows.length} onClick={() => setAnalyse(pickedRows.map(target))}>
+                  Analyse Selected ({pickedRows.length})
+                </button>
+                {pickedRows.length > 0 && (
+                  <button type="button" className="btn btn-ghost !min-h-[38px] !py-2" onClick={() => setPicked(new Set())}>
+                    Clear Selection
+                  </button>
+                )}
+                <span className="explain" aria-live="polite">
+                  {pickedRows.length >= PM_QUEUE_MAX ? `Limit reached — up to ${PM_QUEUE_MAX} campaigns per batch.` : `Tick up to ${PM_QUEUE_MAX} campaigns, or use Analyse on one row.`}
+                </span>
+              </div>
+            )}
             <TableWrap label={`${levelWord} performance table`}>
               <thead>
                 <tr>
+                  {pickable && (
+                    <th className="w-10">
+                      <label className="-m-2 flex cursor-pointer p-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          style={{ accentColor: 'var(--accent)' }}
+                          aria-label={rows.length > PM_QUEUE_MAX ? `Select the first ${PM_QUEUE_MAX} campaigns` : 'Select all campaigns'}
+                          checked={allPicked}
+                          onChange={() => setPicked(allPicked ? new Set() : new Set(rows.slice(0, PM_QUEUE_MAX).map((r) => r.id)))}
+                        />
+                      </label>
+                    </th>
+                  )}
                   <SortTh k="name" sort={sort} onSort={setSort} num={false}>Name</SortTh>
                   <SortTh k="spend" sort={sort} onSort={setSort}>Spend <Source s="meta" /></SortTh>
                   <SortTh k="roas" sort={sort} onSort={setSort}><T k="roas">ROAS</T> <Source s="fp" /></SortTh>
@@ -247,7 +291,7 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
                   <SortTh k="frequency" sort={sort} onSort={setSort}><T k="frequency">Avg daily freq.</T> <Source s="meta" /></SortTh>
                   <SortTh k="visitors" sort={sort} onSort={setSort}>Visitors <Source s="site" /></SortTh>
                   <SortTh k="verdict" sort={sort} onSort={setSort} num={false}>Verdict</SortTh>
-                  <th><span className="sr-only">Details</span></th>
+                  <th><span className="sr-only">{pickable ? 'Actions' : 'Details'}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -257,6 +301,21 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
                   const drill = r.level === 'campaign' ? () => go({ campaign: r.id, adset: '', sel: '' }) : r.level === 'adset' ? () => go({ adset: r.id, sel: '' }) : () => update({ sel: `ad.${r.id}` })
                   return (
                     <tr key={r.id}>
+                      {pickable && (
+                        <td className="w-10">
+                          <label className="-m-2 flex cursor-pointer p-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              style={{ accentColor: 'var(--accent)' }}
+                              aria-label={`Select ${r.name} for AI analysis`}
+                              checked={picked.has(r.id)}
+                              disabled={!picked.has(r.id) && pickedRows.length >= PM_QUEUE_MAX}
+                              onChange={() => toggle(r.id)}
+                            />
+                          </label>
+                        </td>
+                      )}
                       <td className="max-w-[300px]">
                         <button type="button" onClick={drill} className="text-left font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-[var(--accent)] break-words" style={{ color: 'var(--accent-strong)' }}>
                           {r.name}
@@ -287,15 +346,18 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
                       <td className="num">{fmt.int(m.siteVisitors)}</td>
                       <td><VerdictChip target={r.target} /></td>
                       <td>
-                        <button
-                          type="button"
-                          className="btn btn-ghost !min-h-[34px] !px-2.5 !py-1.5"
-                          aria-label={`Trend and CPA breakdown for ${r.name}`}
-                          title="Trend and CPA breakdown"
-                          onClick={() => update({ sel: `${r.level}.${r.id}` })}
-                        >
-                          <LineChart size={15} aria-hidden="true" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="btn btn-ghost !min-h-[34px] !px-2.5 !py-1.5"
+                            aria-label={`Trend and CPA breakdown for ${r.name}`}
+                            title="Trend and CPA breakdown"
+                            onClick={() => update({ sel: `${r.level}.${r.id}` })}
+                          >
+                            <LineChart size={15} aria-hidden="true" />
+                          </button>
+                          {pickable && <AnalyseButton compact name={r.name} onClick={() => setAnalyse([target(r)])} />}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -305,7 +367,18 @@ function EntityExplorer({ tenantId, q, view, update }: { tenantId: string; q: Pm
           </div>
         )}
       </div>
-      <EntityPanel tenantId={tenantId} q={q} row={selRow} onClose={() => update({ sel: '' })} />
+      <EntityPanel tenantId={tenantId} q={q} row={selRow} onClose={() => update({ sel: '' })} onAnalyse={(r) => setAnalyse([target(r)])} />
+      <AnalyseDialog
+        key={analyse?.map((c) => c.id).join() ?? ''}
+        tenantId={tenantId}
+        campaigns={analyse}
+        onClose={() => setAnalyse(null)}
+        onOpenAgent={() => {
+          setAnalyse(null)
+          setPicked(new Set())
+          update({ tab: 'agent', day: '', run: '', sel: '' })
+        }}
+      />
     </SectionCard>
   )
 }
@@ -332,7 +405,7 @@ function StatusChip({ status }: { status: string }) {
 
 // ── Side panel: trend + CPA decomposition + recent changes ─────────────────
 
-function EntityPanel({ tenantId, q, row, onClose }: { tenantId: string; q: PmQuery; row: PmEntityRow | null; onClose: () => void }) {
+function EntityPanel({ tenantId, q, row, onClose, onAnalyse }: { tenantId: string; q: PmQuery; row: PmEntityRow | null; onClose: () => void; onAnalyse: (r: PmEntityRow) => void }) {
   return (
     <Dialog.Root open={!!row} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
@@ -342,7 +415,7 @@ function EntityPanel({ tenantId, q, row, onClose }: { tenantId: string; q: PmQue
           className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-[560px] flex-col overflow-y-auto overscroll-contain animate-panel-slide-in"
           style={{ background: 'var(--paper)', boxShadow: 'var(--shadow-overlay)' }}
         >
-          {row && <PanelBody tenantId={tenantId} q={q} row={row} />}
+          {row && <PanelBody tenantId={tenantId} q={q} row={row} onAnalyse={onAnalyse} />}
           <Dialog.Close asChild>
             <button type="button" className="btn btn-ghost absolute right-4 top-4 !min-h-[36px] !px-2" aria-label="Close panel">
               <X size={18} aria-hidden="true" />
@@ -354,7 +427,7 @@ function EntityPanel({ tenantId, q, row, onClose }: { tenantId: string; q: PmQue
   )
 }
 
-function PanelBody({ tenantId, q, row }: { tenantId: string; q: PmQuery; row: PmEntityRow }) {
+function PanelBody({ tenantId, q, row, onAnalyse }: { tenantId: string; q: PmQuery; row: PmEntityRow; onAnalyse: (r: PmEntityRow) => void }) {
   const key = `${JSON.stringify(q)}${row.level}${row.id}`
   const eq = { ...q, level: row.level, id: row.id }
   const trend = useLoad(`ptrend${key}`, () => getPmTrend(tenantId, eq))
@@ -375,6 +448,11 @@ function PanelBody({ tenantId, q, row }: { tenantId: string; q: PmQuery; row: Pm
           <VerdictChip target={row.target} />
           <ConfidenceChip c={row.target.confidence} />
         </div>
+        {row.level === 'campaign' && (
+          <div className="mt-3">
+            <AnalyseButton onClick={() => onAnalyse(row)} />
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2.5">
         <KpiTile label="Spend" source="meta" value={fmt.inr(m.spend)} />

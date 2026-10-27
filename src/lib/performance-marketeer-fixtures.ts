@@ -9,6 +9,14 @@
  */
 
 import type {
+  PmAgentAction,
+  PmAgentCancelResult,
+  PmAgentEnqueueRequest,
+  PmAgentEnqueueResult,
+  PmAgentQueue,
+  PmAgentRollup,
+  PmAgentRunStatus,
+  PmAgentRun,
   PmBudgetResponse,
   PmBudgetRow,
   PmChangesResponse,
@@ -21,7 +29,13 @@ import type {
   PmFinding,
   PmFunnelResponse,
   PmGeoResponse,
+  PmLesson,
+  PmLessonProposal,
+  PmLessonScorecard,
+  PmLessonStatus,
+  PmLessonType,
   PmLevel,
+  PmOwnerRule,
   PmMetrics,
   PmQuery,
   PmReconcileResponse,
@@ -811,3 +825,434 @@ function pct(x: number | null): string {
   return x == null ? '—' : `${Math.round(x * 100)}%`
 }
 
+
+// ── Step 3 AI analyst runs (agent/*) ───────────────────────────────────────
+
+const AGENT_CAMPAIGNS = [
+  { campaignId: '120211000000000001', campaignName: 'Nadi Premium · Hindi · Broad', product: 'nadi-report-premium' },
+  { campaignId: '120211000000000002', campaignName: 'Golu Devta Arzi · Uttarakhand', product: 'golu-devta-arzi' },
+  { campaignId: '120211000000000003', campaignName: 'Nadi Report · English · Lookalike', product: 'nadi-report' },
+] as const
+
+/** Run dates: today (IST) and the 4 days before; the newest has one run still going. */
+export function fixtureAgentDates(): string[] {
+  const today = addDays(istYesterday(), 1)
+  return [0, 1, 2, 3, 4].map((n) => addDays(today, -n))
+}
+
+const agentNotes = new Map<string, string>()
+
+function agentAction(date: string, i: number, over: Partial<PmAgentAction>): PmAgentAction {
+  return {
+    id: `A${i}`,
+    type: 'budget',
+    title: '',
+    causeIds: ['C1'],
+    entityLevel: 'adset',
+    entityId: `12022${i}000000000`,
+    entityName: 'Hindi 25-44 · Advantage+',
+    change: { field: 'daily_budget', from: 10000, to: 8000 },
+    expectedEffect: { metric: 'CPA', low: -15, high: -5, evidence: ['ev-12'] },
+    impactRupeesPerDay: 0,
+    confidence: 0.5,
+    resetsLearning: false,
+    judgeOn: addDays(date, 3),
+    stopCondition: 'CPA above ₹1,300 for 2 days in a row',
+    verdict: 'approve',
+    rank: i,
+    ...over,
+  }
+}
+
+export function fixtureAgentRun(campaignId: string, date: string): PmAgentRun {
+  const dates = fixtureAgentDates()
+  const known = AGENT_CAMPAIGNS.findIndex((c) => c.campaignId === campaignId)
+  const qi = queueItems(date).find((x) => x.campaignId === campaignId)
+  if ((known < 0 && !qi) || !dates.includes(date)) throw new Error('404 No run for this campaign and date')
+  const c = known >= 0 ? AGENT_CAMPAIGNS[known] : { campaignId, campaignName: qi!.campaignName, product: qi!.product }
+  // Campaigns queued from the Overview tab borrow one of the three canned plans.
+  const idx = known >= 0 ? known : hash(campaignId) % 3
+  const latest = date === dates[0]
+  const status = qi ? qi.status : !latest && idx === 1 && date === dates[1] ? 'failed' : 'done'
+  const actions: PmAgentAction[] =
+    status !== 'done'
+      ? []
+      : idx === 0
+        ? [
+            agentAction(date, 1, { title: 'Cut budget on the tired Hindi ad set', impactRupeesPerDay: 4200, confidence: 0.8 }),
+            agentAction(date, 2, {
+              type: 'creative',
+              title: 'Pause “Premium v3” and launch a Diwali hook',
+              entityLevel: 'ad',
+              entityName: 'Nadi Premium Hindi v3',
+              change: { field: 'status', from: 'ACTIVE', to: 'PAUSED' },
+              impactRupeesPerDay: 3100,
+              confidence: 0.5,
+              resetsLearning: true,
+              judgeOn: addDays(date, 7),
+              creativeBrief: 'Open on a diya + palm-leaf shot in the first 2 s; Hindi VO “Aapki naadi mein kya likha hai?”; price card at 4 s.',
+              disputed: true,
+            }),
+            agentAction(date, 3, {
+              type: 'geo',
+              title: 'Exclude Tamil Nadu and Kerala (no orders in 14 days)',
+              entityName: 'Hindi 25-44 · Advantage+',
+              change: { field: 'geo_exclusions', from: null, to: 'IN-TN, IN-KL' },
+              impactRupeesPerDay: 900,
+              confidence: 0.2,
+              verdict: 'unresolved',
+              checksFailed: ['Spend share number did not match a tool result (ev-31)'],
+            }),
+          ]
+        : idx === 1
+          ? [agentAction(date, 1, { type: 'hold', title: 'Hold — budget change on 25 Oct is still settling', change: { field: 'none', from: null, to: null }, impactRupeesPerDay: 0, confidence: 0.8, entityLevel: 'campaign', entityName: c.campaignName })]
+          : [agentAction(date, 1, { type: 'landing_funnel', title: 'Fix the payment page drop on mobile', entityLevel: 'site', entityName: 'nadi-report checkout', change: { field: 'checkout', from: 'UPI intent off', to: 'UPI intent on' }, impactRupeesPerDay: 2600, confidence: 0.5 })]
+  const md = (title: string, body: string) => `---\nphase: ${title}  campaign: ${c.campaignId}  round: 1\n---\n# ${title}\n\n${body}\n`
+  const files: Record<string, string> =
+    status === 'done'
+      ? {
+          '00-brief.md': md('brief', `## Last 7 days\n- Spend ₹70,400 · first-party ROAS 0.62× · CPA ₹1,180\n- Frequency 3.8 on the Hindi ad set (was 2.1)`),
+          '00-journal.md': md('journal', '## 2026-10-25 · A1 cut budget 20% — TAKEN\nDay 2 (early): CPA 1,120 → 980'),
+          '01-investigate.v1.md': md('investigate', '## C1 Creative fatigue — 0.8\nEvidence: frequency 3.8 (ev-12), CTR −31% (ev-13).\n\n## C2 CPM shock — 0.5'),
+          '02-verify.v1.md': md('verify', 'verdict: send_back · blockers: 1\n\n## Issue I1 · blocker · on C3 “Tracking broken”\nUTM coverage 98% (ev-31).'),
+          '01-investigate.v2.md': md('investigate', 'C3 dropped (accepted I1).'),
+          '02-verify.v2.md': md('verify', 'verdict: pass'),
+          '03-plan.v1.md': md('plan', 'pathToTarget: possible\n\n' + actions.map((a) => `- ${a.id} ${a.title}`).join('\n')),
+          '04-plan-verify.v1.md': md('plan_verify', 'verdict: pass · A3 unresolved (number check)'),
+          '05-actions.md': md('actions', actions.map((a) => `## ${a.id} · ${a.title}\n${a.entityName}: ${a.change.from ?? '—'} → ${a.change.to ?? '—'} · ₹${a.impactRupeesPerDay}/day`).join('\n\n')),
+        }
+      : { '00-brief.md': md('brief', '## Last 7 days\n- Spend ₹22,100 · first-party ROAS 1.08×') }
+  return {
+    tenantId: '91astrology',
+    date,
+    campaignId: c.campaignId,
+    campaignName: c.campaignName,
+    accountId: 'act_000000',
+    product: c.product,
+    status,
+    step: qi ? qi.step : status === 'failed' ? 'plan v1' : '',
+    error: qi ? qi.error : status === 'failed' ? 'Phase plan v1 hit its budget cap ($4.00)' : '',
+    investigateRounds: status === 'running' ? 2 : idx === 0 ? 2 : 1,
+    planRounds: status === 'done' ? 1 : 0,
+    unresolved: idx === 0 && status === 'done' ? ['I4 (minor) — A3 spend-share number not re-derived'] : [],
+    actions,
+    impactRupeesPerDay: actions.reduce((s, a) => s + a.impactRupeesPerDay, 0),
+    files,
+    journal:
+      idx === 0
+        ? [
+            { date: addDays(date, -2), actionId: 'A1', title: 'Cut ad set “Hindi 25-44” budget 20%', status: 'taken', matched: ['Meta log 14:02, 10,000 → 8,000'], resetsLearning: false, read: 'early', resultSoFar: 'CPA 1,120 → 980, ROAS 0.61 → 0.74', judgeAgainOn: addDays(date, 5) },
+            { date: addDays(date, -2), actionId: 'A2', title: 'Pause ad “Premium v3”', status: 'not_taken', matched: [], resetsLearning: true, read: 'too_soon', resultSoFar: '—', userNote: 'Waiting for the Diwali creative' },
+            { date: addDays(date, -8), actionId: 'A1', title: 'Raise Lookalike 1% budget 15%', status: 'partly', matched: ['Meta log, 6,000 → 6,500'], resetsLearning: false, read: 'settled', resultSoFar: 'ROAS flat at 0.9×' },
+            { date: addDays(date, -1), title: 'New ad “Diwali v1” created by a teammate', status: 'outside_change', matched: ['Meta log 18:40'], resetsLearning: true, read: 'too_soon', resultSoFar: 'Learning reset', judgeAgainOn: addDays(date, 6) },
+          ]
+        : [],
+    userNote: agentNotes.get(`${campaignId}|${date}`) ?? '',
+    costUsd: qi ? qi.costUsd : status === 'done' ? 3.42 + idx : 1.1,
+    startedAt: qi ? qi.startedAt : `${date}T01:10:00+05:30`,
+    finishedAt: qi ? qi.finishedAt : `${date}T01:52:00+05:30`,
+  }
+}
+
+export function fixtureAgentRollup(date?: string): PmAgentRollup {
+  const d = date ?? fixtureAgentDates()[0]
+  if (!fixtureAgentDates().includes(d)) return { date: d, runs: [], actions: [] }
+  const ids = new Set<string>([...AGENT_CAMPAIGNS.map((c) => c.campaignId), ...queueItems(d).map((x) => x.campaignId)])
+  const runs = [...ids].map((id) => fixtureAgentRun(id, d))
+  return {
+    date: d,
+    runs: runs
+      .map((r) => ({
+        campaignId: r.campaignId, campaignName: r.campaignName, product: r.product, status: r.status, step: r.step, error: r.error,
+        investigateRounds: r.investigateRounds, planRounds: r.planRounds, impactRupeesPerDay: r.impactRupeesPerDay,
+        actionCount: r.actions.length, unresolvedCount: r.unresolved.length, costUsd: r.costUsd, startedAt: r.startedAt, finishedAt: r.finishedAt,
+      }))
+      .sort((a, b) => b.impactRupeesPerDay - a.impactRupeesPerDay),
+    actions: runs
+      .flatMap((r) => r.actions.map((a) => ({ ...a, campaignId: r.campaignId, campaignName: r.campaignName })))
+      .sort((a, b) => b.impactRupeesPerDay * b.confidence - a.impactRupeesPerDay * a.confidence || a.rank - b.rank),
+  }
+}
+
+export function fixtureAgentNote(campaignId: string, date: string, note: string) {
+  agentNotes.set(`${campaignId}|${date}`, note.trim())
+  return { campaignId, date, userNote: note.trim() }
+}
+
+// ── Admin queue (agent/queue) — each poll advances the running item one phase ──
+
+const QUEUE_STEPS = ['brief', 'investigate v1', 'verify v1', 'investigate v2', 'verify v2', 'plan v1', 'plan check v1', 'actions']
+const QUEUE_CAP_USD = 40
+interface MockQueueItem {
+  campaignId: string
+  campaignName: string
+  product: string
+  date: string
+  status: PmAgentRunStatus
+  step: string
+  stepIdx: number
+  error: string
+  queuedAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  heartbeatAt: string | null
+  costUsd: number
+}
+const queueState = new Map<string, MockQueueItem[]>()
+const isoNow = () => new Date().toISOString()
+
+/** Today starts with the nightly runs: two done, the third mid-way through verify v2. */
+function queueItems(date: string): MockQueueItem[] {
+  let items = queueState.get(date)
+  if (!items) {
+    const today = addDays(istYesterday(), 1)
+    items =
+      date !== today
+        ? []
+        : AGENT_CAMPAIGNS.map((c, i) => ({
+            ...c,
+            date,
+            status: i < 2 ? ('done' as const) : ('running' as const),
+            step: i < 2 ? '' : 'verify v2',
+            stepIdx: i < 2 ? QUEUE_STEPS.length : 4,
+            error: '',
+            queuedAt: `${date}T01:00:00+05:30`,
+            startedAt: i < 2 ? `${date}T01:10:00+05:30` : new Date(Date.now() - 6 * 60_000).toISOString(),
+            finishedAt: i < 2 ? `${date}T01:52:00+05:30` : null,
+            heartbeatAt: isoNow(),
+            costUsd: i < 2 ? 3.42 + i : 1.1,
+          }))
+    queueState.set(date, items)
+  }
+  return items
+}
+
+let lastAdvance = 0
+
+/** One phase per poll; calls closer than 5 s (StrictMode double effects, the confirm dialog) don't count. */
+function advanceQueue(date: string) {
+  if (Date.now() - lastAdvance < 5000) return
+  lastAdvance = Date.now()
+  const items = queueItems(date)
+  const running = items.find((x) => x.status === 'running')
+  if (running) {
+    running.stepIdx++
+    running.heartbeatAt = isoNow()
+    running.costUsd = Math.round((running.costUsd + 0.45) * 100) / 100
+    if (running.stepIdx >= QUEUE_STEPS.length) Object.assign(running, { status: 'done', step: '', finishedAt: isoNow() })
+    else running.step = QUEUE_STEPS[running.stepIdx]
+  } else {
+    const next = items.find((x) => x.status === 'queued')
+    if (next) Object.assign(next, { status: 'running', step: QUEUE_STEPS[0], stepIdx: 0, startedAt: isoNow(), heartbeatAt: isoNow() })
+  }
+}
+
+export function fixtureQueue(date: string): PmAgentQueue {
+  advanceQueue(date)
+  const items = queueItems(date)
+  const queued = items.filter((x) => x.status === 'queued')
+  return {
+    date,
+    worker: true,
+    capUsd: QUEUE_CAP_USD,
+    spentUsd: Math.round(items.reduce((s, x) => s + x.costUsd, 0) * 100) / 100,
+    queued: queued.map((x, i) => ({ campaignId: x.campaignId, campaignName: x.campaignName, date: x.date, step: x.step, position: i + 1, queuedAt: x.queuedAt, queuedBy: 'admin@91astrology.com' })),
+    running: items
+      .filter((x) => x.status === 'running')
+      .map((x) => ({ campaignId: x.campaignId, campaignName: x.campaignName, date: x.date, step: x.step, startedAt: x.startedAt, heartbeatAt: x.heartbeatAt, costUsd: x.costUsd })),
+    finished: items
+      .filter((x): x is MockQueueItem & { status: 'done' | 'failed' } => x.status === 'done' || x.status === 'failed')
+      .map((x) => ({ campaignId: x.campaignId, campaignName: x.campaignName, date: x.date, step: x.step, status: x.status, error: x.error, costUsd: x.costUsd, finishedAt: x.finishedAt, actionCount: fixtureAgentRun(x.campaignId, x.date).actions.length })),
+  }
+}
+
+export function fixtureEnqueue(body: PmAgentEnqueueRequest): PmAgentEnqueueResult {
+  const date = body.date ?? addDays(istYesterday(), 1)
+  if (!body.campaignIds.length || body.campaignIds.length > 20) throw new Error('400 {"message":"campaignIds must have 1–20 entries"}')
+  const items = queueItems(date)
+  const out: PmAgentEnqueueResult = { queued: [], skipped: [] }
+  for (const id of body.campaignIds) {
+    const known = CAMPAIGNS.find((c) => c.id === id) ?? AGENT_CAMPAIGNS.map((c) => ({ id: c.campaignId, name: c.campaignName, product: c.product })).find((c) => c.id === id)
+    const have = items.find((x) => x.campaignId === id)
+    if (!known) out.skipped.push({ campaignId: id, reason: 'campaign not found' })
+    else if (have && (have.status === 'queued' || have.status === 'running')) out.skipped.push({ campaignId: id, reason: `already ${have.status}` })
+    else if (have && !body.rerun) out.skipped.push({ campaignId: id, reason: `already analysed for ${date} — pass rerun` })
+    else {
+      const item: MockQueueItem = { campaignId: id, campaignName: known.name, product: known.product, date, status: 'queued', step: '', stepIdx: 0, error: '', queuedAt: isoNow(), startedAt: null, finishedAt: null, heartbeatAt: null, costUsd: 0 }
+      if (have) Object.assign(have, item)
+      else items.push(item)
+      out.queued.push(id)
+    }
+  }
+  return out
+}
+
+export function fixtureCancelQueued(campaignId: string, date: string): PmAgentCancelResult {
+  const items = queueItems(date)
+  const it = items.find((x) => x.campaignId === campaignId)
+  if (!it) throw new Error('404 {"message":"Nothing queued for this campaign and date"}')
+  if (it.status !== 'queued') throw new Error(`409 {"message":"This analysis is ${it.status === 'running' ? 'already running' : 'already finished'} and can’t be cancelled"}`)
+  items.splice(items.indexOf(it), 1)
+  return { campaignId, date, cancelled: 'deleted' }
+}
+
+// ── Lessons (lessons/*) — mutable in-memory state so approve/edit/retire work ──
+
+const C1 = AGENT_CAMPAIGNS[0].campaignId
+const C2 = AGENT_CAMPAIGNS[1].campaignId
+const C3 = AGENT_CAMPAIGNS[2].campaignId
+const lday = (n: number) => addDays(istYesterday(), -n)
+
+const lessonsState: PmLesson[] = [
+  {
+    lessonId: 'L-1', type: 'action_effect', status: 'active', version: 2, confidence: 0.8, uses: 9, hits: 7,
+    statement: 'When an ABO Nadi Premium prospecting ad set has 7-day ROAS ≥ 1.1, a +20% budget step kept ROAS within −10%.',
+    because: 'Curator’s reading: the audience was not saturated (frequency/day < 1.4).',
+    scope: { product: 'nadi-report-premium', structure: 'ABO', audience: 'prospecting', roas7d: '>=1.1' },
+    cases: [
+      { ref: `D-${lday(40)}-${C1}-A1`, supports: true, campaignId: C1, at: lday(40) },
+      { ref: `D-${lday(33)}-${C3}-A2`, supports: true, campaignId: C3, at: lday(33) },
+      { ref: `D-${lday(26)}-${C1}-A1`, supports: true, campaignId: C1, at: lday(26) },
+      { ref: `D-${lday(19)}-${C1}-A3`, supports: false, campaignId: C1, at: lday(19) },
+      { ref: `D-${lday(12)}-${C3}-A1`, supports: true, campaignId: C3, at: lday(12) },
+    ],
+    approvedAt: `${lday(30)}T05:10:00Z`, reviewBy: lday(-60), createdAt: `${lday(38)}T04:00:00Z`,
+    events: [
+      { at: `${lday(38)}T04:00:00Z`, kind: 'created', note: 'Curator ADD as candidate', version: 1 },
+      { at: `${lday(30)}T05:10:00Z`, kind: 'approved', note: 'Promoted after 3 clean cases', version: 1 },
+      { at: `${lday(12)}T04:00:00Z`, kind: 'edited', note: 'Scope narrowed to prospecting', version: 2 },
+    ],
+  },
+  {
+    lessonId: 'L-2', type: 'diagnosis_pattern', status: 'review', version: 1, confidence: 0.5, uses: 8, hits: 4,
+    statement: 'CTR −30% with frequency/day < 1.3 was not creative fatigue; check the placement mix first.',
+    scope: { symptoms: 'ctr_drop', phase: 'investigate' },
+    cases: [
+      { ref: `DC-${lday(35)}-${C2}-C1`, supports: true, campaignId: C2, at: lday(35) },
+      { ref: `DC-${lday(21)}-${C1}-C2`, supports: true, campaignId: C1, at: lday(21) },
+      { ref: `DC-${lday(9)}-${C2}-C1`, supports: false, campaignId: C2, at: lday(9) },
+      { ref: `DC-${lday(4)}-${C1}-C1`, supports: false, campaignId: C1, at: lday(4) },
+    ],
+    approvedAt: `${lday(28)}T05:00:00Z`, reviewBy: lday(-14), createdAt: `${lday(34)}T04:00:00Z`,
+  },
+  {
+    lessonId: 'L-3', type: 'season_effect', status: 'candidate', version: 1, confidence: 0.2, uses: 0, hits: 0,
+    statement: 'Pitru Paksha 2026: Nadi orders −35% and CPM +12% against the 4 weeks before.',
+    scope: { season: 'pitru-paksha', product: 'nadi-report|nadi-report-premium' },
+    cases: [{ ref: 'cev-2026-W39-1', supports: true, campaignId: C1, at: lday(30) }],
+    createdAt: `${lday(6)}T04:00:00Z`,
+  },
+  {
+    lessonId: 'L-4', type: 'analyst_habit', status: 'retired', version: 1, confidence: 0.2, uses: 7, hits: 3,
+    statement: 'The analyst over-blames tracking; check first-party coverage before citing a pixel gap.',
+    scope: { phase: 'investigate', category: 'tracking' },
+    cases: [{ ref: `DC-${lday(50)}-${C3}-C2`, supports: true, campaignId: C3, at: lday(50) }],
+    createdAt: `${lday(70)}T04:00:00Z`,
+  },
+]
+
+const proposalsState: PmLessonProposal[] = [
+  {
+    proposalId: 'P-2026-W43-1', week: '2026-W43', op: 'PROMOTE', lessonId: 'L-5', status: 'pending',
+    why: '3 clean supporting cases across 2 campaigns, support share 100%.',
+    lesson: {
+      lessonId: 'L-5', type: 'creative_pattern', statement: 'Hindi testimonial video hooks beat static images for Nadi Premium: hook rate 31% vs 18%.',
+      scope: { product: 'nadi-report-premium', phase: 'plan' }, confidence: 0.5,
+    },
+    cases: [
+      { ref: 'cev-2026-W41-2', supports: true, campaignId: C1, at: lday(16) },
+      { ref: 'cev-2026-W42-1', supports: true, campaignId: C3, at: lday(10) },
+      { ref: 'cev-2026-W43-4', supports: true, campaignId: C1, at: lday(3) },
+    ],
+    validation: { ok: true, problems: [] },
+  },
+  {
+    proposalId: 'P-2026-W43-2', week: '2026-W43', op: 'RETIRE', lessonId: 'L-2', status: 'pending',
+    why: '2 contradictions in a row; share 50% over the last 8 graded uses.',
+    lesson: lessonsState[1],
+    cases: lessonsState[1].cases.slice(2),
+    validation: { ok: true, problems: [] },
+  },
+  {
+    proposalId: 'P-2026-W43-3', week: '2026-W43', op: 'MERGE', lessonId: 'L-1', mergeIds: ['L-1', 'L-6'], status: 'pending',
+    why: 'L-6 says the same thing for CBO; one lesson with a wider scope.',
+    lesson: { ...lessonsState[0], scope: { product: 'nadi-report-premium', structure: 'ABO|CBO', roas7d: '>=1.1' } },
+    validation: { ok: false, problems: ['Case D-2026-09-30-out-1a2b3c4d is contaminated (other_edit) and cannot count.'] },
+  },
+]
+
+let ownerRulesState: PmOwnerRule[] = [
+  { ruleId: 'R-1', text: 'Never pause an ad before day 3.', active: true, check: { kind: 'no_pause_before_days', days: 3 } },
+  { ruleId: 'R-2', text: 'Never raise Golu Devta budget during Kharmas.', active: true, check: { kind: 'no_budget_increase_in_season', season: 'kharmas', product: 'golu-devta-arzi' } },
+  { ruleId: 'R-3', text: 'Prefer Hindi creatives for Tier 2/3 states.', active: true },
+]
+
+const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+
+export function fixtureLessons(f: { status?: PmLessonStatus; type?: PmLessonType }): PmLesson[] {
+  return copy(lessonsState.filter((l) => (!f.status || l.status === f.status) && (!f.type || l.type === f.type)))
+}
+
+export function fixtureLessonProposals(status: string): PmLessonProposal[] {
+  return copy(proposalsState.filter((p) => !status || p.status === status))
+}
+
+export function fixtureDecideProposal(id: string, status: 'approved' | 'rejected', note?: string) {
+  const p = proposalsState.find((x) => x.proposalId === id)
+  if (!p || p.status !== 'pending') throw new Error('404 No pending proposal with this id')
+  if (status === 'approved' && !p.validation.ok) throw new Error('400 This proposal failed validation and cannot be approved')
+  Object.assign(p, { status, decidedAt: new Date().toISOString(), decidedNote: note })
+  if (status === 'approved') {
+    const l = lessonsState.find((x) => x.lessonId === p.lessonId)
+    if (p.op === 'RETIRE' && l) l.status = 'retired'
+    if (p.op === 'PROMOTE' && p.lesson && !l)
+      lessonsState.push({ status: 'active', version: 1, uses: 0, hits: 0, cases: p.cases ?? [], confidence: 0.5, ...p.lesson } as PmLesson)
+  }
+  return { proposalId: p.proposalId, status, lessonId: p.lessonId }
+}
+
+export function fixtureEditLesson(id: string, patch: Partial<PmLesson>) {
+  const l = lessonsState.find((x) => x.lessonId === id)
+  if (!l) throw new Error('404 No lesson with this id')
+  Object.assign(l, patch, { version: l.version + 1 })
+  ;(l.events ??= []).push({ at: new Date().toISOString(), kind: patch.status === 'retired' ? 'retired' : 'edited', version: l.version })
+  return copy(l)
+}
+
+export function fixtureOwnerRules(): PmOwnerRule[] {
+  return copy(ownerRulesState)
+}
+
+export function fixtureSaveOwnerRule(id: string | null, r: Omit<PmOwnerRule, 'ruleId' | 'check'> & { check: PmOwnerRule['check'] | null }) {
+  const rule: PmOwnerRule = { ruleId: id ?? `R-${ownerRulesState.length + 1}`, text: r.text, active: r.active, ...(r.check ? { check: r.check } : {}) }
+  ownerRulesState = id ? ownerRulesState.map((x) => (x.ruleId === id ? rule : x)) : [...ownerRulesState, rule]
+  return copy(rule)
+}
+
+export function fixtureDeleteOwnerRule(id: string) {
+  ownerRulesState = ownerRulesState.filter((x) => x.ruleId !== id)
+  return { ok: true }
+}
+
+export function fixtureLessonScorecard(weeks: number): PmLessonScorecard {
+  const share = (a: number, b: number) => (b ? Math.round((a / b) * 100) / 100 : null)
+  const at = (n: number, worked: number) => ({ n, worked, rate: share(worked, n) ?? 0 })
+  return {
+    from: lday(7 * weeks),
+    to: lday(-1),
+    weeks: Array.from({ length: weeks }, (_, i): PmLessonScorecard['weeks'][number] => {
+      const g = i < 2 ? 0 : 6 + ((i * 5) % 9)
+      const inside = Math.round(g * (0.45 + i * 0.03))
+      return {
+        week: `2026-W${i + 36}`,
+        byActionType: g ? { budget: at(Math.ceil(g / 2), Math.ceil(g / 3)), creative: at(Math.floor(g / 3), Math.floor(g / 5)), pause: at(2, i % 2 ? 2 : 1) } : {},
+        calibration: { n: g, inside, share: share(inside, g) },
+        acceptance: { recommended: 10 + i, taken: 5 + i, share: share(5 + i, 10 + i) },
+        diagnosis: { n: g ? 4 : 0, held: g ? 3 : 0, accuracy: g ? 0.75 : null },
+        realisedRupees: g ? 4000 + i * 1800 : 0,
+      }
+    }),
+    lessons: lessonsState.filter((l) => l.status === 'active' || l.status === 'review').map((l) => ({ lessonId: l.lessonId, type: l.type, status: l.status, uses: l.uses, hits: l.hits, hitRate: share(l.hits, l.uses) })),
+    notes: 'Sample data.',
+  }
+}

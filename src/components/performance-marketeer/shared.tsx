@@ -194,6 +194,18 @@ export function useLoad<T>(key: string, fn: () => Promise<T>) {
   return { data: state.data, error: loading ? undefined : state.error, loading, reload: () => setNonce((n) => n + 1) }
 }
 
+/** apiFetch throws "<status> <body>"; pull Nest's `message` out of a JSON body so the server's own words show. */
+export function serverMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const m = /^(\d{3}) ([\s\S]*)$/.exec(raw)
+  if (!m) return raw.slice(0, 200)
+  try {
+    const body = JSON.parse(m[2]) as { message?: string | string[] }
+    if (body.message) return (Array.isArray(body.message) ? body.message.join('; ') : body.message).slice(0, 200)
+  } catch {}
+  return raw.slice(0, 200)
+}
+
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div role="alert" className="card flex flex-col items-start gap-3 px-5 py-4 sm:flex-row sm:items-center" style={{ background: 'var(--bad-bg)', borderColor: 'var(--bad-border)' }}>

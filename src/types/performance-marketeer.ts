@@ -338,3 +338,254 @@ export interface PmReportResponse {
   findings: PmFinding[];
   generatedAt: string;
 }
+
+// ── Step 3 AI analyst (NOT part of pm-analysis.types.ts) ────────────────────
+// Mirrors marketing-agent/src/performance-marketeer/agent/pm-agent.types.ts
+// (Action, PmJournalEntry), schemas/pm-agent-run.schema.ts and the shapes
+// returned by agent/pm-agent.controller.ts. Change them together.
+
+export type PmAgentConfidence = 0.2 | 0.5 | 0.8;
+export type PmAgentRunStatus = 'queued' | 'running' | 'done' | 'failed';
+
+export interface PmAgentAction {
+  id: string; // A1, A2… stable across rounds
+  type: 'creative' | 'budget' | 'geo' | 'audience' | 'placement' | 'landing_funnel' | 'tracking' | 'festival_prep' | 'pause' | 'hold';
+  title: string;
+  causeIds: string[];
+  entityLevel: 'campaign' | 'adset' | 'ad' | 'site';
+  entityId: string;
+  entityName: string;
+  change: { field: string; from: string | number | null; to: string | number | null };
+  expectedEffect: { metric: string; low: number; high: number; evidence: string[] };
+  impactRupeesPerDay: number;
+  confidence: PmAgentConfidence;
+  resetsLearning: boolean;
+  judgeOn: string; // YYYY-MM-DD
+  stopCondition: string;
+  creativeBrief?: string;
+  verdict: 'approve' | 'change' | 'unresolved';
+  rank: number;
+  /** Optional flags, shown when the pipeline sets them. */
+  disputed?: boolean;
+  checksFailed?: string[];
+}
+
+export type PmJournalStatus = 'taken' | 'partly' | 'not_taken' | 'outside_change';
+export interface PmJournalEntry {
+  date: string;
+  actionId?: string;
+  title: string;
+  status: PmJournalStatus;
+  matched: string[];
+  resetsLearning: boolean;
+  read: 'too_soon' | 'early' | 'settled';
+  resultSoFar: string;
+  judgeAgainOn?: string;
+  userNote?: string;
+}
+
+export interface PmAgentRunSummary {
+  campaignId: string;
+  campaignName: string;
+  product: string;
+  status: PmAgentRunStatus;
+  step: string;
+  error: string;
+  investigateRounds: number;
+  planRounds: number;
+  impactRupeesPerDay: number;
+  actionCount: number;
+  unresolvedCount: number;
+  costUsd: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/** GET /agent/runs?date= — date is null when there are no runs at all. */
+export interface PmAgentRollup {
+  date: string | null;
+  runs: PmAgentRunSummary[];
+  /** All campaigns' actions, ranked by ₹ impact × confidence. */
+  actions: (PmAgentAction & { campaignId: string; campaignName: string })[];
+}
+
+/** GET /agent/runs/:campaignId?date= */
+export interface PmAgentRun {
+  tenantId: string;
+  date: string;
+  campaignId: string;
+  campaignName: string;
+  accountId: string;
+  product: string;
+  status: PmAgentRunStatus;
+  step: string;
+  error: string;
+  investigateRounds: number;
+  planRounds: number;
+  unresolved: string[];
+  actions: PmAgentAction[];
+  impactRupeesPerDay: number;
+  /** File name → final text (00-brief.md … 05-actions.md, evidence.jsonl). */
+  files: Record<string, string>;
+  journal: PmJournalEntry[];
+  userNote: string;
+  costUsd: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+// ── Admin-triggered analysis queue (agent/queue) ──────────────────────────
+// Mirrors marketing-agent's agent queue controller. Change them together.
+
+export interface PmQueuedItem {
+  campaignId: string;
+  campaignName: string;
+  date: string;
+  /** '' normally; 'waiting: daily budget reached' when the day's cap is hit. */
+  step: string;
+  position: number;
+  queuedAt: string | null;
+  queuedBy: string;
+}
+
+export interface PmRunningItem {
+  campaignId: string;
+  campaignName: string;
+  date: string;
+  /** Current phase, e.g. "verify v2". */
+  step: string;
+  startedAt: string | null;
+  heartbeatAt: string | null;
+  costUsd: number;
+}
+
+export interface PmFinishedItem {
+  campaignId: string;
+  campaignName: string;
+  date: string;
+  step: string;
+  status: 'done' | 'failed';
+  error: string;
+  costUsd: number;
+  finishedAt: string | null;
+  actionCount: number;
+}
+
+/** GET /agent/queue?date= — queued/running span all dates; finished is only `date`. */
+export interface PmAgentQueue {
+  date: string;
+  /** false = this server doesn't process the queue. */
+  worker: boolean;
+  capUsd: number;
+  spentUsd: number;
+  queued: PmQueuedItem[];
+  running: PmRunningItem[];
+  finished: PmFinishedItem[];
+}
+
+/** POST /agent/queue body: campaignIds 1–20 (digits); date defaults to today (IST) on the server. */
+export interface PmAgentEnqueueRequest {
+  campaignIds: string[];
+  date?: string;
+  rerun?: boolean;
+}
+
+/** Skip reasons: 'campaign not found', 'already queued', 'already running', 'already analysed for <date> — pass rerun', 'state changed, try again'. */
+export interface PmAgentEnqueueResult {
+  queued: string[];
+  skipped: { campaignId: string; reason: string }[];
+}
+
+/** POST /agent/queue/:campaignId/cancel — 409 if running/finished, 404 if none. */
+export interface PmAgentCancelResult {
+  campaignId: string;
+  date: string;
+  cancelled: 'deleted' | 'marked_failed';
+}
+
+// ── Lessons (agent/lessons/lessons.types.ts + pm-lessons.controller.ts) ─────
+// Mirrors marketing-agent/src/performance-marketeer/agent/lessons/lessons.types.ts
+// (PmLesson, PmLessonProposal, PmOwnerRule). Change them together.
+
+export type PmLessonType = 'action_effect' | 'diagnosis_pattern' | 'creative_pattern' | 'season_effect' | 'segment_fact' | 'analyst_habit';
+export type PmLessonStatus = 'candidate' | 'active' | 'review' | 'retired';
+export type PmLessonScope = Record<string, string>;
+
+export interface PmLessonCase {
+  ref: string; // D-…, DC-…, cev-…
+  supports: boolean;
+  campaignId: string;
+  at: string; // YYYY-MM-DD
+}
+
+export interface PmLessonEvent {
+  at: string; // ISO
+  kind: string; // created, approved, edited, retired, used…
+  note?: string;
+  version?: number;
+}
+
+export interface PmLesson {
+  lessonId: string;
+  type: PmLessonType;
+  statement: string;
+  because?: string;
+  scope: PmLessonScope;
+  status: PmLessonStatus;
+  cases: PmLessonCase[];
+  confidence: 0.2 | 0.5 | 0.8;
+  uses: number;
+  hits: number;
+  version: number;
+  approvedAt?: string;
+  reviewBy?: string;
+  createdAt?: string;
+  /** Audit trail (pm_lesson_events), when the API includes it. */
+  events?: PmLessonEvent[];
+}
+
+export interface PmLessonProposal {
+  proposalId: string;
+  week: string;
+  op: 'ADD' | 'EDIT' | 'ATTACH' | 'MERGE' | 'RETIRE' | 'PROMOTE';
+  lesson?: Partial<PmLesson>;
+  lessonId?: string;
+  mergeIds?: string[];
+  cases?: PmLessonCase[];
+  why: string;
+  validation: { ok: boolean; problems: string[] };
+  status: 'pending' | 'applied' | 'approved' | 'rejected' | 'invalid';
+  decidedAt?: string;
+  decidedNote?: string;
+}
+
+export type PmOwnerRuleCheck =
+  | { kind: 'no_pause_before_days'; days: number }
+  | { kind: 'max_budget_step'; step: number }
+  | { kind: 'no_budget_increase_in_season'; season: string; product?: string }
+  | { kind: 'no_action_type'; type: string; product?: string };
+
+export interface PmOwnerRule {
+  ruleId: string;
+  text: string;
+  active: boolean;
+  check?: PmOwnerRuleCheck;
+}
+
+/** GET /lessons/scorecard?weeks= — one row per ISO week that has decisions or checks, oldest first. Shares 0–1, null when nothing to grade. */
+export interface PmLessonScorecardWeek {
+  week: string; // 2026-W44
+  /** Action type → clean settled outcomes of taken/outside changes, and how many worked. */
+  byActionType: Record<string, { n: number; worked: number; rate: number }>;
+  calibration: { n: number; inside: number; share: number | null };
+  acceptance: { recommended: number; taken: number; share: number | null };
+  diagnosis: { n: number; held: number; accuracy: number | null };
+  realisedRupees: number;
+}
+export interface PmLessonScorecard {
+  from: string;
+  to: string;
+  weeks: PmLessonScorecardWeek[];
+  lessons: { lessonId: string; type: PmLessonType; status: PmLessonStatus; uses: number; hits: number; hitRate: number | null }[];
+  notes: string;
+}
