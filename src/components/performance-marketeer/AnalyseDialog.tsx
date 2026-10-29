@@ -165,7 +165,7 @@ function Body({ tenantId, campaigns, onClose, onOpenAgent }: { tenantId: string;
         Analyse {n} {word} with AI?
       </Dialog.Title>
       <Dialog.Description className="explain">
-        Each analysis runs Claude Opus for several minutes and uses API credits. Data is analysed up to yesterday ({fmt.date(istYesterday())}).
+        Each analysis runs Claude Opus for several minutes and uses API credits. Data is analysed up to yesterday ({fmt.date(istYesterday())}). Any missing history (from launch) is loaded first, so a campaign’s first run can take longer.
       </Dialog.Description>
       <ul className="flex max-h-[240px] flex-col gap-1.5 overflow-y-auto rounded-xl px-3 py-2.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}>
         {campaigns.map((c) => {
