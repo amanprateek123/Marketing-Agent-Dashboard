@@ -480,6 +480,17 @@ export interface PmCampaignTarget {
   updatedAt: string | null
 }
 
+/** GET agent/campaigns — every campaign to pick from, data loaded or not (list comes from Meta). */
+export interface PmCampaignListItem {
+  id: string
+  name: string
+  accountId: string
+  effectiveStatus: string
+  createdTime: string | null
+  product: string
+  dailyBudget: number | null
+}
+
 export interface PmAgentQueue {
   date: string;
   /** false = this server doesn't process the queue. */
