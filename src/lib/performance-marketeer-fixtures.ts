@@ -9,6 +9,7 @@
  */
 
 import type {
+  PmCampaignListItem,
   PmCampaignTarget,
   PmAgentAction,
   PmAgentCancelResult,
@@ -1100,6 +1101,29 @@ export function fixtureCancelQueued(campaignId: string, date: string): PmAgentCa
 // ── Purchase targets (agent/targets) ──
 
 const targets = new Map<string, PmCampaignTarget>()
+
+export function fixtureCampaignList(): PmCampaignListItem[] {
+  return [
+    ...AGENT_CAMPAIGNS.map((c, i) => ({
+      id: c.campaignId,
+      name: c.campaignName,
+      accountId: '6995951240481576',
+      effectiveStatus: 'ACTIVE',
+      createdTime: `2026-0${7 + i}-12T06:00:00Z`,
+      product: c.product,
+      dailyBudget: 5000 * (i + 1),
+    })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      id: `1202110000000001${String(i).padStart(2, '0')}`,
+      name: `Old test campaign ${i + 1}`,
+      accountId: '549390260260950',
+      effectiveStatus: 'PAUSED',
+      createdTime: `2026-05-${String((i % 28) + 1).padStart(2, '0')}T06:00:00Z`,
+      product: 'other',
+      dailyBudget: null,
+    })),
+  ]
+}
 
 export function fixtureTargets(): PmCampaignTarget[] {
   return [...targets.values()].filter((x) => x.targetPurchases != null)

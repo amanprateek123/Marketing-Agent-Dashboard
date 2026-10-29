@@ -27,6 +27,7 @@ import {
 } from './shared'
 import { TrendChart } from './TrendChart'
 import { AnalyseButton, AnalyseDialog, type AnalyseTarget } from './AnalyseDialog'
+import { CampaignList } from './CampaignList'
 import type { PmView } from './PerformanceMarketeer'
 
 export function OverviewTab({ tenantId, q, view, update }: { tenantId: string; q: PmQuery; view: PmView; update: (p: Partial<PmView>) => void }) {
@@ -36,6 +37,8 @@ export function OverviewTab({ tenantId, q, view, update }: { tenantId: string; q
 
   return (
     <div className="flex flex-col gap-5">
+      <CampaignList tenantId={tenantId} onOpenAgent={() => update({ tab: 'agent', day: '', run: '', sel: '' })} />
+
       {summary.error ? (
         <LoadError message={summary.error} onRetry={summary.reload} />
       ) : !summary.data ? (
