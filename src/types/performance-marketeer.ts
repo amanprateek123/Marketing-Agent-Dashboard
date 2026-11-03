@@ -351,6 +351,8 @@ export interface PmAgentAction {
   id: string; // A1, A2… stable across rounds
   type: 'creative' | 'budget' | 'geo' | 'audience' | 'placement' | 'landing_funnel' | 'tracking' | 'festival_prep' | 'pause' | 'hold';
   title: string;
+  /** Plain-words summary for the owner; older runs don't have it. */
+  plain?: string;
   causeIds: string[];
   entityLevel: 'campaign' | 'adset' | 'ad' | 'site';
   entityId: string;
@@ -362,12 +364,17 @@ export interface PmAgentAction {
   resetsLearning: boolean;
   judgeOn: string; // YYYY-MM-DD
   stopCondition: string;
+  risk?: string;
+  /** Reviewer's notes, "verifier (change): …". */
+  notes?: string[];
   creativeBrief?: string;
   verdict: 'approve' | 'change' | 'unresolved';
   rank: number;
   /** Optional flags, shown when the pipeline sets them. */
   disputed?: boolean;
   checksFailed?: string[];
+  /** "check: message" per failed check, from the code checks. */
+  checkMessages?: string[];
 }
 
 export type PmJournalStatus = 'taken' | 'partly' | 'not_taken' | 'outside_change';
@@ -424,6 +431,8 @@ export interface PmAgentRun {
   planRounds: number;
   unresolved: string[];
   actions: PmAgentAction[];
+  /** Final causes (C1…) the actions point to. */
+  causes?: { id: string; title: string; confidence: PmAgentConfidence; verdict: string }[];
   impactRupeesPerDay: number;
   /** File name → final text (00-brief.md … 05-actions.md, evidence.jsonl). */
   files: Record<string, string>;
@@ -608,3 +617,140 @@ export interface PmLessonScorecard {
   lessons: { lessonId: string; type: PmLessonType; status: PmLessonStatus; uses: number; hits: number; hitRate: number | null }[];
   notes: string;
 }
+
+// ── Launch Planner ───────────────────────────────────────────────────────
+// Mirrors marketing-agent agent/launch/launch.types.ts and the shapes from
+// agent/launch/launch.controller.ts. Change them together.
+
+export type PmLaunchLabel = 'fact' | 'assumption' | 'hypothesis' | 'unknown'
+export interface PmLaunchFinding { text: string; label: PmLaunchLabel; source: string }
+
+export interface PmLaunchProduct { name: string; price: number; landingUrl: string; hasConversion: boolean }
+
+export interface PmLaunchInput {
+  productName: string
+  creativeUrls: string[]
+  dailySpend: number
+  desiredRoas: number
+  roasType: 'meta' | 'first_party'
+  launchDate: string
+  maxCpa?: number
+  note?: string
+}
+
+export interface PmLaunchCreative {
+  file: string
+  designId: string
+  summary: string
+  hook: string
+  language: string
+  angle: string
+  messaging: 'good' | 'needs_changes'
+  policyRisk: 'low' | 'review' | 'block'
+  phoneReadability: 'pass' | 'fail'
+  landingMatch: 'pass' | 'warning'
+  finalStatus: 'ready' | 'needs_fixes' | 'excluded'
+  scores: { hook: number; clarity: number; offer: number; trust: number }
+  strengths: string[]
+  weaknesses: string[]
+  resizeAdvice: string[]
+  claimsToVerify: string[]
+}
+
+export interface PmLaunchAdSet {
+  name: string
+  budgetPercent: number
+  audienceType: string
+  excludeAudienceIds: string[]
+  ageMin: number
+  ageMax: number
+  gender: string
+  geoLocations: string[]
+  geoStates: string[]
+  geoCities: string[]
+  locales: number[]
+  interests: { id: string; name: string }[]
+  placementPreset: 'vertical' | 'vertical_feed' | 'everywhere'
+  designIds: string[]
+  reason: string
+  label: PmLaunchLabel
+}
+
+export interface PmLaunchSummary {
+  _id: string
+  input: PmLaunchInput
+  status: 'queued' | 'running' | 'done' | 'failed'
+  step: string
+  error: string
+  costUsd: number
+  createStatus: '' | 'creating' | 'paused' | 'failed'
+  metaCampaignId: string
+  readiness: { ready: boolean; blocks: string[]; warnings: string[] } | null
+  createdAt: string
+}
+
+export interface PmLaunchPlan extends PmLaunchSummary {
+  createError: string
+  creatives: { url: string; file: string; width: number; height: number; ratio: string }[]
+  economics: {
+    price: number
+    netPrice: number
+    roasType: 'meta' | 'first_party'
+    desiredRoas: number
+    allowedCpaMeta: number
+    allowedCpaFirstParty: number
+    allowedCpa: number
+    dailySpend: number
+    ordersPerWeekAtTarget: number
+    learningBenchmark: number
+    scenarios: { costPerOrder: number; ordersPerWeek: number; metaRoas: number; firstPartyRoas: number; meetsTarget: boolean }[]
+  } | null
+  tracking: { conversionId: string; accountId: string; blocks: string[]; warnings: string[]; facts: string[] } | null
+  review: {
+    creatives: PmLaunchCreative[]
+    missingAngles: string[]
+    landing: {
+      summary: string
+      mainButton: string
+      directPurchase: 'yes' | 'no' | 'unknown'
+      path: { step: string; status: 'ok' | 'warning' | 'problem' | 'unknown'; note: string }[]
+      whatWorks: string[]
+      issues: string[]
+      claimsToVerify: string[]
+    }
+  } | null
+  research: {
+    audience: { name: string; situation: string; whyTheyBuy: string; ageRange: string; languages: string; messageIdea: string; label: PmLaunchLabel; source: string }[]
+    reach: { targeting: string; low: number; high: number; source: string }[]
+    locations: { place: string; decision: 'include' | 'exclude' | 'test_later' | 'no_preference'; reason: string; label: PmLaunchLabel; source: string }[]
+    dates: { date: string; event: string; effect: 'higher_demand' | 'lower_demand' | 'higher_costs' | 'neutral'; whatToDo: string; label: PmLaunchLabel; source: string }[]
+    competitors: { brand: string; angle: string; offer: string; format: string; runningFor: string; takeaway: string; label: PmLaunchLabel; source: string }[]
+    patterns: PmLaunchFinding[]
+    gaps: string[]
+  } | null
+  plan: {
+    targetVerdict: 'realistic' | 'unrealistic' | 'unknown'
+    targetNote: string
+    campaignName: string
+    campaignType: 'advantage_plus' | 'custom'
+    adSets: PmLaunchAdSet[]
+    copy: { designId: string; primaryText: string; headline: string; cta: string }[]
+    analysis: {
+      headline: string
+      summary: string
+      whySetup: { title: string; detail: string; label: PmLaunchLabel; source: string }[]
+      creativeTakeaway: string
+      competitorTakeaway: string
+      todo: { priority: 'must' | 'should' | 'nice'; action: string; why: string }[]
+      risks: { risk: string; impact: 'high' | 'medium' | 'low'; response: string }[]
+      newCreativeIdeas: { angle: string; hook: string; format: string; why: string }[]
+    }
+    decisions: (PmLaunchFinding & { topic: string })[]
+    unknowns: string[]
+    reviewPlan: { beforeLive: string[]; day1: string[]; day3: string[]; day7: string[]; rules: string[] }
+    sources: string[]
+  } | null
+  approved: { metaStatus?: { campaign: string; adSets: { total: number; paused: number }; ads: { total: number; paused: number } } } | null
+}
+
+export type PmLaunchChecklist = Record<'testPurchase' | 'deduplicated' | 'mobilePath' | 'claimsVerified', boolean>
