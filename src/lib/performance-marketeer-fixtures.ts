@@ -9,6 +9,10 @@
  */
 
 import type {
+  PmLaunchInput,
+  PmLaunchPlan,
+  PmLaunchProduct,
+  PmLaunchSummary,
   PmCampaignListItem,
   PmCampaignTarget,
   PmAgentAction,
@@ -892,8 +896,22 @@ export function fixtureAgentRun(campaignId: string, date: string): PmAgentRun {
               confidence: 0.5,
               resetsLearning: true,
               judgeOn: addDays(date, 7),
-              creativeBrief: 'Open on a diya + palm-leaf shot in the first 2 s; Hindi VO “Aapki naadi mein kya likha hai?”; price card at 4 s.',
+              creativeBrief: 'Angle: your question, with a when (ev-95)\nHook (0–3s): diya + palm-leaf shot; Hindi VO “Aapki naadi mein kya likha hai?”\nOffer: price card at 4 s\nCTA: Order Now',
               disputed: true,
+            }),
+            agentAction(date, 4, {
+              type: 'landing_funnel',
+              title: 'Show the ₹1,799 price and what is included at the top of the page',
+              plain: 'Today the page shows no report price, so people tap the buy button without knowing the cost. Showing it near the button should lift buyers from about 0.7 to 0.9–1.05 out of 100 visitors.',
+              entityLevel: 'site',
+              entityName: 'Nadi Report Premium landing page',
+              change: { field: 'above-the-fold price block', from: "only '+ Free Consultation (worth ₹499)' shown; no ₹1,799", to: "'Nadi Report ₹1,799 + FREE 15-min consultation (worth ₹499) · 48h delivery' next to the buy button" },
+              expectedEffect: { metric: 'visit→order % (campaign, first-party)', low: 0.87, high: 1.05, evidence: ['ev-96'] },
+              impactRupeesPerDay: 592,
+              confidence: 0.2,
+              risk: 'Showing the price up front could lower clicks on the buy button (ev-104).',
+              verdict: 'change',
+              notes: ['verifier (change): Align the expected effect with the ₹ impact and replace the noise-triggered stop condition (ev-117).'],
             }),
             agentAction(date, 3, {
               type: 'geo',
@@ -903,7 +921,8 @@ export function fixtureAgentRun(campaignId: string, date: string): PmAgentRun {
               impactRupeesPerDay: 900,
               confidence: 0.2,
               verdict: 'unresolved',
-              checksFailed: ['Spend share number did not match a tool result (ev-31)'],
+              checksFailed: ['budget_step', 'no_spend_increase_below_target'],
+              checkMessages: ['budget_step: 0 → 3000 cannot be checked against the +100% / −20% step', 'no_spend_increase_below_target: raises spend while first-party ROAS 0.52 < 1 (net +₹3000/day)'],
             }),
           ]
         : idx === 1
@@ -938,6 +957,7 @@ export function fixtureAgentRun(campaignId: string, date: string): PmAgentRun {
     planRounds: status === 'done' ? 1 : 0,
     unresolved: idx === 0 && status === 'done' ? ['I4 (minor) — A3 spend-share number not re-derived'] : [],
     actions,
+    causes: [{ id: 'C1', title: 'Meme creatives drifted into cheap, low-intent clicks from 16 Oct (CTR 0.79%→4.66%) (ev-19)', confidence: 0.8, verdict: 'confirmed' }],
     impactRupeesPerDay: actions.reduce((s, a) => s + a.impactRupeesPerDay, 0),
     files,
     journal:
@@ -1294,4 +1314,152 @@ export function fixtureLessonScorecard(weeks: number): PmLessonScorecard {
     lessons: lessonsState.filter((l) => l.status === 'active' || l.status === 'review').map((l) => ({ lessonId: l.lessonId, type: l.type, status: l.status, uses: l.uses, hits: l.hits, hitRate: share(l.hits, l.uses) })),
     notes: 'Sample data.',
   }
+}
+
+// ── Launch Planner ──
+
+const swatch = (w: number, h: number, c: string) =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="${c}"/></svg>`)}`
+
+const launchInput: PmLaunchInput = { productName: 'Career Report', creativeUrls: [], dailySpend: 5000, desiredRoas: 1, roasType: 'first_party', launchDate: '2026-11-10' }
+const launchBase = (id: string): PmLaunchPlan => ({
+  _id: id,
+  input: launchInput,
+  status: 'done',
+  step: '',
+  error: '',
+  costUsd: 6.4,
+  createStatus: '',
+  createError: '',
+  metaCampaignId: '',
+  createdAt: '2026-11-03T08:00:00.000Z',
+  approved: null,
+  readiness: {
+    ready: true,
+    blocks: [],
+    warnings: ['Even at the target this budget buys at most 22 orders a week, below Meta’s benchmark of about 50. Learning may stay limited.', 'D2 has no 9:16 image. Launch will make one by extending the image with a blurred background. Upload a real one for a better result.'],
+  },
+  economics: { price: 1799, netPrice: 1524.58, roasType: 'first_party', desiredRoas: 1, allowedCpaMeta: 1799, allowedCpaFirstParty: 1524.58, allowedCpa: 1524.58, dailySpend: 5000, ordersPerWeekAtTarget: 22.96, learningBenchmark: 50, scenarios: [
+    { costPerOrder: 762.29, ordersPerWeek: 45.91, metaRoas: 2.36, firstPartyRoas: 2, meetsTarget: true },
+    { costPerOrder: 1143.43, ordersPerWeek: 30.61, metaRoas: 1.57, firstPartyRoas: 1.33, meetsTarget: true },
+    { costPerOrder: 1524.58, ordersPerWeek: 22.96, metaRoas: 1.18, firstPartyRoas: 1, meetsTarget: true },
+    { costPerOrder: 2286.86, ordersPerWeek: 15.3, metaRoas: 0.79, firstPartyRoas: 0.67, meetsTarget: false },
+    { costPerOrder: 3049.15, ordersPerWeek: 11.48, metaRoas: 0.59, firstPartyRoas: 0.5, meetsTarget: false },
+  ] },
+  tracking: { conversionId: '28192042993817619', accountId: '6995951240481576', blocks: [], warnings: [], facts: ['Conversion “Career_Report_Purchase” on pixel 459303576818354.', 'Last 90 days from ads: 31 purchases worth ₹55051, about ₹1776 each.'] },
+  creatives: [
+    { url: swatch(270, 480, '#c7d2fe'), file: 'C1.jpg', width: 1080, height: 1920, ratio: '9:16' },
+    { url: swatch(400, 400, '#c7d2fe'), file: 'C2.jpg', width: 1080, height: 1080, ratio: '1:1' },
+    { url: swatch(400, 400, '#fde68a'), file: 'C3.jpg', width: 1080, height: 1080, ratio: '1:1' },
+    { url: swatch(400, 500, '#fecaca'), file: 'C4.jpg', width: 1080, height: 1350, ratio: '4:5' },
+  ],
+  review: {
+    missingAngles: ['Nothing speaks to people deciding between a job and a business.'],
+    landing: {
+      summary: 'Clear offer in English. The main button leads to a free 2-page preview.',
+      mainButton: 'Free 2-page preview, then the buy step',
+      directPurchase: 'yes',
+      path: [
+        { step: 'Ad', status: 'ok', note: 'The ad button opens the landing page.' },
+        { step: 'Landing page', status: 'warning', note: 'English only. Buying is the second button.' },
+        { step: 'Free preview', status: 'ok', note: 'Asks for birth details, then shows 2 pages.' },
+        { step: 'Checkout', status: 'unknown', note: 'Can’t be checked without placing an order.' },
+        { step: 'Payment', status: 'unknown', note: 'Confirm with your test purchase.' },
+      ],
+      whatWorks: ['The price and the free call are clear at the top.', 'The free preview lets people see the report first.'],
+      issues: ['The page is in English, so Hindi ads would send people to a page some can’t read.'],
+      claimsToVerify: ['100,000+ people', 'Rahul (Pune) just ordered'],
+    },
+    creatives: [
+      { file: 'C1.jpg', designId: 'D1', summary: 'A person at a crossroads with the question “Job or business?”.', hook: 'Job or business?', language: 'English', angle: 'Career decision', messaging: 'good', policyRisk: 'low', phoneReadability: 'pass', landingMatch: 'pass', finalStatus: 'ready', scores: { hook: 5, clarity: 4, offer: 3, trust: 3 }, strengths: ['The question is one most buyers already ask themselves.', 'The text is large enough to read on a phone.'], weaknesses: ['The price and the free call aren’t shown.'], resizeAdvice: ['Move the headline up 10%: the bottom is covered in Reels.'], claimsToVerify: [] },
+      { file: 'C2.jpg', designId: 'D1', summary: 'Square version of the same design.', hook: 'Job or business?', language: 'English', angle: 'Career decision', messaging: 'good', policyRisk: 'low', phoneReadability: 'pass', landingMatch: 'pass', finalStatus: 'ready', scores: { hook: 5, clarity: 4, offer: 3, trust: 3 }, strengths: [], weaknesses: [], resizeAdvice: [], claimsToVerify: [] },
+      { file: 'C3.jpg', designId: 'D2', summary: 'Long text about career timing on a yellow background.', hook: 'Your next move has a date', language: 'English', angle: 'Timing', messaging: 'needs_changes', policyRisk: 'review', phoneReadability: 'fail', landingMatch: 'pass', finalStatus: 'needs_fixes', scores: { hook: 3, clarity: 2, offer: 2, trust: 2 }, strengths: ['Timing is what this report sells.'], weaknesses: ['Too much text to read while scrolling.', '“Has a date” sounds like a certain outcome.'], resizeAdvice: ['Cut the text to one line.', 'Make a 9:16 version.'], claimsToVerify: ['Your next move has a date'] },
+      { file: 'C4.jpg', designId: 'D3', summary: 'Promises a guaranteed promotion.', hook: 'Guaranteed promotion', language: 'Hindi', angle: 'Outcome promise', messaging: 'needs_changes', policyRisk: 'block', phoneReadability: 'pass', landingMatch: 'warning', finalStatus: 'excluded', scores: { hook: 4, clarity: 3, offer: 1, trust: 1 }, strengths: [], weaknesses: ['No report can guarantee a promotion.', 'The page is in English, but this image is in Hindi.'], resizeAdvice: [], claimsToVerify: ['Guaranteed promotion'] },
+    ],
+  },
+  research: {
+    audience: [
+      { name: 'Stuck in a role', situation: 'Working for years with no promotion, and unsure what to do next.', whyTheyBuy: 'Wants to know when things will change.', ageRange: '28–45', languages: 'English, Hinglish', messageIdea: 'Mehnat poori, phir bhi promotion kab?', label: 'hypothesis', source: 'https://example.com/research' },
+      { name: 'Job or business', situation: 'Thinking of quitting to start something.', whyTheyBuy: 'Wants a clear answer before taking the risk.', ageRange: '25–40', languages: 'English, Hinglish', messageIdea: 'Job ya business: your chart takes a side.', label: 'hypothesis', source: 'https://example.com/research' },
+    ],
+    reach: [{ targeting: 'All India, age 18–65', low: 340900000, high: 401000000, source: 'ev-4' }],
+    locations: [{ place: 'All India', decision: 'no_preference', reason: 'No evidence favours any state, and the product can be bought anywhere.', label: 'assumption', source: 'facts' }],
+    dates: [{ date: '2026-11-08', event: 'Diwali', effect: 'higher_costs', whatToDo: 'Expect costly ads for a few days. Don’t judge the campaign on them.', label: 'hypothesis', source: 'ev-12' }],
+    competitors: [{ brand: 'AstroSage', angle: 'One career question with a timing answer', offer: 'Paid report', format: 'Static image', runningFor: 'Over 60 days', takeaway: 'A specific question may work better than general astrology claims.', label: 'hypothesis', source: 'ev-20' }],
+    patterns: [{ text: 'Most competitors lead with a question. Few show the price in the ad.', label: 'hypothesis', source: 'ev-20' }],
+    gaps: [],
+  },
+  plan: {
+    targetVerdict: 'unknown',
+    targetNote: 'To hit first-party ROAS 1, each confirmed order must cost at most ₹1,525. Only live data can show whether it will.',
+    campaignName: 'Career Report — Launch — Nov 2026',
+    campaignType: 'custom',
+    adSets: [{ name: 'Broad India', budgetPercent: 100, audienceType: 'advantage_plus', excludeAudienceIds: ['1'], ageMin: 18, ageMax: 65, gender: 'all', geoLocations: ['IN'], geoStates: [], geoCities: [], locales: [], interests: [], placementPreset: 'vertical_feed', designIds: ['D1', 'D2'], reason: 'One ad set gives Meta all the purchase data while the budget is small.', label: 'assumption' }],
+    copy: [
+      { designId: 'D1', primaryText: 'Job or business? Your chart can help you decide. Read 2 pages free.', headline: 'Career Report', cta: 'LEARN_MORE' },
+      { designId: 'D2', primaryText: 'See which months suit a career move.', headline: 'Career timing', cta: 'LEARN_MORE' },
+    ],
+    analysis: {
+      headline: 'Launch one broad India ad set at ₹5,000/day with 2 of your 3 designs.',
+      summary: 'One ad set gives Meta all the purchase data while the budget is small. “Job or business?” should lead. “Your next move has a date” can run once its text is shorter.',
+      whySetup: [
+        { title: 'One ad set', detail: 'A split would leave each ad set with too few purchases to learn from.', label: 'assumption', source: 'facts' },
+        { title: 'All India', detail: 'Nothing shows that one state will do better, and anyone in India can buy.', label: 'assumption', source: 'facts' },
+        { title: 'Optimise on purchases', detail: 'Your goal is paid orders, and the Career Report event is working.', label: 'fact', source: 'facts' },
+      ],
+      creativeTakeaway: '“Job or business?” is your strongest image: a clear question, readable on a phone. “Guaranteed promotion” is left out because it promises something no report can.',
+      competitorTakeaway: 'Long-running competitor ads pair one career question with a timing answer. Yours does too, though that doesn’t prove it will work.',
+      todo: [
+        { priority: 'must', action: 'Stop ₹1 test orders firing Purchase.', why: 'They teach Meta from fake buyers and skew ROAS.' },
+        { priority: 'must', action: 'Make one real test purchase.', why: 'It confirms the value reaches Meta as ₹1,799.' },
+        { priority: 'should', action: 'Make a 9:16 version of “Your next move has a date”.', why: 'Otherwise launch extends it with a blurred background.' },
+        { priority: 'nice', action: 'Test a Hinglish page heading.', why: 'It may help people arriving from Hinglish ads.' },
+      ],
+      risks: [
+        { risk: 'Too few purchases for Meta to finish learning.', impact: 'high', response: 'Judge on spend against cost per order, and avoid edits in the first week.' },
+        { risk: 'The free preview may delay purchases past Meta’s reporting window.', impact: 'medium', response: 'Track previews and orders separately.' },
+      ],
+      newCreativeIdeas: [
+        { angle: 'Job or business, with a verdict', hook: 'Job ya business? Your chart takes a side.', format: '9:16 and 1:1 image', why: 'No current image shows that the report gives a clear answer.' },
+        { angle: 'See it first', hook: 'Read your first 2 pages free.', format: '4:5 image', why: 'The free preview is the page’s main offer, and no ad mentions it.' },
+      ],
+    },
+    decisions: [
+      { topic: 'Objective', text: 'Website purchases, using the Career Report purchase event.', label: 'fact', source: 'facts' },
+      { topic: 'Bidding', text: 'Meta’s lowest cost, no cap.', label: 'assumption', source: 'facts' },
+      { topic: 'Audience', text: 'Broad, excluding existing buyers.', label: 'assumption', source: 'ev-3' },
+    ],
+    unknowns: ['Cost per order', 'ROAS', 'Which creative wins'],
+    reviewPlan: {
+      beforeLive: ['Check the ad previews in Ads Manager.'],
+      day1: ['Ads are delivering, links work, and events fire.'],
+      day3: ['Check spend, clicks and the funnel for anything unusual.'],
+      day7: ['Read cost per order and ROAS only if there are enough purchases.'],
+      rules: ['Pause an ad after it spends 2× the allowed cost per order with no purchases.'],
+    },
+    sources: ['https://example.com/research'],
+  },
+})
+
+const launchPlans = new Map<string, PmLaunchPlan>([['lp1', launchBase('lp1')]])
+
+export const fixtureLaunchProducts = (): PmLaunchProduct[] => [{ name: 'Career Report', price: 1799, landingUrl: 'https://91astrology.com/career-report', hasConversion: true }]
+export const fixtureLaunchPlans = (): PmLaunchSummary[] => [...launchPlans.values()]
+export function fixtureLaunchPlan(id: string): PmLaunchPlan {
+  const p = launchPlans.get(id)
+  if (!p) throw new Error('404 No such launch plan')
+  return p
+}
+export function fixtureStartLaunch(input: PmLaunchInput) {
+  const id = `lp${launchPlans.size + 1}`
+  launchPlans.set(id, { ...launchBase(id), input, status: 'running', step: 'review', review: null, research: null, plan: null, readiness: null, costUsd: 0 })
+  setTimeout(() => launchPlans.set(id, { ...launchBase(id), input }), 2500)
+  return { id }
+}
+export function fixtureCreatePaused(id: string) {
+  const p = fixtureLaunchPlan(id)
+  p.createStatus = 'paused'
+  p.metaCampaignId = '120249000000000000'
+  p.approved = { metaStatus: { campaign: 'PAUSED', adSets: { total: 1, paused: 1 }, ads: { total: 2, paused: 2 } } }
+  return { metaCampaignId: p.metaCampaignId }
 }

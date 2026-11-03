@@ -12,6 +12,7 @@ import { FunnelTab } from './FunnelTab'
 import { BudgetGeoTab, CreativesTab, DataChecksTab } from './AnalysisTabs'
 import { AgentTab } from './AgentTab'
 import { LessonsTab } from './LessonsTab'
+import { LaunchTab } from './LaunchTab'
 import { fmt } from './shared'
 
 export type { PmView }
@@ -67,7 +68,7 @@ export function PerformanceMarketeer({ tenantId, initial, yesterday }: { tenantI
         </div>
       </header>
 
-      {view.tab !== 'agent' && view.tab !== 'lessons' && (
+      {view.tab !== 'agent' && view.tab !== 'lessons' && view.tab !== 'launch' && (
         <form className="card flex flex-wrap items-end gap-3 px-4 py-3.5 sm:px-5" onSubmit={(e) => e.preventDefault()} aria-label="Filters">
           <fieldset className="flex min-w-0 flex-col gap-1">
             <legend className="mb-1 text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>Date range (IST)</legend>
@@ -159,6 +160,9 @@ export function PerformanceMarketeer({ tenantId, initial, yesterday }: { tenantI
         </Tabs.Content>
         <Tabs.Content value="lessons" className={PANEL}>
           <LessonsTab tenantId={tenantId} view={view} update={update} />
+        </Tabs.Content>
+        <Tabs.Content value="launch" className={PANEL}>
+          <LaunchTab tenantId={tenantId} />
         </Tabs.Content>
       </Tabs.Root>
     </div>

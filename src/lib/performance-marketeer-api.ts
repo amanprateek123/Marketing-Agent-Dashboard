@@ -37,6 +37,11 @@ import type {
   PmAction,
   PmLevel,
   PmQuery,
+  PmLaunchChecklist,
+  PmLaunchInput,
+  PmLaunchPlan,
+  PmLaunchProduct,
+  PmLaunchSummary,
   PmReconcileResponse,
   PmReportResponse,
   PmSummaryResponse,
@@ -49,6 +54,7 @@ export const PM_PRODUCTS = [
   { id: 'nadi-report-premium', label: 'Nadi Report Premium' },
   { id: 'nadi-report', label: 'Nadi Report' },
   { id: 'golu-devta-arzi', label: 'Golu Devta Arzi' },
+  { id: 'career-report', label: 'Career Report' },
 ] as const
 
 export function productLabel(id: string | undefined): string {
@@ -158,6 +164,29 @@ export const setPmTarget = (t: string, campaignId: string, targetPurchases: numb
     ? mock((f) => f.fixtureSetTarget(campaignId, targetPurchases))
     : apiFetch<PmCampaignTarget>(`/performance-marketeer/${encodeURIComponent(t)}/agent/targets/${encodeURIComponent(campaignId)}`, { method: 'PUT', body: JSON.stringify({ targetPurchases }) })
 
+// ── Launch Planner (plan a new campaign from creatives; created paused) ──
+
+const launchPost = <T>(t: string, path: string, body?: unknown) =>
+  apiFetch<T>(`/performance-marketeer/${encodeURIComponent(t)}/launch/${path}`, { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+
+export const getPmLaunchProducts = (t: string) =>
+  PM_MOCK ? mock((f) => f.fixtureLaunchProducts()) : get<PmLaunchProduct[]>(t, 'launch/products', {})
+
+export const getPmLaunchPlans = (t: string) =>
+  PM_MOCK ? mock((f) => f.fixtureLaunchPlans()) : get<PmLaunchSummary[]>(t, 'launch/plans', {})
+
+export const getPmLaunchPlan = (t: string, id: string) =>
+  PM_MOCK ? mock((f) => f.fixtureLaunchPlan(id)) : get<PmLaunchPlan>(t, `launch/plans/${encodeURIComponent(id)}`, {})
+
+export const startPmLaunchPlan = (t: string, input: PmLaunchInput) =>
+  PM_MOCK ? mock((f) => f.fixtureStartLaunch(input)) : launchPost<{ id: string }>(t, 'plans', input)
+
+export const retryPmLaunchPlan = (t: string, id: string) =>
+  PM_MOCK ? mock(() => ({ ok: true })) : launchPost<{ ok: boolean }>(t, `plans/${encodeURIComponent(id)}/retry`)
+
+export const createPmLaunchPaused = (t: string, id: string, checklist: PmLaunchChecklist) =>
+  PM_MOCK ? mock((f) => f.fixtureCreatePaused(id)) : launchPost<{ metaCampaignId: string }>(t, `plans/${encodeURIComponent(id)}/create-paused`, { checklist })
+
 // ── Lessons (the weekly curator proposes; you approve, edit, retire) ──
 
 async function send<T>(t: string, path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
@@ -220,6 +249,7 @@ export const PM_TABS = [
   { id: 'checks', label: 'Data Checks' },
   { id: 'agent', label: 'AI Analyst' },
   { id: 'lessons', label: 'Lessons' },
+  { id: 'launch', label: 'New Campaign' },
 ] as const
 export type PmTab = (typeof PM_TABS)[number]['id']
 

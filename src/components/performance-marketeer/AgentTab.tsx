@@ -35,6 +35,63 @@ const READ: Record<PmJournalEntry['read'], { label: string; help: string }> = {
   settled: { label: 'Settled · day 7+', help: 'Enough time has passed to judge the result.' },
 }
 
+/** Plain-English meaning of each code check (marketing-agent agent/pipeline/loop.logic.ts runChecks). */
+const CHECK: Record<string, string> = {
+  settling: 'This was changed recently and Meta is still adjusting to it. Changing it again now makes the result impossible to read, so wait.',
+  budget_step: 'The budget change is bigger than the safety limit (at most double, or at most 20% down, in one step), or there is no old budget to compare with (a new ad set starts from ₹0). Check the amount yourself before approving.',
+  no_spend_increase_below_target: 'The campaign is losing money (first-party ROAS below 1) and this plan adds to total daily spend. Note: the code counts budget changes only, so money freed by a pause in the same plan is not subtracted.',
+  cut_below_purchase_target: 'This cuts spend while your purchase target is not reached yet, which costs purchases.',
+  cut_while_meta_roas_ok: 'Our own numbers say this loses money, but Meta’s numbers say it pays back. Find out why they differ before cutting.',
+  evidence_exists: 'The AI cited data it did not actually fetch, so part of the reasoning is unchecked.',
+  cause_checks: 'A cause this action relies on failed its own checks.',
+  impact_from_tool: 'The ₹ impact of a cause was not calculated with the impact tool.',
+  entity_exists: 'The campaign, ad set or ad named here was not found in this campaign.',
+  judge_on: 'The "judge on" date is missing or in the past.',
+  prediction_vs_lesson: 'The expected result does not match what this kind of change did before (a learned lesson).',
+}
+const checkText = (c: string) => CHECK[c] ?? (c.startsWith('owner_rule:') ? 'Breaks one of your standing rules.' : c)
+/** Evidence ids like "(ev-12)" and file refs like "(day/x.md)" mean nothing to the reader; the files tab keeps them. */
+const noEv = (t: string) => t.replace(/\s*\((?:ev-\d+(?:,\s*)?)+\)|\s*\(day\/[^)]*\)/g, '').replace(/[,;]?\s*ev-\d+/g, '')
+
+/** A brief as rows: "Label: text" lines; older briefs are one paragraph, split into sentences. */
+const briefRows = (brief: string) => {
+  const text = noEv(brief).trim()
+  return (text.includes('\n') ? text.split('\n') : text.split(/(?<=\.'?)\s+(?=[A-Z(])/))
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const m = l.match(/^([^:]{1,24}):\s+(.+)$/)
+      return m ? { label: m[1], text: m[2] } : { label: '', text: l }
+    })
+}
+
+function CreativeBrief({ brief }: { brief: string }) {
+  const rows = briefRows(brief)
+  const lead = rows.find((r) => /^(angle|hook)/i.test(r.label)) ?? rows[0]
+  return (
+    <details className="group mt-2 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--hairline-light)' }}>
+      <summary className="cursor-pointer rounded-xl px-3 py-2 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+        Creative brief
+        <span className="ml-2 font-normal group-open:hidden" style={{ color: 'var(--ink-3)' }}>{lead?.text}</span>
+      </summary>
+      <ul className="px-3 pb-1 text-[13px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+        {rows.map((r, i) => (
+          <li key={i} className="grid grid-cols-1 gap-x-3 py-1.5 sm:grid-cols-[110px_1fr]" style={{ borderTop: '1px solid var(--hairline-light)' }}>
+            {r.label ? (
+              <>
+                <span className="font-semibold" style={{ color: 'var(--ink-3)' }}>{r.label}</span>
+                <span className="min-w-0 break-words" style={{ color: 'var(--ink)' }}>{r.text}</span>
+              </>
+            ) : (
+              <span className="min-w-0 break-words sm:col-span-2">{r.text}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const rounds = (r: { investigateRounds: number; planRounds: number }) => `investigate ${plural(r.investigateRounds, 'round')} · plan ${r.planRounds}`
 const val = (v: string | number | null) => (v == null || v === '' ? '—' : typeof v === 'number' ? fmt.int(v) : v)
@@ -42,9 +99,20 @@ const val = (v: string | number | null) => (v == null || v === '' ? '—' : type
 function Change({ a }: { a: PmAgentAction }) {
   const { field, from, to } = a.change
   if (from == null && to == null) return <span style={{ color: 'var(--ink-3)' }}>No change</span>
+  const name = field.replace(/_/g, ' ')
+  const label = name.charAt(0).toUpperCase() + name.slice(1)
+  // Sentences don't fit "x → y"; show them as today and after.
+  if (`${from}${to}`.length > 40)
+    return (
+      <>
+        <span style={{ color: 'var(--ink-3)' }}>{label}</span>
+        <span className="mt-0.5 block"><strong>Now:</strong> {val(from)}</span>
+        <span className="mt-0.5 block"><strong>After:</strong> {val(to)}</span>
+      </>
+    )
   return (
     <>
-      <span style={{ color: 'var(--ink-3)' }} translate="no">{field}: </span>
+      <span style={{ color: 'var(--ink-3)' }}>{label}: </span>
       {val(from)} → {val(to)}
     </>
   )
@@ -54,7 +122,7 @@ function ConfChip({ c }: { c: PmAgentConfidence }) {
   const label = c >= 0.8 ? 'High' : c >= 0.5 ? 'Medium' : 'Low'
   return (
     <span className={`chip ${c >= 0.8 ? 'chip-good' : c >= 0.5 ? 'chip-info' : 'chip-neutral'}`} title="The AI’s confidence, in three coarse bins (0.2 / 0.5 / 0.8).">
-      {label} · {c}
+      {label} confidence
     </span>
   )
 }
@@ -75,10 +143,10 @@ function Flags({ a, dash = true }: { a: PmAgentAction; dash?: boolean }) {
   return (
     <span className="flex flex-wrap gap-1">
       {a.verdict === 'unresolved' && <span className="chip chip-warn" title="The plan check hit its round limit with open issues on this action.">Unresolved</span>}
-      {a.verdict === 'change' && <span className="chip chip-info" title="The plan checker asked for a change to this action.">Changed</span>}
+      {a.verdict === 'change' && <span className="chip chip-warn" title="The reviewer asked for changes to this action, and they may not be made yet.">Needs changes</span>}
       {a.disputed && <span className="chip chip-warn" title="The investigator and the verifier disagree on the cause behind this action by more than 0.3.">Disputed</span>}
       {checks.length > 0 && (
-        <span className="chip chip-bad" title={checks.join('\n')}>
+        <span className="chip chip-bad" title={checks.map(checkText).join('\n')}>
           Check failed
         </span>
       )}
@@ -602,6 +670,7 @@ function RunBody({ tenantId, date, campaignId }: { tenantId: string; date: strin
 }
 
 function RunActions({ d }: { d: PmAgentRun }) {
+  const causes = new Map((d.causes ?? []).map((c) => [c.id, c]))
   return (
     <div className="flex flex-col gap-3">
       {d.unresolved.length > 0 && (
@@ -627,39 +696,72 @@ function RunActions({ d }: { d: PmAgentRun }) {
                 </span>
                 <span className="min-w-0 break-words text-[12.5px] font-semibold" style={{ color: 'var(--ink-2)' }}>{a.entityName}</span>
               </div>
-              <p className="mt-1.5 text-[15px] font-semibold leading-snug">{a.title}</p>
+              <p className="mt-1.5 text-[15px] font-semibold leading-snug">{noEv(a.title)}</p>
+              {a.plain && <p className="mt-1.5 break-words text-[13.5px] leading-relaxed" style={{ color: 'var(--ink)' }}>{noEv(a.plain)}</p>}
               <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[auto_1fr]" style={{ color: 'var(--ink-2)' }}>
                 <dt style={{ color: 'var(--ink-3)' }}>Change</dt>
                 <dd className="break-words">
                   <Change a={a} />
                 </dd>
-                <dt style={{ color: 'var(--ink-3)' }}>Expected</dt>
-                <dd className="tabular-nums">{a.expectedEffect.metric} {a.expectedEffect.low} to {a.expectedEffect.high}</dd>
-                <dt style={{ color: 'var(--ink-3)' }}>Impact</dt>
-                <dd className="tabular-nums">{fmt.inr(a.impactRupeesPerDay)}/day</dd>
-                <dt style={{ color: 'var(--ink-3)' }}>Judge on</dt>
-                <dd>{fmt.date(a.judgeOn)}{a.resetsLearning ? ' · resets learning' : ''}</dd>
-                <dt style={{ color: 'var(--ink-3)' }}>Stop if</dt>
-                <dd className="break-words">{a.stopCondition || '—'}</dd>
+                <dt style={{ color: 'var(--ink-3)' }}>Expected result</dt>
+                <dd className="tabular-nums">{a.expectedEffect.metric}: {a.expectedEffect.low} to {a.expectedEffect.high}</dd>
+                <dt style={{ color: 'var(--ink-3)' }}>Est. gain</dt>
+                <dd className="tabular-nums">about {fmt.inr(a.impactRupeesPerDay)}/day if it works (AI estimate)</dd>
+                <dt style={{ color: 'var(--ink-3)' }}>Check result on</dt>
+                <dd>{fmt.date(a.judgeOn)}{a.resetsLearning ? ' · Meta restarts learning, so early days look worse' : ''}</dd>
+                <dt style={{ color: 'var(--ink-3)' }}>Undo if</dt>
+                <dd className="break-words">{a.stopCondition ? noEv(a.stopCondition) : '—'}</dd>
+                {a.risk && (
+                  <>
+                    <dt style={{ color: 'var(--ink-3)' }}>Risk</dt>
+                    <dd className="break-words">{noEv(a.risk)}</dd>
+                  </>
+                )}
                 {a.causeIds.length > 0 && (
                   <>
-                    <dt style={{ color: 'var(--ink-3)' }}>Causes</dt>
-                    <dd>{a.causeIds.join(', ')}</dd>
+                    <dt style={{ color: 'var(--ink-3)' }}>Why (causes)</dt>
+                    <dd>
+                      <ul className="flex flex-col gap-0.5">
+                        {a.causeIds.map((id) => {
+                          const c = causes.get(id)
+                          return (
+                            <li key={id} className="break-words">
+                              <strong>{id}</strong>
+                              {c ? `: ${noEv(c.title)}` : ''}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </dd>
                   </>
                 )}
               </dl>
-              {a.creativeBrief && (
-                <p className="mt-2 break-words rounded-lg px-3 py-2 text-[13px]" style={{ background: 'var(--surface)', border: '1px solid var(--hairline-light)' }}>
-                  <strong>Creative brief: </strong>
-                  {a.creativeBrief}
-                </p>
+              {a.creativeBrief && <CreativeBrief brief={a.creativeBrief} />}
+              {a.verdict !== 'approve' && (a.notes ?? []).length > 0 && (
+                <div className="mt-2 rounded-lg px-3 py-2 text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--ink-2)' }}>
+                  <strong style={{ color: 'var(--warn)' }}>The reviewer wants this fixed before you act on it:</strong>
+                  <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+                    {a.notes!.map((n, i) => (
+                      <li key={i} className="break-words">{noEv(n.replace(/^verifier \(\w+\):\s*/, ''))}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               {a.checksFailed && a.checksFailed.length > 0 && (
-                <ul className="mt-2 list-disc pl-5 text-[12.5px]" style={{ color: 'var(--bad)' }}>
-                  {a.checksFailed.map((c, i) => (
-                    <li key={i} className="break-words">{c}</li>
-                  ))}
-                </ul>
+                <div className="mt-2 rounded-lg px-3 py-2 text-[13px]" style={{ background: 'var(--bad-bg)', border: '1px solid var(--bad-border)', color: 'var(--ink-2)' }}>
+                  <strong style={{ color: 'var(--bad)' }}>Safety check flagged this. You can still approve it, but read why:</strong>
+                  <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+                    {a.checksFailed.map((c) => {
+                      const detail = a.checkMessages?.find((m) => m.startsWith(`${c}: `))?.slice(c.length + 2)
+                      return (
+                        <li key={c} className="break-words">
+                          {checkText(c)}
+                          {detail && <span className="block text-[12px]" style={{ color: 'var(--ink-3)' }}>Details: {noEv(detail)}</span>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <ConfChip c={a.confidence} />
