@@ -645,16 +645,25 @@ export interface PmLaunchCreative {
   hook: string
   language: string
   angle: string
-  messaging: 'good' | 'needs_changes'
-  policyRisk: 'low' | 'review' | 'block'
-  phoneReadability: 'pass' | 'fail'
-  landingMatch: 'pass' | 'warning'
+  firstLook?: { viewer: string; noticesFirst: string; thinks: string; reaction: 'stops_and_taps' | 'stops_only' | 'scrolls_past'; why: string }
   finalStatus: 'ready' | 'needs_fixes' | 'excluded'
-  scores: { hook: number; clarity: number; offer: number; trust: number }
+  verdict?: string
   strengths: string[]
-  weaknesses: string[]
+  changes?: { where: string; problem: string; whatViewerDoes: string; fix: string }[]
+  tests?: string[]
+  promise?: { adPromises: string; pageDelivers: 'yes' | 'no' | 'unclear'; note: string }
+  policyRisk: 'low' | 'review' | 'block'
   resizeAdvice: string[]
   claimsToVerify: string[]
+  /** Plans saved before the viewer-first review. */
+  weaknesses?: string[]
+}
+
+export interface PmLaunchCreativeCall {
+  designId: string
+  call: 'run' | 'fix' | 'replace'
+  why: string
+  replacements: { topic: string; hook: string; format: string; forWho: string; why: string }[]
 }
 
 export interface PmLaunchAdSet {
@@ -726,6 +735,7 @@ export interface PmLaunchPlan extends PmLaunchSummary {
     dates: { date: string; event: string; effect: 'higher_demand' | 'lower_demand' | 'higher_costs' | 'neutral'; whatToDo: string; label: PmLaunchLabel; source: string }[]
     competitors: { brand: string; angle: string; offer: string; format: string; runningFor: string; takeaway: string; label: PmLaunchLabel; source: string }[]
     patterns: PmLaunchFinding[]
+    socialPlaybook?: { pattern: string; seenAt: string; howToUse: string; label: PmLaunchLabel; source: string }[]
     gaps: string[]
   } | null
   plan: {
@@ -741,6 +751,7 @@ export interface PmLaunchPlan extends PmLaunchSummary {
       whySetup: { title: string; detail: string; label: PmLaunchLabel; source: string }[]
       creativeTakeaway: string
       competitorTakeaway: string
+      creativeCalls?: PmLaunchCreativeCall[]
       todo: { priority: 'must' | 'should' | 'nice'; action: string; why: string }[]
       risks: { risk: string; impact: 'high' | 'medium' | 'low'; response: string }[]
       newCreativeIdeas: { angle: string; hook: string; format: string; why: string }[]
