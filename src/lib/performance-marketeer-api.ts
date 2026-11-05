@@ -57,8 +57,13 @@ export const PM_PRODUCTS = [
   { id: 'career-report', label: 'Career Report' },
 ] as const
 
+/** Sold inside the app. Not in the product filter: they have no first-party data to filter. */
+export const PM_APP_PRODUCTS = [{ id: 'app-chat', label: 'App Chat' }] as const
+
+export const isPmAppProduct = (id: string | undefined) => PM_APP_PRODUCTS.some((p) => p.id === id)
+
 export function productLabel(id: string | undefined): string {
-  return PM_PRODUCTS.find((p) => p.id === id)?.label ?? (id || 'All products')
+  return [...PM_PRODUCTS, ...PM_APP_PRODUCTS].find((p) => p.id === id)?.label ?? (id || 'All products')
 }
 
 type Fixtures = typeof import('./performance-marketeer-fixtures')
@@ -150,7 +155,7 @@ export const cancelPmAgentQueued = (t: string, campaignId: string, date: string)
     ? mock((f) => f.fixtureCancelQueued(campaignId, date))
     : apiFetch<PmAgentCancelResult>(`/performance-marketeer/${encodeURIComponent(t)}/agent/queue/${encodeURIComponent(campaignId)}/cancel`, { method: 'POST', body: JSON.stringify({ date }) })
 
-// ── Lifetime purchase targets (any logged-in user; the AI analyst plans towards them) ──
+// ── Campaign goals (any logged-in user; the AI analyst plans towards them) ──
 
 export const getPmCampaignList = (t: string) =>
   PM_MOCK ? mock((f) => f.fixtureCampaignList()) : get<PmCampaignListItem[]>(t, 'agent/campaigns', {})
@@ -158,11 +163,13 @@ export const getPmCampaignList = (t: string) =>
 export const getPmTargets = (t: string) =>
   PM_MOCK ? mock((f) => f.fixtureTargets()) : get<PmCampaignTarget[]>(t, 'agent/targets', {})
 
-/** null removes the target. */
-export const setPmTarget = (t: string, campaignId: string, targetPurchases: number | null) =>
+/** Only the fields sent change; null removes one. Sending targetDays starts a new count from today. */
+export type PmGoalChange = Partial<Pick<PmCampaignTarget, 'targetRoas' | 'targetPurchases' | 'targetDays' | 'maxDailyBudget'>>
+
+export const setPmGoal = (t: string, campaignId: string, change: PmGoalChange) =>
   PM_MOCK
-    ? mock((f) => f.fixtureSetTarget(campaignId, targetPurchases))
-    : apiFetch<PmCampaignTarget>(`/performance-marketeer/${encodeURIComponent(t)}/agent/targets/${encodeURIComponent(campaignId)}`, { method: 'PUT', body: JSON.stringify({ targetPurchases }) })
+    ? mock((f) => f.fixtureSetGoal(campaignId, change))
+    : apiFetch<PmCampaignTarget>(`/performance-marketeer/${encodeURIComponent(t)}/agent/targets/${encodeURIComponent(campaignId)}`, { method: 'PUT', body: JSON.stringify(change) })
 
 // ── Launch Planner (plan a new campaign from creatives; created paused) ──
 

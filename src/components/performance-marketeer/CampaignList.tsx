@@ -107,7 +107,7 @@ export function CampaignList({ tenantId, onOpenAgent }: { tenantId: string; onOp
                     <td className="whitespace-nowrap">{fmt.date(istDate(c.createdTime))}</td>
                     <td className="num">{c.dailyBudget != null ? fmt.inr(c.dailyBudget) : '—'}</td>
                     <td>
-                      <AnalyseButton compact name={c.name} onClick={() => setAnalyse([{ id: c.id, name: c.name }])} />
+                      <AnalyseButton compact name={c.name} onClick={() => setAnalyse([{ id: c.id, name: c.name, product: c.product }])} />
                     </td>
                   </tr>
                 ))}

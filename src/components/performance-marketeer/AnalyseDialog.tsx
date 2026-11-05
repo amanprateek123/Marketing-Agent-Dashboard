@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Sparkles, X } from 'lucide-react'
-import { PM_QUEUE_MAX, enqueuePmAgent, getPmAgentQueue, getPmTargets, istToday, istYesterday, setPmTarget } from '@/lib/performance-marketeer-api'
+import { PM_QUEUE_MAX, enqueuePmAgent, getPmAgentQueue, getPmTargets, istToday, istYesterday, setPmGoal, type PmGoalChange } from '@/lib/performance-marketeer-api'
 import type { PmAgentEnqueueResult } from '@/types/performance-marketeer'
 import { fmt, serverMessage, useLoad } from './shared'
+import { GoalFields, goalChange, readGoal } from './CampaignGoal'
 
-export type AnalyseTarget = { id: string; name: string }
+export type AnalyseTarget = { id: string; name: string; product?: string }
 
 /** The per-row / toolbar / panel trigger. Always labelled, never hover-only. */
 export function AnalyseButton({ name, onClick, compact }: { name?: string; onClick: () => void; compact?: boolean }) {
@@ -65,9 +66,9 @@ function Body({ tenantId, campaigns, onClose, onOpenAgent }: { tenantId: string;
   // Today's queue tells us which campaigns already have a run today (→ offer "Run again").
   const queue = useLoad(`analyse-queue${today}`, () => getPmAgentQueue(tenantId, today))
   const qd = queue.data
-  // Lifetime purchase targets, editable here so every run starts with the owner's target.
+  // The owner's goals, editable here so every run starts with what the owner wants.
   const targets = useLoad(`analyse-targets${tenantId}`, () => getPmTargets(tenantId))
-  const stored = new Map((targets.data ?? []).map((t) => [t.campaignId, t.targetPurchases]))
+  const storedGoal = (id: string) => targets.data?.find((t) => t.campaignId === id)
   const status = new Map<string, string>([
     ...(qd?.finished ?? []).map((x) => [x.campaignId, x.status] as const),
     ...(qd?.queued ?? []).filter((x) => x.date === today).map((x) => [x.campaignId, 'queued'] as const),
@@ -99,22 +100,22 @@ function Body({ tenantId, campaigns, onClose, onOpenAgent }: { tenantId: string;
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
-    const changes: { id: string; value: number | null }[] = []
+    const changes: { id: string; change: PmGoalChange }[] = []
     for (const c of campaigns) {
-      const raw = String(form.get(`target-${c.id}`) ?? '').trim()
-      const value = raw === '' ? null : Number(raw)
-      if (value !== null && (!Number.isInteger(value) || value < 1 || value > 1_000_000)) {
-        setError(`Target for ${c.name} must be a whole number from 1 to 1,000,000, or empty for no target.`)
+      const next = readGoal(form, `goal-${c.id}`, c.name)
+      if (typeof next === 'string') {
+        setError(next)
         return
       }
-      if (value !== (stored.get(c.id) ?? null)) changes.push({ id: c.id, value })
+      const change = goalChange(storedGoal(c.id), next)
+      if (change) changes.push({ id: c.id, change })
     }
     setSending(true)
     setError('')
     try {
-      for (const ch of changes) await setPmTarget(tenantId, ch.id, ch.value)
+      for (const ch of changes) await setPmGoal(tenantId, ch.id, ch.change)
     } catch (err) {
-      setError(`Couldn’t save the purchase target: ${serverMessage(err)}`)
+      setError(`Couldn’t save the goal: ${serverMessage(err)}`)
       setSending(false)
       return
     }
@@ -202,30 +203,20 @@ function Body({ tenantId, campaigns, onClose, onOpenAgent }: { tenantId: string;
                 {s === 'queued' && <span className="chip chip-neutral">Already queued</span>}
                 {s === 'running' && <span className="chip chip-info">Running now</span>}
               </span>
-              <label className="flex items-center gap-2 whitespace-nowrap text-[12.5px] font-semibold" style={{ color: 'var(--ink-2)' }}>
-                Target purchases
-                <input
-                  // Remount once targets load so the stored value shows.
-                  key={targets.data ? 'loaded' : 'loading'}
-                  type="number"
-                  inputMode="numeric"
-                  name={`target-${c.id}`}
-                  min={1}
-                  max={1000000}
-                  step={1}
-                  placeholder="None"
-                  autoComplete="off"
-                  disabled={!targets.data && !targets.error}
-                  defaultValue={stored.get(c.id) ?? ''}
-                  className="input !min-h-[34px] w-[110px] !py-1 tabular-nums"
-                />
-              </label>
+              {/* Remount once goals load so the saved values show. */}
+              <GoalFields
+                key={targets.data ? 'loaded' : 'loading'}
+                prefix={`goal-${c.id}`}
+                stored={storedGoal(c.id)}
+                product={c.product}
+                disabled={!targets.data && !targets.error}
+              />
             </li>
           )
         })}
       </ul>
-      <p className="explain">Target purchases is optional: the lifetime first-party purchases you want from the campaign. The AI plans towards it. Leave empty for no target.</p>
-      {targets.error && <p className="explain" style={{ color: 'var(--bad)' }}>Couldn’t load saved targets — entering one here replaces it.</p>}
+      <p className="explain">Tell the AI what you want: the ROAS and purchases in how many days, and the most the campaign may spend per day. It plans towards these and flags what isn’t reachable. All are optional; with none set, it aims for its default ROAS.</p>
+      {targets.error && <p className="explain" style={{ color: 'var(--bad)' }}>Couldn’t load saved goals — entering one here replaces it.</p>}
       {queue.loading && !queue.data && <p className="explain">Checking today’s runs…</p>}
       {done.length > 0 && (
         <label className="flex cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)' }}>
