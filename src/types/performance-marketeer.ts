@@ -485,6 +485,12 @@ export interface PmFinishedItem {
 export interface PmCampaignTarget {
   campaignId: string
   targetPurchases: number | null
+  targetRoas: number | null
+  /** The ROAS and purchases are wanted within this many days from targetStart. */
+  targetDays: number | null
+  targetStart: string | null
+  /** Rupees per day. Not tied to the period. */
+  maxDailyBudget: number | null
   updatedBy: string
   updatedAt: string | null
 }

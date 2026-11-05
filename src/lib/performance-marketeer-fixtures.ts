@@ -1133,6 +1133,15 @@ export function fixtureCampaignList(): PmCampaignListItem[] {
       product: c.product,
       dailyBudget: 5000 * (i + 1),
     })),
+    {
+      id: '120211000000000900',
+      name: "App Chat Promotion 26-Oct'26",
+      accountId: '6995951240481576',
+      effectiveStatus: 'ACTIVE',
+      createdTime: '2026-10-26T07:20:00Z',
+      product: 'app-chat',
+      dailyBudget: 1000,
+    },
     ...Array.from({ length: 30 }, (_, i) => ({
       id: `1202110000000001${String(i).padStart(2, '0')}`,
       name: `Old test campaign ${i + 1}`,
@@ -1146,11 +1155,23 @@ export function fixtureCampaignList(): PmCampaignListItem[] {
 }
 
 export function fixtureTargets(): PmCampaignTarget[] {
-  return [...targets.values()].filter((x) => x.targetPurchases != null)
+  return [...targets.values()]
 }
 
-export function fixtureSetTarget(campaignId: string, targetPurchases: number | null): PmCampaignTarget {
-  const t = { campaignId, targetPurchases, updatedBy: 'you', updatedAt: new Date().toISOString() }
+export function fixtureSetGoal(campaignId: string, change: Partial<PmCampaignTarget>): PmCampaignTarget {
+  const t: PmCampaignTarget = {
+    targetPurchases: null,
+    targetRoas: null,
+    targetDays: null,
+    targetStart: null,
+    maxDailyBudget: null,
+    ...targets.get(campaignId),
+    ...change,
+    ...(change.targetDays !== undefined ? { targetStart: change.targetDays ? new Date().toISOString().slice(0, 10) : null } : {}),
+    campaignId,
+    updatedBy: 'you',
+    updatedAt: new Date().toISOString(),
+  }
   targets.set(campaignId, t)
   return t
 }
