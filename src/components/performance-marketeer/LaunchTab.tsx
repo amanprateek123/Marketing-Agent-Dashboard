@@ -6,7 +6,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { X } from 'lucide-react'
 import { uploadCreativeFile } from '@/lib/api'
 import { PM_MOCK, createPmLaunchPaused, getPmLaunchPlan, getPmLaunchPlans, getPmLaunchProducts, istToday, retryPmLaunchPlan, startPmLaunchPlan } from '@/lib/performance-marketeer-api'
-import type { PmLaunchAdSet, PmLaunchChecklist, PmLaunchCreative, PmLaunchFinding, PmLaunchLabel, PmLaunchPlan, PmLaunchSummary } from '@/types/performance-marketeer'
+import type { PmLaunchAdSet, PmLaunchChecklist, PmLaunchCreative, PmLaunchCreativeCall, PmLaunchFinding, PmLaunchLabel, PmLaunchPlan, PmLaunchSummary } from '@/types/performance-marketeer'
 import { Bar, Caveat, Empty, LoadError, PmSkeleton, SectionCard, TableWrap, fmt, serverMessage, useLoad } from './shared'
 
 const POLL_MS = 10_000
@@ -24,10 +24,21 @@ const VERDICT = {
   unknown: { text: 'Target: unknown until live', chip: 'chip-neutral' },
 }
 const PLACEMENT = { vertical: 'Stories and Reels only', vertical_feed: 'Stories, Reels and Feed', everywhere: 'All Facebook and Instagram' }
-const STATUS: Record<PmLaunchCreative['finalStatus'], { text: string; chip: string }> = {
-  ready: { text: 'Ready', chip: 'chip-good' },
-  needs_fixes: { text: 'Needs fixes', chip: 'chip-warn' },
-  excluded: { text: 'Excluded', chip: 'chip-bad' },
+const CALL: Record<PmLaunchCreativeCall['call'], { text: string; chip: string }> = {
+  run: { text: 'Run It', chip: 'chip-good' },
+  fix: { text: 'Fix, Then Run', chip: 'chip-warn' },
+  replace: { text: 'Replace', chip: 'chip-bad' },
+}
+const STATUS_CALL: Record<PmLaunchCreative['finalStatus'], PmLaunchCreativeCall['call']> = { ready: 'run', needs_fixes: 'fix', excluded: 'replace' }
+const REACTION = {
+  stops_and_taps: { text: 'Stops and taps', chip: 'chip-good' },
+  stops_only: { text: 'Stops, doesn’t tap', chip: 'chip-warn' },
+  scrolls_past: { text: 'Scrolls past', chip: 'chip-bad' },
+}
+const PROMISE = {
+  yes: { text: 'Page keeps the promise', chip: 'chip-good' },
+  no: { text: 'Page doesn’t keep the promise', chip: 'chip-bad' },
+  unclear: { text: 'Check the page keeps the promise', chip: 'chip-warn' },
 }
 const CHECKLIST: { key: keyof PmLaunchChecklist; text: string }[] = [
   { key: 'testPurchase', text: 'I made a real test purchase, and Events Manager shows the right value in INR.' },
@@ -276,6 +287,7 @@ function PlanView({ tenantId, id, onBack }: { tenantId: string; id: string; onBa
 }
 
 function stepLabel(step: string) {
+  if (step === 'review edit') return 'A creative director is editing the review…'
   if (step.startsWith('review')) return 'Reviewing images and the page…'
   if (step.startsWith('research')) return 'Researching the market…'
   if (step.startsWith('plan check')) return 'A second AI is challenging the plan…'
@@ -546,7 +558,7 @@ function SetupPanel({ d }: { d: PmLaunchPlan }) {
       {unused.length > 0 && (
         <SectionCard title="Images not used" description="See the Creatives tab for the full review.">
           <ul className="flex flex-wrap gap-3">
-            {unused.map((id) => <DesignImages key={id} d={d} id={id} note={d.review!.creatives.find((c) => c.designId === id)?.weaknesses[0]} />)}
+            {unused.map((id) => <DesignImages key={id} d={d} id={id} note={plan.analysis.creativeCalls?.find((c) => c.designId === id)?.why ?? d.review!.creatives.find((c) => c.designId === id)?.verdict ?? d.review!.creatives.find((c) => c.designId === id)?.weaknesses?.[0]} />)}
           </ul>
         </SectionCard>
       )}
@@ -582,78 +594,128 @@ function audienceText(a: PmLaunchAdSet) {
   return a.excludeAudienceIds.length ? `${base}, excluding ${a.excludeAudienceIds.length} audience${a.excludeAudienceIds.length === 1 ? '' : 's'}` : base
 }
 
-function Meter({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="grid grid-cols-[62px_1fr_28px] items-center gap-2 text-[12.5px]">
-      <span style={{ color: 'var(--ink-3)' }}>{label}</span>
-      <Bar value={value} max={5} label={`${label}: ${value} out of 5`} />
-      <span className="tabular-nums text-right">{value}/5</span>
-    </div>
-  )
-}
-
 function CreativesCard({ d }: { d: PmLaunchPlan }) {
   const review = d.review!
   const byFile = new Map(d.creatives.map((c) => [c.file, c]))
   const designs = [...new Set(review.creatives.map((c) => c.designId))]
-  const ideas = d.plan!.analysis.newCreativeIdeas
+  const { creativeCalls, creativeTakeaway, newCreativeIdeas: ideas } = d.plan!.analysis
+  const callOf = (id: string) => creativeCalls?.find((c) => c.designId === id)
+  const decisionOf = (id: string) => {
+    const files = review.creatives.filter((c) => c.designId === id)
+    const worst = files.find((c) => c.finalStatus === 'needs_fixes') ?? files.find((c) => c.finalStatus === 'ready') ?? files[0]
+    return callOf(id)?.call ?? STATUS_CALL[worst.finalStatus]
+  }
   return (
     <>
-      <SectionCard title="Your creatives" description="Scores are the AI’s opinion, from 1 (weak) to 5 (strong). Real results will decide.">
+      <SectionCard title="What To Do With Your Creatives" description="This is the AI’s read as a marketer. Only real ads can prove it.">
+        <p className="text-[13.5px] leading-relaxed">{creativeTakeaway}</p>
+        <dl className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+          {(['run', 'fix', 'replace'] as const).map((k) => {
+            const ids = designs.filter((id) => decisionOf(id) === k)
+            return (
+              <div key={k} className="rounded-xl px-4 py-3" style={CARD}>
+                <dt><span className={`chip ${CALL[k].chip}`}>{CALL[k].text}</span></dt>
+                <dd className="mt-1.5 text-[14px] font-semibold tabular-nums">{ids.length ? ids.join(', ') : 'None'}</dd>
+              </div>
+            )
+          })}
+        </dl>
+      </SectionCard>
+      <SectionCard title="Each Creative">
         <ul className="flex flex-col gap-3">
           {designs.map((id) => {
             const files = review.creatives.filter((c) => c.designId === id)
-            const first = files[0]
             // An excluded file never ships, even when other sizes of the design do.
             const live = files.filter((c) => c.finalStatus !== 'excluded')
             const left = files.filter((c) => c.finalStatus === 'excluded' && live.length > 0)
-            const worst = live.find((c) => c.finalStatus === 'needs_fixes') ?? live[0] ?? first
-            const lead = live[0] ?? first
+            const lead = live[0] ?? files[0]
             const sizes = (live.length ? live : files).map((c) => byFile.get(c.file)?.ratio ?? '')
-            const uniq = (f: (c: PmLaunchCreative) => string[]) => [...new Set(files.flatMap(f))]
+            const uniq = <T,>(f: (c: PmLaunchCreative) => T[] | undefined) => [...new Set(files.flatMap((c) => f(c) ?? []))]
+            const call = callOf(id)
+            const look = lead.firstLook
+            const changes = uniq((c) => c.changes)
+            const tests = uniq((c) => c.tests)
             const advice = uniq((c) => c.resizeAdvice)
             const claims = uniq((c) => c.claimsToVerify)
             const strengths = uniq((c) => c.strengths)
             const weaknesses = uniq((c) => c.weaknesses)
+            const risk = files.some((c) => c.policyRisk === 'block') ? 'block' : files.some((c) => c.policyRisk === 'review') ? 'review' : 'low'
             return (
               <li key={id} className="flex flex-col gap-4 rounded-xl px-4 py-4 md:flex-row" style={CARD}>
-                <div className="flex shrink-0 flex-col gap-3 md:w-[220px]">
-                  <div className="flex flex-wrap gap-1.5">
-                    {files.map((c) => {
-                      const f = byFile.get(c.file)
-                      return f ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={c.file} src={f.url} alt={`${id}, size ${f.ratio}: ${c.summary}`} width={104} height={104} className="h-[104px] w-[104px] rounded-lg object-contain" style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }} />
-                      ) : null
-                    })}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Meter label="Hook" value={lead.scores.hook} />
-                    <Meter label="Clarity" value={lead.scores.clarity} />
-                    <Meter label="Offer" value={lead.scores.offer} />
-                    <Meter label="Trust" value={lead.scores.trust} />
-                  </div>
+                <div className="flex shrink-0 flex-wrap content-start gap-1.5 md:w-[220px]">
+                  {files.map((c) => {
+                    const f = byFile.get(c.file)
+                    return f ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={c.file} src={f.url} alt={`${id}, size ${f.ratio}: ${c.summary}`} width={files.length > 1 ? 104 : 220} height={files.length > 1 ? 104 : 220} loading="lazy" className={`rounded-lg object-contain ${files.length > 1 ? 'h-[104px] w-[104px]' : 'h-[220px] w-[220px]'}`} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)' }} />
+                    ) : null
+                  })}
                 </div>
-                <div className="min-w-0 flex-1 text-[13px]" style={{ color: 'var(--ink-2)' }}>
+                <div className="min-w-0 flex-1 text-[13.5px]" style={{ color: 'var(--ink-2)' }}>
                   <p className="flex flex-wrap items-center gap-1.5">
                     <strong className="text-[15px]" style={{ color: 'var(--ink)' }}>{id}</strong>
-                    <span className={`chip ${STATUS[worst.finalStatus].chip}`}>{STATUS[worst.finalStatus].text}</span>
-                    <span>{first.language} · {first.angle}</span>
+                    <span className={`chip ${CALL[decisionOf(id)].chip}`}>{CALL[decisionOf(id)].text}</span>
+                    {risk !== 'low' && <span className={`chip ${risk === 'block' ? 'chip-bad' : 'chip-warn'}`}>{risk === 'block' ? 'Meta will likely reject' : 'Borderline for Meta'}</span>}
+                    <span className="text-[13px]">{lead.language} · {lead.angle}</span>
                   </p>
-                  <p className="mt-1 break-words text-[13.5px]" style={{ color: 'var(--ink)' }}>{first.summary}</p>
-                  <p className="mt-2 flex flex-wrap gap-1.5">
-                    {(['1:1', '4:5', '9:16'] as const).map((s) => <span key={s} className={`chip ${sizes.includes(s) ? 'chip-good' : 'chip-neutral'}`}>{s} {sizes.includes(s) ? 'available' : 'missing'}</span>)}
-                  </p>
-                  <p className="mt-1.5 flex flex-wrap gap-1.5">
-                    <span className={`chip ${files.every((c) => c.phoneReadability === 'pass') ? 'chip-good' : 'chip-bad'}`}>{files.every((c) => c.phoneReadability === 'pass') ? 'Readable on a phone' : 'Hard to read on a phone'}</span>
-                    <span className={`chip ${files.every((c) => c.landingMatch === 'pass') ? 'chip-good' : 'chip-warn'}`}>{files.every((c) => c.landingMatch === 'pass') ? 'Matches the page' : 'Doesn’t match the page'}</span>
-                    <span className={`chip ${files.some((c) => c.policyRisk === 'block') ? 'chip-bad' : files.some((c) => c.policyRisk === 'review') ? 'chip-warn' : 'chip-good'}`}>{files.some((c) => c.policyRisk === 'block') ? 'Likely rejected by Meta' : files.some((c) => c.policyRisk === 'review') ? 'Policy: needs a check' : 'Low policy risk'}</span>
-                  </p>
-                  <div className="mt-2.5 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    {strengths.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>What works</strong><List items={strengths} /></div>}
+                  <p className="mt-1.5 break-words text-[14.5px] font-medium leading-snug" style={{ color: 'var(--ink)' }}>{call?.why || lead.verdict || lead.summary}</p>
+
+                  {look && (
+                    <div className="mt-3 break-words rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)', border: '1px solid var(--hairline-light)' }}>
+                      <p className="flex flex-wrap items-center gap-2"><span className="micro-label">First look</span><span className={`chip ${REACTION[look.reaction].chip}`}>{REACTION[look.reaction].text}</span></p>
+                      <p className="mt-1.5 text-[13px]">{look.viewer}. Notices first: {look.noticesFirst}</p>
+                      <p className="mt-1 text-[14px] italic" style={{ color: 'var(--ink)' }}>“{look.thinks}”</p>
+                      <p className="mt-1 text-[13px]">{look.why}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-col gap-3">
+                    {strengths.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>Why it works</strong><List items={strengths} /></div>}
+                    {changes.length > 0 && (
+                      <div>
+                        <strong style={{ color: 'var(--ink)' }}>{changes.length === 1 ? 'What to change' : `${changes.length} things to change`}</strong>
+                        <ul className="mt-1 flex flex-col gap-1.5">
+                          {changes.map((c, i) => (
+                            <li key={i} className="break-words rounded-lg px-3 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--hairline-light)' }}>
+                              <p><strong style={{ color: 'var(--ink)' }}>{c.where}:</strong> {c.problem}</p>
+                              <p className="mt-0.5">What people do: {c.whatViewerDoes}</p>
+                              <p className="mt-0.5" style={{ color: 'var(--ink)' }}><strong>Fix:</strong> {c.fix}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {weaknesses.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>What’s weak</strong><List items={weaknesses} /></div>}
-                    {advice.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>Resize and fix</strong><List items={advice} /></div>}
-                    {claims.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>Needs proof</strong><List items={claims} /></div>}
+                    {lead.promise && (
+                      <div className="break-words">
+                        <p className="flex flex-wrap items-center gap-2"><strong style={{ color: 'var(--ink)' }}>After the click</strong><span className={`chip ${PROMISE[lead.promise.pageDelivers].chip}`}>{PROMISE[lead.promise.pageDelivers].text}</span></p>
+                        <p className="mt-0.5">The ad makes people expect: {lead.promise.adPromises}. {lead.promise.note}</p>
+                      </div>
+                    )}
+                    {(call?.replacements.length ?? 0) > 0 && (
+                      <div>
+                        <strong style={{ color: 'var(--ink)' }}>Make this instead</strong>
+                        <ul className="mt-1 flex flex-col gap-1.5">
+                          {call!.replacements.map((x, i) => (
+                            <li key={i} className="break-words rounded-lg px-3 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--hairline-light)' }}>
+                              <p className="micro-label">{x.topic}</p>
+                              <p className="mt-0.5 font-semibold" style={{ color: 'var(--ink)' }}>“{x.hook}”</p>
+                              <p className="mt-0.5">{x.why}</p>
+                              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ink-3)' }}>{x.forWho} · {x.format}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {tests.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>Worth testing</strong><List items={tests} /></div>}
+                    {claims.length > 0 && <div><strong style={{ color: 'var(--ink)' }}>Check before going live</strong><List items={claims} /></div>}
+                    <details>
+                      <summary className="cursor-pointer rounded font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]" style={{ color: 'var(--ink)' }}>Sizes</summary>
+                      <p className="mt-1.5 flex flex-wrap gap-1.5">
+                        {(['1:1', '4:5', '9:16'] as const).map((s) => <span key={s} className={`chip ${sizes.includes(s) ? 'chip-good' : 'chip-neutral'}`}>{s} {sizes.includes(s) ? 'available' : 'missing'}</span>)}
+                      </p>
+                      {advice.length > 0 && <List items={advice} />}
+                    </details>
                   </div>
                   {left.length > 0 && <p className="mt-2"><strong>Left out:</strong> {left.map((c) => `size ${byFile.get(c.file)?.ratio ?? c.file}`).join(', ')}, as it failed the review.</p>}
                 </div>
@@ -661,10 +723,10 @@ function CreativesCard({ d }: { d: PmLaunchPlan }) {
             )
           })}
         </ul>
-        {review.missingAngles.length > 0 && <div className="mt-3 text-[13.5px]"><strong>Angles none of these use</strong><List items={review.missingAngles} /></div>}
+        {review.missingAngles.length > 0 && <div className="mt-3 text-[13.5px]"><strong>Topics none of these use</strong><List items={review.missingAngles} /></div>}
       </SectionCard>
       {ideas.length > 0 && (
-        <SectionCard title="Images worth making next" description="Ideas to test, based on the gaps above.">
+        <SectionCard title="Images Worth Making Next" description="Ideas to test, based on the gaps above.">
           <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             {ideas.map((x, i) => (
               <li key={i} className="break-words rounded-xl px-4 py-3 text-[13.5px]" style={CARD}>
@@ -772,6 +834,19 @@ function CompetitorPanel({ d }: { d: PmLaunchPlan }) {
         </SectionCard>
       )}
       {r.patterns.length > 0 && <SectionCard title="Patterns across competitors"><Findings rows={r.patterns} /></SectionCard>}
+      {(r.socialPlaybook?.length ?? 0) > 0 && (
+        <SectionCard title="What Gets Attention On Social" description="Formats and tones seen in this space, and how to use them.">
+          <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+            {r.socialPlaybook!.map((x, i) => (
+              <li key={i} className="break-words rounded-xl px-4 py-3 text-[13.5px]" style={CARD}>
+                <p className="flex flex-wrap items-center gap-2 font-semibold">{x.pattern} <LabelChip l={x.label} /></p>
+                <p className="mt-1">{x.howToUse}</p>
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--ink-3)' }}>Seen at: {x.seenAt}</p>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      )}
     </>
   )
 }
