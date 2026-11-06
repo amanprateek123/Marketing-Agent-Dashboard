@@ -504,6 +504,8 @@ export interface PmCampaignListItem {
   createdTime: string | null
   product: string
   dailyBudget: number | null
+  /** Latest finished AI run (YYYY-MM-DD), for the report link; older backends omit it. */
+  lastRunDate?: string | null
 }
 
 export interface PmAgentQueue {
@@ -771,3 +773,144 @@ export interface PmLaunchPlan extends PmLaunchSummary {
 }
 
 export type PmLaunchChecklist = Record<'testPurchase' | 'deduplicated' | 'mobilePath' | 'claimsVerified', boolean>
+
+// ── Campaign report (agent/runs/:campaignId/report) ─────────────────────────
+// Mirrors marketing-agent agent/report/pm-report.service.ts. Change them together.
+
+export interface PmReportNumbers {
+  spend: number
+  impressions: number
+  linkClicks: number
+  landingPageViews: number
+  ctrPct: number | null
+  cpm: number | null
+  cpc: number | null
+  metaPurchases: number
+  metaPurchaseValue: number
+  metaRoas: number | null
+  costPerPurchase: number | null
+  siteVisitors: number
+  firstPartyOrders: number
+  firstPartyRevenue: number
+  firstPartyRoas: number | null
+}
+
+export type PmCreativeTag = 'scale' | 'keep' | 'cut' | 'too_early'
+
+export interface PmReportCreative {
+  id: string
+  name: string
+  status: string
+  thumbnailUrl: string | null
+  format: string | null
+  title: string
+  body: string
+  cta: string
+  spend: number
+  spendSharePct: number | null
+  impressions: number
+  ctrPct: number | null
+  cpm: number | null
+  metaPurchases: number
+  costPerPurchase: number | null
+  metaRoas: number | null
+  firstPartyOrders: number
+  verdict: { tag: PmCreativeTag; reason: string }
+}
+
+export interface PmCreativeIdea {
+  title: string
+  angle: string
+  hook: string
+  format: string
+  language: string
+  primaryText: string
+  headline: string
+  cta: string
+  basedOn: string
+  why: string
+}
+
+export interface PmReportBreakdownRow {
+  key: string
+  spend: number
+  spendSharePct: number | null
+  impressions: number
+  cpm: number | null
+  ctrPct: number | null
+  metaPurchases: number
+  metaRoas: number | null
+}
+
+export interface PmReportBreakdown {
+  rows: PmReportBreakdownRow[]
+  missingDays: string[]
+  daysWithData: number
+}
+
+export interface PmReportCause {
+  id: string
+  title: string
+  category: string
+  confidence: PmAgentConfidence
+  impactRupeesPerDay: number
+  verdict: 'confirmed' | 'weakened' | 'rejected' | 'added' | 'unverified'
+  /** The investigator's section for this cause (markdown bullets). */
+  narrative: string
+}
+
+export interface PmReportGoal {
+  source: string
+  basis?: 'app' | 'untracked' | null
+  maxDailyBudget: number | null
+  currentDailyBudget: number | null
+  daysLeft: number | null
+  targetPurchases: number | null
+  targetRoas: number | null
+  targetDays?: number
+  start?: string
+  end?: string
+  purchases?: number
+  remaining?: number
+  purchasesPerDayNeeded?: number | null
+  spendPerDayNeeded?: number | null
+  periodRoas?: number | null
+  dataTo?: string
+}
+
+export interface PmCampaignReport {
+  run: { campaignId: string; campaignName: string; date: string; status: PmAgentRunStatus; finishedAt: string | null; costUsd: number; product: string }
+  window: { from: string; to: string }
+  launched: string | null
+  settings: { objective: string | null; status: string | null; budgetLevel: string | null; dailyBudget: number | null; currentDailyBudget: number | null }
+  basis: 'app' | 'untracked' | null
+  goal: PmReportGoal | null
+  last7: PmReportNumbers | null
+  sinceLaunch: (PmReportNumbers & { from: string; to: string }) | null
+  account: { ctrPct: number | null; cpm: number | null; cpc: number | null }
+  verdict: string
+  planSummary: string
+  pathToTarget: 'likely' | 'possible' | 'unlikely' | null
+  funnel: {
+    meta: { impressions: number; linkClicks: number; landingPageViews: number; metaPurchases: number }
+    site: { step: string; campaign: number; campaignPctOfPrev: number | null; allMetaPctOfPrev: number | null }[]
+    payments: { campaign: PmReportPeople; allWebOrders: PmReportPeople } | null
+  }
+  causes: PmReportCause[]
+  creatives: PmReportCreative[]
+  creativeIdeas: PmCreativeIdea[]
+  breakdowns: { ageGender: PmReportBreakdown | null; placement: PmReportBreakdown | null; region: PmReportBreakdown | null }
+  trend: { date: string; spend: number; cpm: number | null; ctrPct: number | null; metaPurchases: number; firstPartyOrders: number }[]
+  actions: PmAgentAction[]
+  ruledOut: string[]
+  dataGaps: string[]
+  unresolved: string[]
+}
+
+export interface PmReportPeople {
+  people: number
+  paid: number
+  didNotPay: number
+  paidPct: number | null
+  retriedThenPaid: number
+}
