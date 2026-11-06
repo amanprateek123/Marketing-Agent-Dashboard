@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Tabs from '@radix-ui/react-tabs'
 import { X } from 'lucide-react'
-import { cancelPmAgentQueued, getPmAgentDates, getPmAgentQueue, getPmAgentRollup, getPmAgentRun, istToday, productLabel, savePmAgentNote } from '@/lib/performance-marketeer-api'
+import Link from 'next/link'
+import { cancelPmAgentQueued, getPmAgentDates, getPmAgentQueue, getPmAgentRollup, getPmAgentRun, istToday, pmReportHref, productLabel, savePmAgentNote } from '@/lib/performance-marketeer-api'
 import type { PmAgentAction, PmAgentConfidence, PmAgentQueue, PmAgentRollup, PmAgentRun, PmAgentRunStatus, PmJournalEntry } from '@/types/performance-marketeer'
 import { Empty, LoadError, PmSkeleton, SectionCard, TableWrap, fmt, serverMessage, useLoad } from './shared'
 import type { PmView } from './PerformanceMarketeer'
@@ -48,10 +49,11 @@ const CHECK: Record<string, string> = {
   entity_exists: 'The campaign, ad set or ad named here was not found in this campaign.',
   judge_on: 'The "judge on" date is missing or in the past.',
   prediction_vs_lesson: 'The expected result does not match what this kind of change did before (a learned lesson).',
+  small_sample: 'Too few people reached this step in the last 7 days to tell a real problem from chance (needs 20+). Watch it; don’t spend developer time on it yet.',
 }
 const checkText = (c: string) => CHECK[c] ?? (c.startsWith('owner_rule:') ? 'Breaks one of your standing rules.' : c)
 /** Evidence ids like "(ev-12)" and file refs like "(day/x.md)" mean nothing to the reader; the files tab keeps them. */
-const noEv = (t: string) => t.replace(/\s*\((?:ev-\d+(?:,\s*)?)+\)|\s*\(day\/[^)]*\)/g, '').replace(/[,;]?\s*ev-\d+/g, '')
+export const noEv = (t: string) => t.replace(/\s*\((?:ev-\d+(?:,\s*)?)+\)|\s*\(day\/[^)]*\)/g, '').replace(/[,;]?\s*ev-\d+/g, '')
 
 /** A brief as rows: "Label: text" lines; older briefs are one paragraph, split into sentences. */
 const briefRows = (brief: string) => {
@@ -138,13 +140,15 @@ function StatusChip({ status, step }: { status: PmAgentRunStatus; step: string }
 }
 
 function Flags({ a, dash = true }: { a: PmAgentAction; dash?: boolean }) {
-  const checks = a.checksFailed ?? []
-  if (!a.disputed && !checks.length && a.verdict === 'approve') return dash ? <span style={{ color: 'var(--ink-4)' }}>—</span> : null
+  const watch = (a.checksFailed ?? []).includes('small_sample')
+  const checks = (a.checksFailed ?? []).filter((c) => c !== 'small_sample')
+  if (!a.disputed && !checks.length && !watch && a.verdict === 'approve') return dash ? <span style={{ color: 'var(--ink-4)' }}>—</span> : null
   return (
     <span className="flex flex-wrap gap-1">
       {a.verdict === 'unresolved' && <span className="chip chip-warn" title="The plan check hit its round limit with open issues on this action.">Unresolved</span>}
       {a.verdict === 'change' && <span className="chip chip-warn" title="The reviewer asked for changes to this action, and they may not be made yet.">Needs changes</span>}
       {a.disputed && <span className="chip chip-warn" title="The investigator and the verifier disagree on the cause behind this action by more than 0.3.">Disputed</span>}
+      {watch && <span className="chip chip-info" title={checkText('small_sample')}>Watch only</span>}
       {checks.length > 0 && (
         <span className="chip chip-bad" title={checks.map(checkText).join('\n')}>
           Check failed
@@ -408,9 +412,16 @@ function AgentQueue({ tenantId, onOpen, onFinished }: { tenantId: string; onOpen
                   name={x.campaignName || x.campaignId}
                   chip={<StatusChip status={x.status} step={x.step} />}
                   action={
-                    <button type="button" className="btn btn-ghost !min-h-[34px] !px-3 !py-1.5 text-[13px]" aria-label={`Open run for ${x.campaignName || x.campaignId}`} onClick={() => onOpen(x.date, x.campaignId)}>
-                      Open Run
-                    </button>
+                    <span className="flex flex-wrap gap-1.5">
+                      {x.status === 'done' && (
+                        <Link href={pmReportHref(tenantId, x.campaignId, x.date)} className="btn btn-accent !min-h-[34px] !px-3 !py-1.5 text-[13px]" aria-label={`Full report for ${x.campaignName || x.campaignId}`}>
+                          Full Report
+                        </Link>
+                      )}
+                      <button type="button" className="btn btn-ghost !min-h-[34px] !px-3 !py-1.5 text-[13px]" aria-label={`Open run for ${x.campaignName || x.campaignId}`} onClick={() => onOpen(x.date, x.campaignId)}>
+                        Open Run
+                      </button>
+                    </span>
                   }
                 >
                   <span className="tabular-nums">
@@ -626,8 +637,13 @@ function RunBody({ tenantId, date, campaignId }: { tenantId: string; date: strin
           {d ? `${rounds(d)} · ${plural(d.actions.length, 'action')} · ${fmt.inr(d.impactRupeesPerDay)}/day · AI cost ${usd.format(d.costUsd)}` : 'Loading run…'}
         </Dialog.Description>
         {d && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <StatusChip status={d.status} step={d.step} />
+            {d.status === 'done' && (
+              <Link href={pmReportHref(tenantId, campaignId, date)} className="btn btn-accent !min-h-[32px] !px-3 !py-1 text-[13px]">
+                Open Full Report
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -669,7 +685,7 @@ function RunBody({ tenantId, date, campaignId }: { tenantId: string; date: strin
   )
 }
 
-function RunActions({ d }: { d: PmAgentRun }) {
+export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | 'unresolved' | 'status'> }) {
   const causes = new Map((d.causes ?? []).map((c) => [c.id, c]))
   return (
     <div className="flex flex-col gap-3">

@@ -11,6 +11,7 @@
 import { apiFetch } from './api'
 import { PM_MAX_SPAN_DAYS, addDays, validDay } from './performance-marketeer-dates'
 import type {
+  PmCampaignReport,
   PmAgentCancelResult,
   PmAgentEnqueueRequest,
   PmAgentEnqueueResult,
@@ -130,6 +131,13 @@ export const getPmAgentRollup = (t: string, date?: string) =>
 
 export const getPmAgentRun = (t: string, campaignId: string, date: string) =>
   PM_MOCK ? mock((f) => f.fixtureAgentRun(campaignId, date)) : get<PmAgentRun>(t, `agent/runs/${encodeURIComponent(campaignId)}`, { date })
+
+/** The full report page for a run (default: the campaign's latest run). */
+export const pmReportHref = (tenantId: string, campaignId: string, date?: string | null) =>
+  `/dashboard/${encodeURIComponent(tenantId)}/performance-marketeer/report/${encodeURIComponent(campaignId)}${date ? `?date=${date}` : ''}`
+
+export const getPmCampaignReport = (t: string, campaignId: string, date?: string) =>
+  PM_MOCK ? mock((f) => f.fixtureCampaignReport(campaignId, date)) : get<PmCampaignReport>(t, `agent/runs/${encodeURIComponent(campaignId)}/report`, { date })
 
 export const savePmAgentNote = (t: string, campaignId: string, date: string, note: string) =>
   PM_MOCK

@@ -9,6 +9,8 @@
  */
 
 import type {
+  PmCampaignReport,
+  PmReportCreative,
   PmLaunchInput,
   PmLaunchPlan,
   PmLaunchProduct,
@@ -927,7 +929,7 @@ export function fixtureAgentRun(campaignId: string, date: string): PmAgentRun {
           ]
         : idx === 1
           ? [agentAction(date, 1, { type: 'hold', title: 'Hold — budget change on 25 Oct is still settling', change: { field: 'none', from: null, to: null }, impactRupeesPerDay: 0, confidence: 0.8, entityLevel: 'campaign', entityName: c.campaignName })]
-          : [agentAction(date, 1, { type: 'landing_funnel', title: 'Fix the payment page drop on mobile', entityLevel: 'site', entityName: 'nadi-report checkout', change: { field: 'checkout', from: 'UPI intent off', to: 'UPI intent on' }, impactRupeesPerDay: 2600, confidence: 0.5 })]
+          : [agentAction(date, 1, { type: 'landing_funnel', title: 'Watch: Check the payment step (2 of 3 people paid)', entityLevel: 'site', entityName: 'career-report checkout', change: { field: 'checkout', from: null, to: null }, impactRupeesPerDay: 0, confidence: 0.2, checksFailed: ['small_sample'], checkMessages: ['small_sample: 3 people started an order in the last 7 days; a funnel change needs 20+. Watch only.'] })]
   const md = (title: string, body: string) => `---\nphase: ${title}  campaign: ${c.campaignId}  round: 1\n---\n# ${title}\n\n${body}\n`
   const files: Record<string, string> =
     status === 'done'
@@ -1132,6 +1134,7 @@ export function fixtureCampaignList(): PmCampaignListItem[] {
       createdTime: `2026-0${7 + i}-12T06:00:00Z`,
       product: c.product,
       dailyBudget: 5000 * (i + 1),
+      lastRunDate: i === 0 ? istYesterday() : null,
     })),
     {
       id: '120211000000000900',
@@ -1489,4 +1492,100 @@ export function fixtureCreatePaused(id: string) {
   p.metaCampaignId = '120249000000000000'
   p.approved = { metaStatus: { campaign: 'PAUSED', adSets: { total: 1, paused: 1 }, ads: { total: 2, paused: 2 } } }
   return { metaCampaignId: p.metaCampaignId }
+}
+
+// ── Campaign report (shaped on the Career Report run of 6 Nov 2026) ───────
+
+export function fixtureCampaignReport(campaignId: string, date?: string): PmCampaignReport {
+  const d = date || istYesterday()
+  const to = addDays(d, -1)
+  const ad = (i: number, spend: number, impressions: number, ctrPct: number, purchases: number, roas: number | null, tag: PmReportCreative['verdict']['tag'], reason: string, title: string): PmReportCreative => ({
+    id: `1202496610${50 + i}0403`,
+    name: `ADVANTAGE_PLUS_2026-11-03 — Variant ${i} (uploaded)`,
+    status: 'ACTIVE',
+    thumbnailUrl: null,
+    format: i % 2 ? 'video' : 'image',
+    title,
+    body: 'Career growth aur timing par personalised astrology insights paao.',
+    cta: 'SHOP_NOW',
+    spend,
+    spendSharePct: Math.round((spend / 7269) * 1000) / 10,
+    impressions,
+    ctrPct,
+    cpm: Math.round((spend / impressions) * 1000),
+    metaPurchases: purchases,
+    costPerPurchase: purchases ? Math.round(spend / purchases) : null,
+    metaRoas: roas,
+    firstPartyOrders: 0,
+    verdict: { tag, reason },
+  })
+  return {
+    run: { campaignId, campaignName: 'Career Report 3-11-2026', date: d, status: 'done', finishedAt: `${d}T05:40:00Z`, costUsd: 4.12, product: 'career-report' },
+    window: { from: addDays(d, -7), to },
+    launched: addDays(d, -3),
+    settings: { objective: 'OUTCOME_SALES', status: 'ACTIVE', budgetLevel: 'adset', dailyBudget: null, currentDailyBudget: 3000 },
+    basis: 'untracked',
+    goal: { source: 'Meta', basis: 'untracked', maxDailyBudget: 3000, currentDailyBudget: 3000, daysLeft: 3, targetPurchases: 15, targetRoas: 1, targetDays: 3, start: d, end: addDays(d, 2), purchases: 0, remaining: 15, purchasesPerDayNeeded: 5, spendPerDayNeeded: 12115, periodRoas: null, dataTo: to },
+    last7: { spend: 7269, impressions: 11393, linkClicks: 97, landingPageViews: 74, ctrPct: 0.85, cpm: 638, cpc: 75, metaPurchases: 3, metaPurchaseValue: 5397, metaRoas: 0.74, costPerPurchase: 2423, siteVisitors: 0, firstPartyOrders: 0, firstPartyRevenue: 0, firstPartyRoas: 0 },
+    sinceLaunch: null,
+    account: { ctrPct: 1.34, cpm: 336, cpc: 41 },
+    verdict: "Since launch the campaign spent **₹7,269** for **3 Meta purchases** (Meta ROAS 0.74×). Our own numbers read 0 because orders are not linked to this campaign's ads yet; if the 3 paid career-report orders of 3–5 Nov came from it, ROAS is about **0.63×** and a purchase costs about **₹2,423**. That is below 1.00, mainly because of high CPM and spend going to weak creatives.\n\n**Owner's goal (15 purchases, ROAS 1.00, max ₹3,000/day):** not reachable. 15 purchases on ₹9,000 needs ₹600 per purchase; at ₹2,423 the cap buys about 1.2 a day.",
+    planSummary: 'Hold the ad set at ₹3,000/day until it leaves learning on 10 Nov, pause Variant 9 then, and add three Hinglish creatives in the Variant 4 style. Net spend unchanged; ROAS should move toward 0.9× as spend shifts to stronger ads.',
+    pathToTarget: 'unlikely',
+    funnel: {
+      meta: { impressions: 11393, linkClicks: 97, landingPageViews: 74, metaPurchases: 3 },
+      site: [
+        { step: 'visitors', campaign: 83, campaignPctOfPrev: null, allMetaPctOfPrev: null },
+        { step: 'ctaClick', campaign: 21, campaignPctOfPrev: 25.3, allMetaPctOfPrev: 31.2 },
+        { step: 'beginCheckout', campaign: 9, campaignPctOfPrev: 42.9, allMetaPctOfPrev: 48.5 },
+        { step: 'paymentInitiated', campaign: 5, campaignPctOfPrev: 55.6, allMetaPctOfPrev: 61 },
+        { step: 'paid', campaign: 3, campaignPctOfPrev: 60, allMetaPctOfPrev: 70.4 },
+      ],
+      payments: { campaign: { people: 3, paid: 2, didNotPay: 1, paidPct: 66.7, retriedThenPaid: 1 }, allWebOrders: { people: 3, paid: 2, didNotPay: 1, paidPct: 66.7, retriedThenPaid: 1 } },
+    },
+    causes: [
+      { id: 'C2', title: 'CPM ₹638 vs account ₹336 (+90%) and CPC ₹75 vs ₹41 (+83%) on the new ad set in learning', category: 'auction_cost', confidence: 0.5, impactRupeesPerDay: 897, verdict: 'confirmed', narrative: '- CPM ₹638 vs the account\'s ₹336, +90%. CPC ₹75 vs ₹41, +83%.\n- The account\'s CPM *fell* 8% over the last 7 days, so this is not the festive auction.\n- Spend leaned to ages 35–54 and to IG feed/stories at ₹741 and ₹1,101, while IG Reels ran at ₹401.' },
+      { id: 'C3', title: '52% of spend on the two weakest creatives: Variant 3 (CTR 0.60%) and Variant 9 (CTR 0.50%)', category: 'creative', confidence: 0.5, impactRupeesPerDay: 466, verdict: 'confirmed', narrative: '- Variant 3 and Variant 9 took 52% of spend.\n  - Variant 3: English book mock-up with a feature list, no hook and no price.\n  - Variant 9: "plan 2027" copy.\n- Variant 4 has CTR 1.03% and Meta ROAS 2.11 with a Hinglish late-night "layoffs ka darr" hook.' },
+      { id: 'C5', title: 'Ad set is 3 days old and still learning on 3 purchases, with 16 ads in one ad set', category: 'learning_edits', confidence: 0.5, impactRupeesPerDay: 0, verdict: 'confirmed', narrative: '- LEARNING with 3 Meta purchases in 3 days and 16 ads.\n- No edits since launch; it settles on 10 Nov. Avoid stacking edits.' },
+      { id: 'C6', title: '53% of spend on men 25–54 with 0 purchases; all 3 came from women 35–54', category: 'geo_age_placement', confidence: 0.2, impactRupeesPerDay: 0, verdict: 'weakened', narrative: '- Men 25–54 took 53% of spend and had 0 Meta purchases. All 3 came from women 35–54.\n- Not significant on 3 purchases.' },
+    ],
+    creatives: [
+      ad(3, 2050, 3420, 0.6, 0, 0, 'cut', '₹2,050 spent, 0 purchases, CTR 0.60% vs 0.85%', 'Your career, decoded'),
+      ad(9, 1142, 2280, 0.5, 0, 0, 'keep', 'No purchase yet on ₹1,142, CTR 0.50%', 'Plan 2027 with your chart'),
+      ad(4, 1810, 2900, 1.03, 2, 2.11, 'scale', '2 purchases at ₹905 each vs ₹2,423 for the campaign', 'Layoffs ka darr? Timing jaano'),
+      ad(1, 182, 334, 2.1, 0, null, 'too_early', 'Only 334 impressions so far', 'Mehnat meri. Promotion unka.'),
+      ad(13, 160, 150, 4.6, 1, 1.8, 'keep', '1 purchase, CTR 4.60%', 'Job change kab?'),
+    ],
+    creativeIdeas: [
+      { title: 'Late-night layoffs worry', angle: 'Job insecurity after appraisal season', hook: 'Phone glow at 2 am: “Layoffs ki khabar… mera number aayega?”', format: '9:16 Reel, face-to-camera, 15 s', language: 'Hinglish', primaryText: 'Raat ko neend nahi aati job ki tension se? Apni kundli se jaano career mein agla badlaav kab aayega.', headline: 'Career timing, aapki kundli se', cta: 'Shop now', basedOn: 'Variant 4', why: 'Variant 4: CTR 1.03% vs 0.85% campaign, 2 of 3 purchases' },
+      { title: 'Promotion passed over', angle: 'Hard work not rewarded', hook: '“Mehnat meri, promotion unka” on screen, then a beat', format: '9:16 Reel, text-led', language: 'Hinglish', primaryText: 'Sirf mehnat kaafi nahi, timing bhi chahiye. 26 pages ki career report mein jaano aapka sahi samay.', headline: 'Sahi samay jaano', cta: 'Shop now', basedOn: 'Variant 1', why: 'Variant 1: CTR 2.10% on early impressions' },
+      { title: 'Women 35–54 decision point', angle: 'Return to work / switch after a break', hook: 'Woman at a desk: “Ab dobara shuru karun?”', format: '4:5 feed + 9:16 cut', language: 'Hindi', primaryText: 'Career break ke baad naya shuruaat? Apni kundli se jaano kaunsa raasta aapke liye sahi hai.', headline: 'Aapka agla career step', cta: 'Shop now', basedOn: '', why: 'All 3 Meta purchases came from women 35–54 (24% of spend)' },
+    ],
+    breakdowns: {
+      ageGender: { daysWithData: 3, missingDays: [], rows: [
+        { key: 'male|25-34', spend: 1900, spendSharePct: 26.1, impressions: 2600, cpm: 731, ctrPct: 0.8, metaPurchases: 0, metaRoas: 0 },
+        { key: 'male|35-44', spend: 1350, spendSharePct: 18.6, impressions: 1500, cpm: 900, ctrPct: 0.7, metaPurchases: 0, metaRoas: 0 },
+        { key: 'female|35-44', spend: 1100, spendSharePct: 15.1, impressions: 1300, cpm: 846, ctrPct: 1.1, metaPurchases: 2, metaRoas: 2.2 },
+        { key: 'female|25-34', spend: 900, spendSharePct: 12.4, impressions: 1500, cpm: 600, ctrPct: 0.9, metaPurchases: 0, metaRoas: 0 },
+        { key: 'female|45-54', spend: 640, spendSharePct: 8.8, impressions: 600, cpm: 1066, ctrPct: 1.2, metaPurchases: 1, metaRoas: 2.4 },
+        { key: 'male|45-54', spend: 600, spendSharePct: 8.3, impressions: 520, cpm: 1153, ctrPct: 0.6, metaPurchases: 0, metaRoas: 0 },
+      ] },
+      placement: { daysWithData: 3, missingDays: [], rows: [
+        { key: 'instagram|feed', spend: 2600, spendSharePct: 35.8, impressions: 3500, cpm: 741, ctrPct: 0.7, metaPurchases: 1, metaRoas: 0.6 },
+        { key: 'instagram|instagram_reels', spend: 2100, spendSharePct: 28.9, impressions: 5240, cpm: 401, ctrPct: 1.1, metaPurchases: 2, metaRoas: 1.5 },
+        { key: 'instagram|instagram_stories', spend: 1500, spendSharePct: 20.6, impressions: 1360, cpm: 1101, ctrPct: 0.5, metaPurchases: 0, metaRoas: 0 },
+        { key: 'facebook|feed', spend: 1069, spendSharePct: 14.7, impressions: 1290, cpm: 829, ctrPct: 0.9, metaPurchases: 0, metaRoas: 0 },
+      ] },
+      region: null,
+    },
+    trend: [3, 4, 5].map((k, i) => ({ date: addDays(d, -k), spend: [2850, 2700, 1719][i], cpm: [685, 640, 573][i], ctrPct: [1.63, 0.9, 0.58][i], metaPurchases: [1, 2, 0][i], firstPartyOrders: 0 })).sort((a, b) => a.date.localeCompare(b.date)),
+    actions: [
+      agentAction(d, 1, { type: 'hold', title: 'Hold the ad set at ₹3,000/day with no edits until 10 Nov', plain: 'The ad set is still learning. Edits now restart it and make results impossible to read.', entityLevel: 'adset', entityName: 'ADVANTAGE_PLUS_2026-11-03', change: { field: 'none', from: null, to: null }, impactRupeesPerDay: 0, confidence: 0.5, causeIds: ['C5'] }),
+      agentAction(d, 2, { type: 'creative', title: 'Add 3 Hinglish creatives in the Variant 4 style on 10 Nov', entityLevel: 'adset', entityName: 'ADVANTAGE_PLUS_2026-11-03', change: { field: 'new ads', from: 16, to: 19 }, impactRupeesPerDay: 466, confidence: 0.5, causeIds: ['C3'], creativeBrief: 'Angle: Job insecurity after appraisal season\nHook (0–3s): 2 am phone glow, “mera number aayega?”\nLanguage: Hinglish\nFormat: 9:16 Reel\nCTA: Shop now' }),
+      agentAction(d, 3, { type: 'pause', title: 'Pause Variant 9 on 10 Nov: CTR 0.50%, 0 purchases on ₹1,142', entityLevel: 'ad', entityName: 'Variant 9', change: { field: 'status', from: 'ACTIVE', to: 'PAUSED' }, impactRupeesPerDay: 120, confidence: 0.5, causeIds: ['C3'] }),
+    ],
+    ruledOut: ['Festive CPM over 3–5 Nov: the account CPM fell', 'Saturation: daily frequency is 1.21', 'A rival career-report offer: competitors push free chat apps instead'],
+    dataGaps: ['Landing page and funnel unmeasurable until orders link to ads', 'Buyer quality and consultation upsell are not available'],
+    unresolved: [],
+  }
 }

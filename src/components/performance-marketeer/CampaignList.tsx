@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { getPmCampaignList, productLabel } from '@/lib/performance-marketeer-api'
+import Link from 'next/link'
+import { getPmCampaignList, pmReportHref, productLabel } from '@/lib/performance-marketeer-api'
 import type { PmCampaignListItem } from '@/types/performance-marketeer'
 import { Empty, LoadError, SectionCard, TableWrap, fmt, useLoad } from './shared'
 import { AnalyseButton, AnalyseDialog, type AnalyseTarget } from './AnalyseDialog'
@@ -107,7 +108,14 @@ export function CampaignList({ tenantId, onOpenAgent }: { tenantId: string; onOp
                     <td className="whitespace-nowrap">{fmt.date(istDate(c.createdTime))}</td>
                     <td className="num">{c.dailyBudget != null ? fmt.inr(c.dailyBudget) : '—'}</td>
                     <td>
-                      <AnalyseButton compact name={c.name} onClick={() => setAnalyse([{ id: c.id, name: c.name, product: c.product }])} />
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {c.lastRunDate && (
+                          <Link href={pmReportHref(tenantId, c.id, c.lastRunDate)} className="btn btn-ghost !min-h-[34px] !px-3 !py-1.5 text-[13px]" aria-label={`Report for ${c.name}, run ${fmt.date(c.lastRunDate)}`} title={`Latest analysis, ${fmt.date(c.lastRunDate)}`}>
+                            Report
+                          </Link>
+                        )}
+                        <AnalyseButton compact name={c.name} onClick={() => setAnalyse([{ id: c.id, name: c.name, product: c.product }])} />
+                      </div>
                     </td>
                   </tr>
                 ))}
