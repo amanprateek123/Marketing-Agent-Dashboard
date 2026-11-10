@@ -631,7 +631,7 @@ export default function SettingsPage({ params }: PageProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [budgetFields, setBudgetFields] = useState<Record<string, string>>({})
   const [marketing, setMarketing] = useState({ platforms: [] as string[], preferredFormats: [] as string[], forbiddenTopics: [] as string[], campaignsPerRun: '', runFrequency: '' })
-  const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: false, teamMode: '' as string })
+  const [pipeline, setPipeline] = useState({ mode: 'daily', ideasPerRun: '', autoSwitch: true, coldStartDays: '', campaignStrategy: 'balanced', pauseGracePeriodHours: '', scaleRequiresApproval: true, teamMode: '' as string })
   const [delivery, setDelivery] = useState({ whatsappNumber: '', email: '', notionDatabaseId: '' })
   const [meta, setMeta] = useState({ pixelId: '', businessId: '', pageId: '' })
   const [metaAccounts, setMetaAccounts] = useState<MetaAdAccount[]>([])
@@ -690,7 +690,7 @@ export default function SettingsPage({ params }: PageProps) {
       for (const [k, v] of Object.entries(b)) { bf[k] = v != null ? String(v) : '' }
       setBudgetFields(bf)
       setMarketing({ platforms: data.marketing?.platforms || [], preferredFormats: data.marketing?.preferredFormats || [], forbiddenTopics: data.marketing?.forbiddenTopics || [], campaignsPerRun: data.marketing?.campaignsPerRun != null ? String(data.marketing.campaignsPerRun) : '', runFrequency: data.marketing?.runFrequency || '' })
-      setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: data.pipeline?.scaleRequiresApproval ?? false, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
+      setPipeline({ mode: data.pipeline?.mode || 'daily', ideasPerRun: data.pipeline?.ideasPerRun != null ? String(data.pipeline.ideasPerRun) : '', autoSwitch: data.pipeline?.autoSwitch ?? true, coldStartDays: data.pipeline?.coldStartDays != null ? String(data.pipeline.coldStartDays) : '', campaignStrategy: data.pipeline?.campaignStrategy || 'balanced', pauseGracePeriodHours: data.pipeline?.pauseGracePeriodHours != null ? String(data.pipeline.pauseGracePeriodHours) : '', scaleRequiresApproval: true, teamMode: (data.pipeline as Record<string, unknown>)?.teamMode as string || 'sequential' })
       setDelivery({ whatsappNumber: data.delivery?.whatsappNumber || '', email: data.delivery?.email || '', notionDatabaseId: data.delivery?.notionDatabaseId || '' })
       setMeta({ pixelId: data.meta?.pixelId || '', businessId: data.meta?.businessId || '', pageId: data.meta?.pageId || '' })
       setSelectedAccountIds(data.meta?.accountIds?.length ? data.meta.accountIds : data.meta?.accountId ? [data.meta.accountId] : [])
@@ -1095,17 +1095,20 @@ export default function SettingsPage({ params }: PageProps) {
               </div>
               <div><FieldLabel>Ad ideas each time</FieldLabel><NumericInput value={pipeline.ideasPerRun} onChange={v => setPipeline(p => ({ ...p, ideasPerRun: v }))} placeholder="3" /></div>
               <div><FieldLabel>Settling-in days for new campaigns</FieldLabel><NumericInput value={pipeline.coldStartDays} onChange={v => setPipeline(p => ({ ...p, coldStartDays: v }))} placeholder="7" /></div>
-              <div><FieldLabel>Hours before it may pause a new ad</FieldLabel><NumericInput value={pipeline.pauseGracePeriodHours} onChange={v => setPipeline(p => ({ ...p, pauseGracePeriodHours: v }))} placeholder="48" /></div>
+              <div><FieldLabel>Suggested review window (hours)</FieldLabel><NumericInput value={pipeline.pauseGracePeriodHours} onChange={v => setPipeline(p => ({ ...p, pauseGracePeriodHours: v }))} placeholder="48" /></div>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
               <button onClick={() => setPipeline(p => ({ ...p, autoSwitch: !p.autoSwitch }))} className="flex items-center gap-2 text-sm">
                 {pipeline.autoSwitch ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
                 <span className="font-medium" style={{ color: pipeline.autoSwitch ? 'var(--accent)' : 'var(--ink-3)' }}>Pick how often automatically</span>
               </button>
+              {/* Retired optional budget-approval toggle. All changes now require approval.
               <button onClick={() => setPipeline(p => ({ ...p, scaleRequiresApproval: !p.scaleRequiresApproval }))} className="flex items-center gap-2 text-sm">
                 {pipeline.scaleRequiresApproval ? <ToggleRight size={22} style={{ color: 'var(--accent)' }} /> : <ToggleLeft size={22} style={{ color: 'var(--ink-4)' }} />}
                 <span className="font-medium" style={{ color: pipeline.scaleRequiresApproval ? 'var(--accent)' : 'var(--ink-3)' }}>Ask me before raising a budget</span>
               </button>
+              */}
+              <p className="text-sm font-medium" style={{ color: 'var(--ink-2)' }}>Every campaign change requires human approval, including budgets, pauses, placements and creatives.</p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <FieldLabel>How the AI team works</FieldLabel>
@@ -1118,7 +1121,7 @@ export default function SettingsPage({ params }: PageProps) {
               <p className="text-xs w-full" style={{ color: 'var(--ink-3)' }}>One after another is quick and reliable. Debate first lets the AI helpers argue ideas through — slower, sometimes better.</p>
             </div>
           </div>
-          <div className="mt-5"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: pipeline.scaleRequiresApproval, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save automation settings" /></div>
+          <div className="mt-5"><SaveBtn state={pipelineState} onClick={() => saveSection({ pipelineConfig: { mode: pipeline.mode, ideasPerRun: pipeline.ideasPerRun ? Number(pipeline.ideasPerRun) : undefined, autoSwitch: pipeline.autoSwitch, coldStartDays: pipeline.coldStartDays ? Number(pipeline.coldStartDays) : undefined, campaignStrategy: pipeline.campaignStrategy, pauseGracePeriodHours: pipeline.pauseGracePeriodHours ? Number(pipeline.pauseGracePeriodHours) : undefined, scaleRequiresApproval: true, teamMode: (pipeline as Record<string, unknown>).teamMode } }, setPipelineState)} label="Save automation settings" /></div>
         </SectionCard>
 
         {/* ── Competitors ── */}

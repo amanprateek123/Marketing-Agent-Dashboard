@@ -1153,6 +1153,7 @@ function ChangePlacementsPanel({
    ACTION TYPE BADGE
    ═════════════════════════════════════════════════════════════════ */
 const ACTION_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
+  pause_campaign:              { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Campaign' },
   pause_ad:                    { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad' },
   pause_adset:                 { bg: C.redBg, color: C.red, border: C.redBorder, label: 'Pause Ad Set' },
   scale_adset:                 { bg: C.greenBg, color: C.green, border: C.greenBorder, label: 'Scale Ad Set' },
@@ -1169,6 +1170,7 @@ const ACTION_STYLES: Record<string, { bg: string; color: string; border: string;
 function TypeBadge({ type }: { type: string }) {
   const s = ACTION_STYLES[type] || { bg: 'var(--muted)', color: 'var(--ink-3)', border: 'var(--hairline)', label: plainStatus('actionType', type).label }
   const icons: Record<string, React.ReactNode> = {
+    pause_campaign: <Pause size={11} />,
     pause_ad: <Pause size={11} />,
     pause_adset: <Pause size={11} />,
     scale_adset: <TrendingUp size={11} />,
@@ -1325,7 +1327,7 @@ function ActionsPanel({ tenantId, campaignId, adSetNames = {} }: { tenantId: str
             const aS = st[action.actionId]?.a || '', oS = st[action.actionId]?.o || ''
             const pending = action.status === 'pending'
             const growth = GROWTH.includes(action.type)
-            const pause = action.type === 'pause_ad' || action.type === 'pause_adset'
+            const pause = action.type === 'pause_campaign' || action.type === 'pause_ad' || action.type === 'pause_adset'
             const hasRepl = action.type === 'replace_creative' || action.type === 'add_creative'
             const typeS = ACTION_STYLES[action.type] || { border: C.border }
 
@@ -1420,7 +1422,8 @@ function ActionsPanel({ tenantId, campaignId, adSetNames = {} }: { tenantId: str
                     )}
                     {hasRepl && action.replacementStatus && <ReplaceBadge status={action.replacementStatus} />}
                     {action.recommendedAt && <span className="text-[11px] tabular-nums flex items-center gap-1" style={{ color: C.textMuted }}><Clock size={10} />Suggested {formatRelative(action.recommendedAt)}</span>}
-                    {pending && action.executeAt && <span className="text-[11px] tabular-nums flex items-center gap-1 font-semibold" style={{ color: C.amber }}><Clock size={10} />Happens {formatRelative(action.executeAt)}</span>}
+                    {/* Retired automatic execution countdown: changes wait for explicit approval. */}
+                    {pending && <span className="text-[11px] font-semibold" style={{ color: C.amber }}>Waiting for human approval</span>}
                   </div>
 
                   {/* Dayparting visual */}
