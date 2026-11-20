@@ -30,6 +30,7 @@ import { LaunchReview } from '@/components/campaign/LaunchReview'
 import { CampaignSetup } from '@/components/campaign/CampaignSetup'
 import { SegmentsPanel } from '@/components/campaign/SegmentsPanel'
 import { AdMediaModal } from '@/components/campaign/AdMediaModal'
+import { useAdThumbnail } from '@/lib/ad-thumbnail'
 import { CreativeSourceFields, type CreativeSourceValue } from '@/components/creative/CreativeSourceFields'
 import { SheetAttachPicker, type SheetAttachSelection } from '@/components/creative/SheetAttachPicker'
 
@@ -555,9 +556,9 @@ function AnchoredPortal({
 /* ═════════════════════════════════════════════════════════════════
    AD THUMBNAIL — Meta's creative thumbnail_url; poster frame for video ads
    ═════════════════════════════════════════════════════════════════ */
-function AdThumbnail({ thumbnailUrl, isVideo }: { thumbnailUrl?: string; isVideo?: boolean }) {
-  const [errored, setErrored] = useState(false)
-  const showImage = !!thumbnailUrl && !errored
+function AdThumbnail({ adId, thumbnailUrl, isVideo }: { adId?: string; thumbnailUrl?: string; isVideo?: boolean }) {
+  const { src, onError } = useAdThumbnail(adId, thumbnailUrl)
+  const showImage = !!src
   return (
     <div
       className="relative shrink-0 rounded-lg overflow-hidden"
@@ -566,11 +567,11 @@ function AdThumbnail({ thumbnailUrl, isVideo }: { thumbnailUrl?: string; isVideo
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={thumbnailUrl}
+          src={src}
           alt=""
           className="w-full h-full"
           style={{ objectFit: 'cover' }}
-          onError={() => setErrored(true)}
+          onError={onError}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
@@ -629,7 +630,7 @@ function AdRow({ ad, objectiveContext, onViewAd }: { ad: CampaignAd; objectiveCo
               className={hasMedia ? 'cursor-pointer' : 'cursor-default'}
               title={hasMedia ? (ad.creativeVideoId ? 'Play video' : 'View image') : undefined}
             >
-              <AdThumbnail thumbnailUrl={ad.thumbnailUrl} isVideo={!!ad.creativeVideoId || ad.format === 'video'} />
+              <AdThumbnail adId={ad.id} thumbnailUrl={ad.thumbnailUrl} isVideo={!!ad.creativeVideoId || ad.format === 'video'} />
             </button>
             <div className="min-w-0">
               <p className="text-[13px] font-medium truncate" style={{ color: C.text }}>{ad.name || '—'}</p>

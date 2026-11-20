@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { X, AlertCircle, Video } from 'lucide-react'
 import type { CampaignAd } from '@/types'
+import { useAdThumbnail } from '@/lib/ad-thumbnail'
 
 interface AdMediaModalProps {
   tenantId: string
@@ -25,6 +26,7 @@ export function AdMediaModal({ ad, onClose }: AdMediaModalProps) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [ad, onClose])
+  const { src, onError } = useAdThumbnail(ad?.id, ad?.thumbnailUrl)
 
   if (!ad) return null
 
@@ -65,10 +67,11 @@ export function AdMediaModal({ ad, onClose }: AdMediaModalProps) {
         )}
 
         <div className="flex items-center justify-center" style={{ background: '#000', minHeight: 280 }}>
-          {ad.thumbnailUrl ? (
+          {src ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={ad.thumbnailUrl}
+              src={src}
+              onError={onError}
               alt={ad.name || 'Ad creative'}
               className="w-full"
               style={{ maxHeight: '70vh', objectFit: 'contain', display: 'block' }}
