@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Fragment } from 'react'
 import { getPmCampaignReport } from '@/lib/performance-marketeer-api'
 import type { PmCampaignReport, PmCreativeTag, PmReportBreakdown, PmReportCause } from '@/types/performance-marketeer'
-import { RunActions, noEv } from './AgentTab'
+import { DecisionCard, RunActions, noEv } from './AgentTab'
 import { Empty, LoadError, PmSkeleton, fmt, useLoad } from './shared'
 
 /**
@@ -52,7 +52,10 @@ export function CampaignReport({ tenantId, campaignId, date }: { tenantId: strin
           <Note tone="warn">Our orders for this product are not linking to these ads yet, so this report judges the campaign on Meta’s numbers.</Note>
         )}
         {r.basis === 'app' && <Note tone="info">App product: purchases happen in the app, so every number here is Meta-reported.</Note>}
-        {r.verdict ? <Md text={r.verdict} /> : <p className="report-muted">The AI wrote no verdict for this run.</p>}
+        {r.launchCheck?.on && (
+          <Note tone="info">Launch check: too early to judge results ({r.launchCheck.reasons.join('; ')}). This run checks setup, delivery, tracking and the ads themselves, and sets one stop/go rule.</Note>
+        )}
+        {r.decision ? <DecisionCard d={r.decision} /> : r.verdict ? <Md text={r.verdict} /> : <p className="report-muted">The AI wrote no verdict for this run.</p>}
         {r.goal && <Goal g={r.goal} />}
         {r.planSummary && (
           <div className="report-plan">
@@ -73,7 +76,7 @@ export function CampaignReport({ tenantId, campaignId, date }: { tenantId: strin
         {causes.length ? <Causes causes={causes} /> : <Empty title="No causes in this run" />}
       </Section>
 
-      <Section n={4} title="Creatives" hint="Every ad that spent in the 7 days, judged on Meta purchases against this campaign’s own average.">
+      <Section n={4} title="Creatives" hint="Every ad that spent in the 7 days, the same ad in several ad sets counted once. Judged on Meta purchases against this campaign’s average; with no purchases yet, on click rate and cost per page opened.">
         <Creatives r={r} />
       </Section>
 
@@ -92,8 +95,8 @@ export function CampaignReport({ tenantId, campaignId, date }: { tenantId: strin
         <Trend r={r} />
       </Section>
 
-      <Section n={8} title="Action plan" hint="What to do, in order. You approve every change.">
-        <RunActions d={{ actions: r.actions, causes: r.causes, unresolved: r.unresolved, status: r.run.status }} />
+      <Section n={8} title="Action plan" hint="At most three things to do, in order. You approve every change. Watch items are not in the plan yet.">
+        <RunActions d={{ actions: r.actions, causes: r.causes, unresolved: r.unresolved, status: r.run.status, watch: r.watch }} />
       </Section>
 
       <Section n={9} title="Checked and ruled out">
@@ -378,6 +381,7 @@ function Creatives({ r }: { r: PmCampaignReport }) {
               <div className="report-card-top">
                 <span className={`chip ${TAG[c.verdict.tag].chip}`}>{TAG[c.verdict.tag].label}</span>
                 <span className="report-ad-name">{c.name}</span>
+                {(c.ids?.length ?? 1) > 1 && <span className="report-muted">in {c.ids!.length} ad sets</span>}
               </div>
               {c.title && <p className="report-ad-title">“{c.title}”</p>}
               <p className="report-ad-reason">{c.verdict.reason}</p>
@@ -385,6 +389,8 @@ function Creatives({ r }: { r: PmCampaignReport }) {
                 <div><dt>Spend</dt><dd>{fmt.inr(c.spend)} <span className="report-muted">({c.spendSharePct ?? '—'}%)</span></dd></div>
                 <div><dt>CTR</dt><dd>{c.ctrPct == null ? '—' : `${c.ctrPct.toFixed(2)}%`}</dd></div>
                 <div><dt>CPM</dt><dd>{fmt.inr(c.cpm)}</dd></div>
+                {c.costPerPageView !== undefined && <div><dt>Per page opened</dt><dd>{fmt.inr(c.costPerPageView)}</dd></div>}
+                {c.hookRatePct != null && <div><dt>Watched 3 s</dt><dd>{c.hookRatePct.toFixed(1)}%</dd></div>}
                 <div><dt>Purchases</dt><dd>{c.metaPurchases}</dd></div>
                 <div><dt>Cost/purchase</dt><dd>{fmt.inr(c.costPerPurchase)}</dd></div>
                 <div><dt>ROAS</dt><dd>{fmt.roas(c.metaRoas)}</dd></div>
@@ -430,9 +436,13 @@ function Ideas({ r }: { r: PmCampaignReport }) {
 
 // ── Breakdowns ─────────────────────────────────────────────────────────────
 
+// Keys come as "age|gender" ("25-34|male"); older fixtures used "gender|age".
+const GENDER: Record<string, string> = { female: 'Women', male: 'Men', unknown: 'Unknown gender' }
 const ageLabel = (k: string) => {
-  const [g, a] = k.split('|')
-  return `${g === 'female' ? 'Women' : g === 'male' ? 'Men' : 'Unknown'} ${a ?? ''}`.trim()
+  const parts = k.split('|')
+  const g = parts.find((p) => p in GENDER)
+  const age = parts.find((p) => p !== g)
+  return `${g ? GENDER[g] : 'Unknown gender'} ${age && age !== 'unknown' ? age : 'age unknown'}`
 }
 const placementLabel = (k: string) =>
   k

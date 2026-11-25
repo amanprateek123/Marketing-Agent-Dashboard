@@ -1532,6 +1532,15 @@ export function fixtureCampaignReport(campaignId: string, date?: string): PmCamp
     verdict: "Since launch the campaign spent **₹7,269** for **3 Meta purchases** (Meta ROAS 0.74×). Our own numbers read 0 because orders are not linked to this campaign's ads yet; if the 3 paid career-report orders of 3–5 Nov came from it, ROAS is about **0.63×** and a purchase costs about **₹2,423**. That is below 1.00, mainly because of high CPM and spend going to weak creatives.\n\n**Owner's goal (15 purchases, ROAS 1.00, max ₹3,000/day):** not reachable. 15 purchases on ₹9,000 needs ₹600 per purchase; at ₹2,423 the cap buys about 1.2 a day.",
     planSummary: 'Hold the ad set at ₹3,000/day until it leaves learning on 10 Nov, pause Variant 9 then, and add three Hinglish creatives in the Variant 4 style. Net spend unchanged; ROAS should move toward 0.9× as spend shifts to stronger ads.',
     pathToTarget: 'unlikely',
+    launchCheck: { on: true, day: 3, spendBar: 12186, reasons: ['day 3 since launch (under 7)', '₹7,269 spent since launch, under 3× the usual ₹4,062 per purchase (₹12,186)'] },
+    decision: {
+      call: 'fix',
+      verdict: 'Fix the two ads that name the wrong product and keep spending at ₹3,000/day: 3 Meta purchases on ₹7,269 is normal this early.',
+      stopGo: { judgeOn: addDays(d, 4), spendUpTo: 18000, metric: 'Meta purchases since launch', goAt: 5, ifGo: 'keep the budget and add the Hinglish creatives', ifStop: 'drop Instagram Reels and cut the budget 20%' },
+    },
+    watch: [
+      { title: 'Men 25–54 take 53% of spend with 0 purchases', why: 'only 3 purchases so far, too few to split by audience', actIf: 'still 0 purchases from men after 8+ purchases in total', checkOn: addDays(d, 7) },
+    ],
     funnel: {
       meta: { impressions: 11393, linkClicks: 97, landingPageViews: 74, metaPurchases: 3 },
       site: [
@@ -1550,8 +1559,8 @@ export function fixtureCampaignReport(campaignId: string, date?: string): PmCamp
       { id: 'C6', title: '53% of spend on men 25–54 with 0 purchases; all 3 came from women 35–54', category: 'geo_age_placement', confidence: 0.2, impactRupeesPerDay: 0, verdict: 'weakened', narrative: '- Men 25–54 took 53% of spend and had 0 Meta purchases. All 3 came from women 35–54.\n- Not significant on 3 purchases.' },
     ],
     creatives: [
-      ad(3, 2050, 3420, 0.6, 0, 0, 'cut', '₹2,050 spent, 0 purchases, CTR 0.60% vs 0.85%', 'Your career, decoded'),
-      ad(9, 1142, 2280, 0.5, 0, 0, 'keep', 'No purchase yet on ₹1,142, CTR 0.50%', 'Plan 2027 with your chart'),
+      { ...ad(3, 2050, 3420, 0.6, 0, 0, 'cut', '₹2,050 spent, 0 purchases, CTR 0.60% vs 0.85%', 'Your career, decoded'), ids: ['ad3a', 'ad3b'], costPerPageView: 128, hookRatePct: null },
+      { ...ad(9, 1142, 2280, 0.5, 0, 0, 'keep', 'No purchase yet on ₹1,142, CTR 0.50%', 'Plan 2027 with your chart'), format: 'video', costPerPageView: 95, hookRatePct: 8.8 },
       ad(4, 1810, 2900, 1.03, 2, 2.11, 'scale', '2 purchases at ₹905 each vs ₹2,423 for the campaign', 'Layoffs ka darr? Timing jaano'),
       ad(1, 182, 334, 2.1, 0, null, 'too_early', 'Only 334 impressions so far', 'Mehnat meri. Promotion unka.'),
       ad(13, 160, 150, 4.6, 1, 1.8, 'keep', '1 purchase, CTR 4.60%', 'Job change kab?'),
@@ -1582,7 +1591,8 @@ export function fixtureCampaignReport(campaignId: string, date?: string): PmCamp
     actions: [
       agentAction(d, 1, { type: 'hold', title: 'Hold the ad set at ₹3,000/day with no edits until 10 Nov', plain: 'The ad set is still learning. Edits now restart it and make results impossible to read.', entityLevel: 'adset', entityName: 'ADVANTAGE_PLUS_2026-11-03', change: { field: 'none', from: null, to: null }, impactRupeesPerDay: 0, confidence: 0.5, causeIds: ['C5'] }),
       agentAction(d, 2, { type: 'creative', title: 'Add 3 Hinglish creatives in the Variant 4 style on 10 Nov', entityLevel: 'adset', entityName: 'ADVANTAGE_PLUS_2026-11-03', change: { field: 'new ads', from: 16, to: 19 }, impactRupeesPerDay: 466, confidence: 0.5, causeIds: ['C3'], creativeBrief: 'Angle: Job insecurity after appraisal season\nHook (0–3s): 2 am phone glow, “mera number aayega?”\nLanguage: Hinglish\nFormat: 9:16 Reel\nCTA: Shop now' }),
-      agentAction(d, 3, { type: 'pause', title: 'Pause Variant 9 on 10 Nov: CTR 0.50%, 0 purchases on ₹1,142', entityLevel: 'ad', entityName: 'Variant 9', change: { field: 'status', from: 'ACTIVE', to: 'PAUSED' }, impactRupeesPerDay: 120, confidence: 0.5, causeIds: ['C3'] }),
+      agentAction(d, 3, { type: 'pause', title: 'Pause Variant 9 on 10 Nov: CTR 0.50%, 0 purchases on ₹1,142', entityLevel: 'ad', entityName: 'Variant 9', change: { field: 'status', from: 'ACTIVE', to: 'PAUSED' }, impactRupeesPerDay: 0, confidence: 0.5, causeIds: ['C3'], impactNote: '₹120/day estimated, ₹0 counted: A2 already counts the same cause (C3)' }),
+      agentAction(d, 4, { type: 'landing_funnel', title: 'Watch: shorten the checkout form', entityLevel: 'site', entityName: 'Career report page', change: { field: 'checkout form', from: '6 fields', to: '3 fields' }, impactRupeesPerDay: 0, confidence: 0.5, causeIds: ['C2'], checksFailed: ['small_sample'], watch: true, watchReason: 'too few people at this step to judge a change yet' }),
     ],
     ruledOut: ['Festive CPM over 3–5 Nov: the account CPM fell', 'Saturation: daily frequency is 1.21', 'A rival career-report offer: competitors push free chat apps instead'],
     dataGaps: ['Landing page and funnel unmeasurable until orders link to ads', 'Buyer quality and consultation upsell are not available'],
