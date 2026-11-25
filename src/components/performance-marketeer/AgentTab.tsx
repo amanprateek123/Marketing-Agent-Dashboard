@@ -6,7 +6,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { X } from 'lucide-react'
 import Link from 'next/link'
 import { cancelPmAgentQueued, getPmAgentDates, getPmAgentQueue, getPmAgentRollup, getPmAgentRun, istToday, pmReportHref, productLabel, savePmAgentNote } from '@/lib/performance-marketeer-api'
-import type { PmAgentAction, PmAgentConfidence, PmAgentQueue, PmAgentRollup, PmAgentRun, PmAgentRunStatus, PmJournalEntry } from '@/types/performance-marketeer'
+import type { PmAgentAction, PmAgentConfidence, PmAgentQueue, PmAgentRollup, PmAgentRun, PmAgentRunStatus, PmDecision, PmJournalEntry, PmWatchItem } from '@/types/performance-marketeer'
 import { Empty, LoadError, PmSkeleton, SectionCard, TableWrap, fmt, serverMessage, useLoad } from './shared'
 import type { PmView } from './PerformanceMarketeer'
 
@@ -667,6 +667,7 @@ function RunBody({ tenantId, date, campaignId }: { tenantId: string; date: strin
               <Tabs.Trigger value="note" className={TAB_CLASS}>Your Note{d.userNote ? ' ✓' : ''}</Tabs.Trigger>
             </Tabs.List>
             <Tabs.Content value="actions" className={PANEL}>
+              {d.decision && <div className="mb-3"><DecisionCard d={d.decision} /></div>}
               <RunActions d={d} />
             </Tabs.Content>
             <Tabs.Content value="journal" className={PANEL}>
@@ -685,8 +686,64 @@ function RunBody({ tenantId, date, campaignId }: { tenantId: string; date: strin
   )
 }
 
-export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | 'unresolved' | 'status'> }) {
+const CALL: Record<PmDecision['call'], { label: string; chip: string }> = {
+  scale: { label: 'Scale', chip: 'chip-good' },
+  keep: { label: 'Keep going', chip: 'chip-good' },
+  fix: { label: 'Fix, then keep going', chip: 'chip-info' },
+  reduce: { label: 'Reduce', chip: 'chip-warn' },
+  pause: { label: 'Pause', chip: 'chip-bad' },
+  wait: { label: 'Wait for data', chip: 'chip-info' },
+}
+
+/** The plan's single call on the campaign, with its stop/go rule. */
+export function DecisionCard({ d }: { d: PmDecision }) {
+  const c = CALL[d.call] ?? CALL.wait
+  return (
+    <div className="rounded-xl px-4 py-3" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}>
+      <p className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+        The call <span className={`chip ${c.chip} normal-case tracking-normal`}>{c.label}</span>
+      </p>
+      <p className="mt-1.5 break-words text-[15px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>{noEv(d.verdict)}</p>
+      {d.stopGo && (
+        <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[auto_1fr]" style={{ color: 'var(--ink-2)' }}>
+          <dt style={{ color: 'var(--ink-3)' }}>Decide on</dt>
+          <dd className="tabular-nums">{fmt.date(d.stopGo.judgeOn)}, after at most {fmt.inr(d.stopGo.spendUpTo)} spent since launch</dd>
+          <dt style={{ color: 'var(--ink-3)' }}>Go if</dt>
+          <dd className="break-words">{noEv(d.stopGo.metric)} reaches {d.stopGo.goAt}: {noEv(d.stopGo.ifGo)}</dd>
+          <dt style={{ color: 'var(--ink-3)' }}>Otherwise</dt>
+          <dd className="break-words">{noEv(d.stopGo.ifStop)}</dd>
+        </dl>
+      )}
+    </div>
+  )
+}
+
+/** Things to keep an eye on, not to act on yet. */
+function WatchList({ items, actions }: { items: PmWatchItem[]; actions: PmAgentAction[] }) {
+  if (!items.length && !actions.length) return null
+  return (
+    <div className="rounded-xl px-4 py-3" style={{ border: '1px dashed var(--hairline)' }}>
+      <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>Watch, not in the plan yet</p>
+      <ul className="mt-1.5 flex flex-col gap-1.5 text-[13px]" style={{ color: 'var(--ink-2)' }}>
+        {items.map((w, i) => (
+          <li key={`w${i}`} className="break-words">
+            <strong>{noEv(w.title)}</strong> — {noEv(w.why)} <span style={{ color: 'var(--ink-3)' }}>Act if {noEv(w.actIf)} · check {fmt.date(w.checkOn)}</span>
+          </li>
+        ))}
+        {actions.map((a) => (
+          <li key={a.id} className="break-words">
+            <strong>{a.id} {noEv(a.title.replace(/^Watch: /, ''))}</strong> — <span style={{ color: 'var(--ink-3)' }}>{a.watchReason ?? 'not in the top three'}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | 'unresolved' | 'status' | 'watch'> }) {
   const causes = new Map((d.causes ?? []).map((c) => [c.id, c]))
+  const planned = d.actions.filter((a) => !a.watch)
+  const watched = d.actions.filter((a) => a.watch)
   return (
     <div className="flex flex-col gap-3">
       {d.unresolved.length > 0 && (
@@ -699,11 +756,11 @@ export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | '
           </ul>
         </div>
       )}
-      {d.actions.length === 0 ? (
-        <Empty title="No actions in this run" hint={d.status === 'done' ? 'The plan had no approved actions.' : 'The run has not reached the final plan yet.'} />
+      {planned.length === 0 ? (
+        <Empty title="No actions in this run" hint={d.status === 'done' ? 'Nothing to change now; see the call and any Watch items.' : 'The run has not reached the final plan yet.'} />
       ) : (
         <ul className="flex flex-col gap-2.5">
-          {d.actions.map((a) => (
+          {planned.map((a) => (
             <li key={a.id} className="rounded-xl px-4 py-3" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline)' }}>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="chip chip-accent !font-bold">{a.id}</span>
@@ -722,7 +779,10 @@ export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | '
                 <dt style={{ color: 'var(--ink-3)' }}>Expected result</dt>
                 <dd className="tabular-nums">{a.expectedEffect.metric}: {a.expectedEffect.low} to {a.expectedEffect.high}</dd>
                 <dt style={{ color: 'var(--ink-3)' }}>Est. gain</dt>
-                <dd className="tabular-nums">about {fmt.inr(a.impactRupeesPerDay)}/day if it works (AI estimate)</dd>
+                <dd className="tabular-nums">
+                  about {fmt.inr(a.impactRupeesPerDay)}/day if it works (AI estimate)
+                  {a.impactNote && <span className="block text-[12px]" style={{ color: 'var(--ink-3)' }}>{a.impactNote}</span>}
+                </dd>
                 <dt style={{ color: 'var(--ink-3)' }}>Check result on</dt>
                 <dd>{fmt.date(a.judgeOn)}{a.resetsLearning ? ' · Meta restarts learning, so early days look worse' : ''}</dd>
                 <dt style={{ color: 'var(--ink-3)' }}>Undo if</dt>
@@ -787,6 +847,7 @@ export function RunActions({ d }: { d: Pick<PmAgentRun, 'actions' | 'causes' | '
           ))}
         </ul>
       )}
+      <WatchList items={d.watch ?? []} actions={watched} />
     </div>
   )
 }

@@ -375,6 +375,43 @@ export interface PmAgentAction {
   checksFailed?: string[];
   /** "check: message" per failed check, from the code checks. */
   checkMessages?: string[];
+  /** Fixes something plainly wrong, so it may go ahead while the entity settles. */
+  corrective?: boolean;
+  /** Not in the plan: shown under Watch (low confidence, too few people, or beyond the top 3). */
+  watch?: boolean;
+  watchReason?: string;
+  /** Why the ₹ gain counted is lower than estimated (another action counts the same cause). */
+  impactNote?: string;
+}
+
+/** The plan's one rule for the next step: a date, a spend limit and the number that decides. */
+export interface PmStopGo {
+  judgeOn: string;
+  spendUpTo: number;
+  metric: string;
+  goAt: number;
+  ifGo: string;
+  ifStop: string;
+}
+
+export interface PmDecision {
+  call: 'scale' | 'keep' | 'fix' | 'reduce' | 'pause' | 'wait';
+  verdict: string;
+  stopGo: PmStopGo | null;
+}
+
+export interface PmWatchItem {
+  title: string;
+  why: string;
+  actIf: string;
+  checkOn: string;
+}
+
+export interface PmLaunchCheck {
+  on: boolean;
+  day: number | null;
+  spendBar: number | null;
+  reasons: string[];
 }
 
 export type PmJournalStatus = 'taken' | 'partly' | 'not_taken' | 'outside_change';
@@ -431,6 +468,10 @@ export interface PmAgentRun {
   planRounds: number;
   unresolved: string[];
   actions: PmAgentAction[];
+  /** The plan's single call (runs from 25 Nov 2026). */
+  decision?: PmDecision | null;
+  watch?: PmWatchItem[];
+  launchCheck?: PmLaunchCheck | null;
   /** Final causes (C1…) the actions point to. */
   causes?: { id: string; title: string; confidence: PmAgentConfidence; verdict: string }[];
   impactRupeesPerDay: number;
@@ -816,6 +857,12 @@ export interface PmReportCreative {
   metaRoas: number | null
   firstPartyOrders: number
   verdict: { tag: PmCreativeTag; reason: string }
+  /** Ad ids summed into this row (the same creative in several ad sets). */
+  ids?: string[]
+  /** Spend ÷ Meta landing page views. */
+  costPerPageView?: number | null
+  /** Video only: 3-second plays ÷ impressions, %. */
+  hookRatePct?: number | null
 }
 
 export interface PmCreativeIdea {
@@ -891,6 +938,9 @@ export interface PmCampaignReport {
   verdict: string
   planSummary: string
   pathToTarget: 'likely' | 'possible' | 'unlikely' | null
+  decision?: PmDecision | null
+  watch?: PmWatchItem[]
+  launchCheck?: PmLaunchCheck | null
   funnel: {
     meta: { impressions: number; linkClicks: number; landingPageViews: number; metaPurchases: number }
     site: { step: string; campaign: number; campaignPctOfPrev: number | null; allMetaPctOfPrev: number | null }[]
