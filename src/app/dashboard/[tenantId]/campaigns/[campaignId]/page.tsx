@@ -986,11 +986,15 @@ function AddCreativePanel({
     setResult(null)
     if (sourceMode === 'sheet') {
       if (!sheetSelection || sheetSelection.selectedCount === 0) { setError('Pick at least one creative from the sheet'); return }
+      const carouselProblem = carouselCountProblem(sheetSelection)
+      if (carouselProblem) { setError(carouselProblem); return }
       setSubmitState('loading')
       try {
         const res = await addCreativesSheetToAdSet(tenantId, campaignId, adSetId, {
           sheetId: sheetSelection.sheetId,
           excludeAssetIds: sheetSelection.excludeAssetIds,
+          imagesAs: sheetSelection.imagesAs,
+          carouselRatio: sheetSelection.carouselRatio,
         })
         setResult(res)
         onAdded()
@@ -1069,7 +1073,7 @@ function AddCreativePanel({
           {submitState === 'loading'
             ? (sourceMode === 'sheet' ? 'Creating ads — this can take a few minutes if the sheet has video…' : 'Adding…')
             : sourceMode === 'sheet' && sheetSelection
-              ? `Add ${sheetSelection.selectedCount} creative${sheetSelection.selectedCount === 1 ? '' : 's'}`
+              ? `Add ${adCountLabel(sheetSelection)}`
               : 'Add Creative'}
         </button>
       </div>
@@ -1937,6 +1941,8 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
     if (!Number.isFinite(budget) || budget <= 0) { setNewAdSetError('Enter a positive daily budget'); return }
     if (newAdSetSourceMode === 'sheet') {
       if (!newAdSetSheetSelection || newAdSetSheetSelection.selectedCount === 0) { setNewAdSetError('Pick at least one creative from the sheet'); return }
+      const carouselProblem = carouselCountProblem(newAdSetSheetSelection)
+      if (carouselProblem) { setNewAdSetError(carouselProblem); return }
     } else {
       if (!newAdSetCreative.mediaUrl) { setNewAdSetError(`Pick or upload a${newAdSetCreative.assetType === 'image' ? 'n image' : ' video'} first`); return }
       if (!newAdSetCreative.primaryText.trim() || !newAdSetCreative.headline.trim()) { setNewAdSetError('Primary text and headline are required'); return }
@@ -1955,7 +1961,12 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
         placementPreset: newAdSetPlacementPreset,
         optimizationGoal: effectiveNewAdSetGoal,
         ...(newAdSetSourceMode === 'sheet'
-          ? { sheetId: newAdSetSheetSelection!.sheetId, excludeAssetIds: newAdSetSheetSelection!.excludeAssetIds }
+          ? {
+              sheetId: newAdSetSheetSelection!.sheetId,
+              excludeAssetIds: newAdSetSheetSelection!.excludeAssetIds,
+              imagesAs: newAdSetSheetSelection!.imagesAs,
+              carouselRatio: newAdSetSheetSelection!.carouselRatio,
+            }
           : newAdSetCreative),
       })
       flash(res.message, 'success')
@@ -2697,7 +2708,7 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
                     {newAdSetState === 'loading'
                       ? (newAdSetSourceMode === 'sheet' ? 'Creating ads — this can take a few minutes if the sheet has video…' : 'Creating…')
                       : newAdSetSourceMode === 'sheet' && newAdSetSheetSelection
-                        ? `Create ad set (${newAdSetSheetSelection.selectedCount} ad${newAdSetSheetSelection.selectedCount === 1 ? '' : 's'})`
+                        ? `Create ad set (${adCountLabel(newAdSetSheetSelection)})`
                         : 'Create ad set'}
                   </button>
                 </div>
@@ -2951,4 +2962,19 @@ export default function CampaignDetailPage({ params, searchParams }: PageProps) 
       </div>
     </div>
   )
+}
+
+/** Ads a sheet selection will create: one carousel (when chosen) plus each video, else one per asset. */
+function adCountLabel(sel: SheetAttachSelection): string {
+  const ads = sel.imagesAs === 'carousel' ? 1 + (sel.selectedCount - sel.selectedImageCount) : sel.selectedCount
+  const noun = `${ads} ad${ads === 1 ? '' : 's'}`
+  return sel.imagesAs === 'carousel' ? `${noun}, carousel of ${sel.selectedImageCount}` : noun
+}
+
+/** Why this selection can't make a carousel, or null when it can (or isn't one). */
+function carouselCountProblem(sel: SheetAttachSelection): string | null {
+  if (sel.imagesAs !== 'carousel') return null
+  if (sel.selectedImageCount < 2) return 'A carousel needs at least 2 images — select more, or switch to separate ads.'
+  if (sel.selectedImageCount > 10) return 'A carousel can have at most 10 images — uncheck some.'
+  return null
 }

@@ -708,7 +708,7 @@ export interface BulkAdsResult {
     adId: string
     creativeId: string
     headline: string
-    assetType: 'image' | 'video'
+    assetType: 'image' | 'video' | 'carousel'
   }>
   failed: Array<{ headline?: string; error: string }>
   /** Carousel cards in the sheet, if any — a card is a slide inside one multi-card ad, not a standalone ad, so it's skipped rather than attached. */
@@ -718,7 +718,13 @@ export interface BulkAdsResult {
 /** Either a single operator-supplied creative, or a whole Gallery sheet — every usable asset in it becomes its own ad. */
 export type AdSetCreativeSource =
   | { assetType: 'image' | 'video'; mediaUrl: string; primaryText: string; headline: string; cta: string }
-  | { sheetId: string; excludeAssetIds?: string[] }
+  | ({ sheetId: string; excludeAssetIds?: string[] } & SheetCarouselOption)
+
+/** Ship a sheet's images as separate ads (default) or together as one carousel ad, all cards at one size. */
+export interface SheetCarouselOption {
+  imagesAs?: 'separate' | 'carousel'
+  carouselRatio?: '1:1' | '4:5'
+}
 
 /**
  * Adds a brand-new ad set to an already-live campaign — same campaign, a new
@@ -795,7 +801,7 @@ export const addCreativesSheetToAdSet = (
   tenantId: string,
   campaignId: string,
   adSetId: string,
-  body: { sheetId: string; excludeAssetIds?: string[] },
+  body: { sheetId: string; excludeAssetIds?: string[] } & SheetCarouselOption,
 ) =>
   apiFetch<
     {
@@ -893,6 +899,8 @@ export interface GalleryAssetItem {
   assetUrl: string
   aspectRatio?: string
   resolution?: string
+  /** Other ready-made sizes of the same creative, filed alongside it. */
+  sizes?: Array<{ imageUrl: string; aspectRatio?: string }>
 }
 
 export type GalleryAssetLocations = Record<string, { topicId: string; topicName: string; sheetId: string; sheetName: string; rejected: boolean }>
