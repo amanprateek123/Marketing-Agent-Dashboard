@@ -1106,7 +1106,7 @@ export interface ManualAdSetInput {
   userOs?: ('iOS' | 'Android')[]
   interests?: Array<{ id: string; name: string }>
   optimizationGoal?: string
-  creativeFormat?: 'video' | 'image' | 'both' | 'mixed'
+  creativeFormat?: 'video' | 'image' | 'both' | 'mixed' | 'carousel'
   placementPreset?: PlacementPreset
   imagePlacementOverrides?: Partial<Record<'feed' | 'vertical' | 'landscape' | 'other', '4:5' | '9:16' | '1:1' | '16:9'>>
   /** Which copy-variant indices this ad set ships as ads. Omit/empty = all variants (default, unchanged behavior). Every variant must be covered by at least one ad set across the campaign. */
@@ -1141,6 +1141,8 @@ export interface CreateManualCampaignDto {
     video?: { variantIndex: number; videoUrl: string; videoThumbnailUrl?: string } | null
     /** Additive to `video` — multiple pre-made sizes of the same video. Set instead of `video`, not alongside it. */
     videos?: Array<{ variantIndex: number; videoUrl: string; videoThumbnailUrl?: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }>
+    /** Cards for 'carousel' ad sets, in swipe order (2–10, one shared size). The carousel uses copyVariants[0] for primary text and CTA. */
+    carouselCards?: Array<{ imageUrl: string; headline: string; description?: string }>
   }
   /** Reuse an existing, already-produced creative from the creative library. */
   creativePackageId?: string

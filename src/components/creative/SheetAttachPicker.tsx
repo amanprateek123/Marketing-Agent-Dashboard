@@ -12,7 +12,14 @@ interface PickableAsset {
   assetUrl: string
   headline?: string
   targetLanguage?: string
+  /** Ratios this creative is filed in (primary first) — to show which cut a carousel card uses. */
+  ratios: string[]
+  /** URL of each filed size, by ratio. */
+  sizeUrls: Record<string, string>
 }
+
+type CarouselRatio = '1:1' | '4:5'
+const CAROUSEL_MAX_CARDS = 10
 
 export interface SheetAttachSelection {
   sheetId: string
@@ -21,6 +28,11 @@ export interface SheetAttachSelection {
   excludeAssetIds: string[]
   totalCount: number
   selectedCount: number
+  /** 'carousel' = every selected image becomes one card of ONE carousel ad, in sheet order. Videos stay separate ads. */
+  imagesAs: 'separate' | 'carousel'
+  carouselRatio: CarouselRatio
+  /** Selected images — the carousel's card count. */
+  selectedImageCount: number
 }
 
 /**
@@ -53,6 +65,8 @@ export function SheetAttachPicker({
   const [assets, setAssets] = useState<PickableAsset[]>([])
   const [assetsLoading, setAssetsLoading] = useState(false)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [imagesAs, setImagesAs] = useState<'separate' | 'carousel'>('separate')
+  const [carouselRatio, setCarouselRatio] = useState<CarouselRatio>('1:1')
 
   useEffect(() => {
     let cancelled = false
@@ -122,6 +136,8 @@ export function SheetAttachPicker({
             assetUrl: a.assetUrl,
             headline: variant?.headline,
             targetLanguage: pkg?.targetLanguage,
+            ratios: [a.aspectRatio ?? '', ...(a.sizes ?? []).map((size) => size.aspectRatio ?? '')],
+            sizeUrls: Object.fromEntries((a.sizes ?? []).filter((size) => size.aspectRatio).map((size) => [size.aspectRatio!, size.imageUrl])),
           }
         })
         setAssets(resolved)
@@ -148,9 +164,29 @@ export function SheetAttachPicker({
       excludeAssetIds: assets.filter((a) => !selectedKeys.has(a.key)).map((a) => a.key),
       totalCount: assets.length,
       selectedCount: selectedKeys.size,
+      imagesAs,
+      carouselRatio,
+      selectedImageCount: assets.filter((a) => a.assetType === 'image' && selectedKeys.has(a.key)).length,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSheetId, selectedSheetName, assets, selectedKeys])
+  }, [selectedSheetId, selectedSheetName, assets, selectedKeys, imagesAs, carouselRatio])
+
+  const isCarousel = imagesAs === 'carousel'
+  // Card number per selected image, in sheet order — what the viewer swipes through.
+  const cardNumber = new Map<string, number>()
+  if (isCarousel) {
+    assets
+      .filter((a) => a.assetType === 'image' && selectedKeys.has(a.key))
+      .forEach((a, i) => cardNumber.set(a.key, i + 1))
+  }
+  const cardCount = cardNumber.size
+  const missingRatio = isCarousel
+    ? assets.filter((a) => cardNumber.has(a.key) && !a.ratios.includes(carouselRatio)).length
+    : 0
+  const segmentStyle = (active: boolean) =>
+    active
+      ? { background: 'var(--paper)', color: 'var(--ink)', boxShadow: 'var(--shadow-raised)' }
+      : { color: 'var(--ink-3)' }
 
   function toggleAsset(key: string) {
     setSelectedKeys((prev) => {
@@ -239,9 +275,59 @@ export function SheetAttachPicker({
         <p className="text-xs py-6 text-center" style={{ color: 'var(--ink-3)' }}>No assets in this sheet yet.</p>
       ) : (
         <>
-          <p className="text-[11.5px] font-medium mb-2" style={{ color: 'var(--ink-3)' }}>
-            {selectedKeys.size} of {assets.length} selected — every asset in this sheet ships as its own ad by default, uncheck any you don&rsquo;t want.
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
+            <span className="text-[11.5px] font-semibold" style={{ color: 'var(--ink-2)' }} id="images-as-label">Images go out as</span>
+            <div role="radiogroup" aria-labelledby="images-as-label" className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+              {([['separate', 'Separate ads'], ['carousel', 'One carousel']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={imagesAs === v}
+                  onClick={() => setImagesAs(v)}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md focus-visible:outline focus-visible:outline-2"
+                  style={segmentStyle(imagesAs === v)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {isCarousel && (
+              <>
+                <span className="text-[11.5px] font-semibold" style={{ color: 'var(--ink-2)' }} id="card-size-label">Card size</span>
+                <div role="radiogroup" aria-labelledby="card-size-label" className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+                  {(['1:1', '4:5'] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      role="radio"
+                      aria-checked={carouselRatio === r}
+                      onClick={() => setCarouselRatio(r)}
+                      className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md tabular-nums focus-visible:outline focus-visible:outline-2"
+                      style={segmentStyle(carouselRatio === r)}
+                    >
+                      {r === '1:1' ? 'Square 1:1' : 'Portrait 4:5'}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <p className="text-[11.5px] font-medium mb-2" style={{ color: 'var(--ink-3)' }} aria-live="polite">
+            {isCarousel
+              ? <>{cardCount} {cardCount === 1 ? 'image' : 'images'} → one carousel ad, cards in the order shown. Videos still go out as their own ads. Uncheck any you don&rsquo;t want.</>
+              : <>{selectedKeys.size} of {assets.length} selected — every asset in this sheet ships as its own ad by default, uncheck any you don&rsquo;t want.</>}
           </p>
+          {isCarousel && (cardCount < 2 || cardCount > CAROUSEL_MAX_CARDS) && (
+            <p className="text-[11.5px] font-semibold mb-2" style={{ color: 'var(--bad)' }}>
+              A carousel needs 2–{CAROUSEL_MAX_CARDS} images. {cardCount < 2 ? 'Select more images.' : `Uncheck ${cardCount - CAROUSEL_MAX_CARDS}.`}
+            </p>
+          )}
+          {isCarousel && missingRatio > 0 && (
+            <p className="text-[11.5px] font-medium mb-2" style={{ color: 'var(--warn)' }}>
+              {missingRatio} {missingRatio === 1 ? 'image has' : 'images have'} no {carouselRatio} size, so the main image is used and Meta may crop it.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
             {assets.map((asset) => {
               const isSelected = selectedKeys.has(asset.key)
@@ -254,11 +340,16 @@ export function SheetAttachPicker({
                   style={isSelected ? { border: '2px solid var(--accent)' } : { border: '2px solid var(--hairline-light)', opacity: 0.6 }}
                 >
                   <div className="relative" style={{ aspectRatio: '4/5', background: 'var(--surface-warm)' }}>
+                    {cardNumber.has(asset.key) && (
+                      <span className="chip chip-neutral tabular-nums" style={{ position: 'absolute', bottom: 4, left: 4, padding: '1px 5px' }}>
+                        Card {cardNumber.get(asset.key)}{asset.ratios.includes(carouselRatio) ? '' : ' · no ' + carouselRatio}
+                      </span>
+                    )}
                     {asset.assetType === 'video' ? (
                       <video src={asset.assetUrl} className="w-full h-full object-cover" muted />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={asset.assetUrl} alt={asset.headline ?? ''} className="w-full h-full object-cover" />
+                      <img src={(cardNumber.has(asset.key) && asset.sizeUrls[carouselRatio]) || asset.assetUrl} alt={asset.headline ?? ''} className="w-full h-full object-cover" />
                     )}
                     <span
                       className="flex items-center justify-center rounded-md"

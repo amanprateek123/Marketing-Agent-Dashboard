@@ -101,6 +101,8 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   // above stay the untagged default) — set alongside videoUrl to ship via Meta
   // placement asset customization instead of one auto-cropped video.
   const [extraVideos, setExtraVideos] = useState<Array<{ aspectRatio: '9:16' | '1:1' | '4:5' | '16:9'; videoUrl: string; videoThumbnailUrl: string }>>([])
+  // One size for every carousel card — Meta serves one card size on every placement.
+  const [carouselRatio, setCarouselRatio] = useState<CarouselRatio>('1:1')
 
   // Creative source — paste URLs by hand (default, unchanged behavior), pick
   // an already-produced creative from the flat library list (single
@@ -325,6 +327,26 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
   }, [adSets, copyVariants, campaignType])
   const creativeCoverageValid = uncoveredVariants.length === 0
 
+  // Carousel ad sets ship ONE carousel ad built from the campaign's images,
+  // one card per image in creative order, each card cut at carouselRatio
+  // (that size if the creative has it, else its main image).
+  const wantsCarousel = adSets.some(a => a.creativeFormat === 'carousel')
+  const carouselCards = useMemo(() => {
+    if (!wantsCarousel || creativeSource === 'library') return []
+    if (creativeSource === 'gallery') {
+      return gallerySelection
+        .filter(a => a.assetType === 'image')
+        .map(a => carouselCard([{ url: a.assetUrl, aspectRatio: a.aspectRatio }, ...a.siblingSizes.map(sib => ({ url: sib.imageUrl, aspectRatio: sib.aspectRatio }))], a.headline ?? '', carouselRatio))
+    }
+    return copyVariants.flatMap((c, i) => {
+      const own = images.filter(img => img.variantIndex === i && img.imageUrl.trim())
+      const sizes = [...own.filter(img => !img.aspectRatio), ...own.filter(img => img.aspectRatio)]
+        .map(img => ({ url: img.imageUrl.trim(), aspectRatio: img.aspectRatio }))
+      return sizes.length ? [carouselCard(sizes, c.headline, carouselRatio)] : []
+    })
+  }, [wantsCarousel, creativeSource, gallerySelection, copyVariants, images, carouselRatio])
+  const carouselValid = !wantsCarousel || creativeSource === 'library' || (carouselCards.length >= 2 && carouselCards.length <= CAROUSEL_MAX_CARDS)
+
   const weeklyProjection = budget * 7
   const overCampaignCap = !!company?.maxBudgetPerCampaign && budget > company.maxBudgetPerCampaign
   const overWeeklyCap = !!company?.weeklyBudgetCap && weeklyProjection > company.weeklyBudgetCap
@@ -446,6 +468,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                         })),
                       ],
                 ) as { variantIndex: number; videoUrl: string; videoThumbnailUrl: string; aspectRatio?: '9:16' | '1:1' | '4:5' | '16:9' }[],
+                ...(wantsCarousel ? { carouselCards: carouselCards.map(({ imageUrl, headline }) => ({ imageUrl, headline })) } : {}),
               },
             }
           : {
@@ -460,6 +483,7 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
                       ],
                     }
                   : { video: videoUrl.trim() ? { variantIndex: 0, videoUrl: videoUrl.trim(), videoThumbnailUrl: videoThumbnailUrl.trim() || undefined } : null }),
+                ...(wantsCarousel ? { carouselCards: carouselCards.map(({ imageUrl, headline }) => ({ imageUrl, headline })) } : {}),
               },
             }),
       }
@@ -798,12 +822,20 @@ export default function CreateCampaignPage({ params }: { params: Promise<{ tenan
             </div>
             </>
             )}
+            {wantsCarousel && (
+              <CarouselCardsPanel
+                fromLibrary={creativeSource === 'library'}
+                cards={carouselCards}
+                ratio={carouselRatio}
+                onRatio={setCarouselRatio}
+              />
+            )}
           </section>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={submitting || !name.trim() || !pctValid || !librarySelectionValid || !creativeCoverageValid}
+            disabled={submitting || !name.trim() || !pctValid || !librarySelectionValid || !creativeCoverageValid || (!isEditMode && !carouselValid)}
             className="btn btn-primary w-full justify-center py-3"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -1086,6 +1118,10 @@ function AdSetCard({
         </details>
       )}
 
+      {adSet.creativeFormat === 'carousel' && (
+        <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>This ad set runs one carousel ad: every image in the campaign becomes a card, in order, at the card size chosen under Creative. Videos don&apos;t go in a carousel — add a Video ad set for them.</p>
+      )}
+
       {['video', 'both', 'mixed'].includes(adSet.creativeFormat ?? 'image') && (
         <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>Videos are mapped from the sizes you upload: 9:16 for Stories, Reels, in-stream and Instagram search, 4:5 or 1:1 for feeds and everything else. Each video is measured at launch, and a missing size uses the closest one you uploaded, so a single video still launches everywhere.</p>
       )}
@@ -1297,12 +1333,13 @@ function AdSetCard({
             <option value="video">Video (variant 1 only)</option>
             <option value="both">Both</option>
             <option value="mixed">Mixed (splits into video + image ad sets)</option>
+            <option value="carousel">Carousel (images as swipeable cards)</option>
           </select>
           <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>Changing format keeps your selected placements. Review Placements above before launching.</p>
         </label>
       </div>
 
-      {showCreativeSplit && copyVariants.length > 1 && (
+      {showCreativeSplit && copyVariants.length > 1 && adSet.creativeFormat !== 'carousel' && (
         <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline-light)' }}>
           {/* Whole-sheet assignment. The campaign still ships one creative
               pool — this just bulk-sets `ads` to that sheet's slice of it, so
@@ -2259,6 +2296,91 @@ function GalleryPicker({
               )
             })}
           </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+type CarouselRatio = '1:1' | '4:5'
+const CAROUSEL_MAX_CARDS = 10
+
+interface CarouselCardDraft {
+  imageUrl: string
+  headline: string
+  /** False when the creative has no size at the chosen ratio, so its main image is used. */
+  hasRatio: boolean
+}
+
+/** One carousel card from a creative's sizes (main first): the chosen ratio's cut, else the main image. */
+function carouselCard(sizes: Array<{ url: string; aspectRatio?: string }>, headline: string, ratio: CarouselRatio): CarouselCardDraft {
+  const match = sizes.find(size => size.aspectRatio === ratio)
+  return { imageUrl: (match ?? sizes[0]).url, headline, hasRatio: !!match }
+}
+
+function CarouselCardsPanel({ fromLibrary, cards, ratio, onRatio }: {
+  fromLibrary: boolean
+  cards: CarouselCardDraft[]
+  ratio: CarouselRatio
+  onRatio: (ratio: CarouselRatio) => void
+}) {
+  const countOk = cards.length >= 2 && cards.length <= CAROUSEL_MAX_CARDS
+  const missing = cards.filter(card => !card.hasRatio).length
+  return (
+    <div className="mt-5 rounded-xl p-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--hairline-light)' }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>Carousel cards</p>
+        {!fromLibrary && (
+          <div role="radiogroup" aria-label="Card size" className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--paper)', border: '1px solid var(--hairline-light)' }}>
+            {(['1:1', '4:5'] as const).map(r => (
+              <button
+                key={r}
+                type="button"
+                role="radio"
+                aria-checked={ratio === r}
+                onClick={() => onRatio(r)}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md tabular-nums focus-visible:outline focus-visible:outline-2"
+                style={ratio === r ? { background: 'var(--accent-bg)', color: 'var(--accent-strong)' } : { color: 'var(--ink-3)' }}
+              >
+                {r === '1:1' ? 'Square 1:1' : 'Portrait 4:5'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {fromLibrary ? (
+        <p className="text-xs" style={{ color: 'var(--ink-3)' }}>The carousel uses the cards already saved on the picked creative. It needs at least 2.</p>
+      ) : (
+        <>
+          <p className="text-xs mb-3" style={{ color: 'var(--ink-3)' }} aria-live="polite">
+            {cards.length} {cards.length === 1 ? 'card' : 'cards'}, one per image, in the order above. The first creative&apos;s primary text and button go above the cards; each card shows its own headline.
+          </p>
+          {!countOk && (
+            <p className="text-xs font-semibold mb-3" style={{ color: 'var(--bad)' }}>
+              A carousel needs 2–{CAROUSEL_MAX_CARDS} images. {cards.length < 2 ? 'Add more images.' : `Remove ${cards.length - CAROUSEL_MAX_CARDS}.`}
+            </p>
+          )}
+          {missing > 0 && (
+            <p className="text-xs mb-3" style={{ color: 'var(--warn)' }}>
+              {missing} {missing === 1 ? 'image has' : 'images have'} no {ratio} size, so the main image is used and Meta may crop it.
+            </p>
+          )}
+          {cards.length > 0 && (
+            <ol className="flex gap-2 overflow-x-auto pb-1" style={{ overscrollBehaviorX: 'contain' }}>
+              {cards.map((card, i) => (
+                <li key={i} className="shrink-0 w-24">
+                  <div className="relative rounded-lg overflow-hidden" style={{ aspectRatio: ratio === '1:1' ? '1 / 1' : '4 / 5', background: 'var(--paper)' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={card.imageUrl} alt={card.headline || `Card ${i + 1}`} width={96} height={ratio === '1:1' ? 96 : 120} loading="lazy" className="w-full h-full object-cover" />
+                    <span className="chip chip-neutral tabular-nums" style={{ position: 'absolute', top: 4, left: 4, padding: '1px 5px' }}>{i + 1}</span>
+                  </div>
+                  <p className="text-[10.5px] font-medium truncate mt-1" style={{ color: card.hasRatio ? 'var(--ink-2)' : 'var(--warn)' }} title={card.headline}>
+                    {card.headline || 'No headline'}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
         </>
       )}
     </div>
